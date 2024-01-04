@@ -49,26 +49,26 @@ def run(country, issue, index):
     # TODO when local reading available: area, forecasts, observations = set_up_analysis_area(params)
 
     forecasts = read_forecasts_locally(
-        f"AA/data/{params.iso}/forecast/{params.iso}_SAB_tp_ecmwf_{str(params.issue).zfill(2)}/*.nc"
+        f"data/{params.iso}/forecast/{params.iso}_SAB_tp_ecmwf_{str(params.issue).zfill(2)}/*.nc"
     )
     logging.info(f"Completed reading of forecasts for the whole {params.iso} country")
 
-    observations = read_observations_locally(f"AA/data/{params.iso}/chirps")
+    observations = read_observations_locally(f"data/{params.iso}/chirps")
     logging.info(
         f"Completed reading of observations for the whole {params.iso} country"
     )
 
     triggers_df = pd.read_csv(
-        f"AA/data/{params.iso}/outputs/Plots/triggers.aa.python.spi.dryspell.2022.csv"
+        f"data/{params.iso}/outputs/Plots/triggers.aa.python.spi.dryspell.2022.csv"
     )
 
     if params.iso == "MOZ":
         gdf = gpd.read_file(
-            f"AA/data/{params.iso}/shapefiles/moz_admbnda_2019_SHP/moz_admbnda_adm2_2019.shp"
+            f"data/{params.iso}/shapefiles/moz_admbnda_2019_SHP/moz_admbnda_adm2_2019.shp"
         )
     else:
         gdf = gpd.read_file(
-            f"AA/data/{params.iso}/shapefiles/global_adm2_wfpGE_UN_final/global_adm2_wfpGE_UN_final.shp"
+            f"data/{params.iso}/shapefiles/global_adm2_wfpGE_UN_final/global_adm2_wfpGE_UN_final.shp"
         )
         gdf = gdf.loc[gdf.iso3 == params.iso]
 
@@ -102,13 +102,13 @@ def run(country, issue, index):
 
     probs_dashboard = pd.concat(probs_df)
     probs_dashboard.to_csv(
-        f"AA/data/{params.iso}/outputs/Fbf_Pilot_MockUp/SPI_probabilities_season_{params.issue}.csv",
+        f"data/{params.iso}/outputs/Fbf_Pilot_MockUp/SPI_probabilities_season_{params.issue}.csv",
         index=False,
     )
 
     merged_dashboard = pd.concat(merged_df)
     merged_dashboard.to_csv(
-        f"AA/data/{params.iso}/outputs/Fbf_Pilot_MockUp/SPI_probabilities_season_triggers_{params.issue}.csv",
+        f"data/{params.iso}/outputs/Fbf_Pilot_MockUp/SPI_probabilities_season_triggers_{params.issue}.csv",
         index=False,
     )
 

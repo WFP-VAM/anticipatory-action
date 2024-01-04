@@ -57,7 +57,7 @@ def run(country, index):
     )
 
     obs = read_aggregated_obs(
-        f"AA/data/{params.iso}/outputs/zarr/obs/2022",
+        f"data/{params.iso}/outputs/zarr/obs/2022",
         params,
     )
     obs = obs.assign_coords(
@@ -74,7 +74,7 @@ def run(country, index):
     )
 
     probs_ds = read_aggregated_probs(
-        f"AA/data/{params.iso}/outputs/zarr/2022",
+        f"data/{params.iso}/outputs/zarr/2022",
         params,
     )
     probs = xr.concat(
@@ -128,10 +128,10 @@ def run(country, index):
     score["index"] = score.index.astype(str)
 
     trigs.to_zarr(
-        f"AA/data/MOZ/outputs/Plots/triggers_{params.index}_{params.year}_NRT.zarr", mode="w"
+        f"data/MOZ/outputs/Plots/triggers_{params.index}_{params.year}_NRT.zarr", mode="w"
     )
     score.to_zarr(
-        f"AA/data/MOZ/outputs/Plots/score_{params.index}_{params.year}_NRT.zarr", mode="w"
+        f"data/MOZ/outputs/Plots/score_{params.index}_{params.year}_NRT.zarr", mode="w"
     )
     logging.info(f"Triggers and score datasets saved as a back-up")
 
@@ -172,7 +172,7 @@ def run(country, index):
     )
 
     df_window.to_csv(
-        "AA/data/MOZ/outputs/Plots/triggers.aa.python.{params.index}.{params.year}.NRT.csv",
+        "data/MOZ/outputs/Plots/triggers.aa.python.{params.index}.{params.year}.NRT.csv",
         index=False,
     )
 

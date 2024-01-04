@@ -64,13 +64,13 @@ def run(country, index):
 
     params = Params(iso=country, index=index)
 
-    observations = read_observations_locally(f"AA/data/{params.iso}/chirps")
+    observations = read_observations_locally(f"data/{params.iso}/chirps")
     logging.info(
         f"Completed reading of observations for the whole {params.iso} country"
     )
 
     gdf = gpd.read_file(
-        f"AA/data/{params.iso}/shapefiles/moz_admbnda_2019_SHP/moz_admbnda_adm2_2019.shp"
+        f"data/{params.iso}/shapefiles/moz_admbnda_2019_SHP/moz_admbnda_adm2_2019.shp"
     )
 
     fbf_roc_issues = [
@@ -88,7 +88,7 @@ def run(country, index):
 
     fbf_roc = pd.concat(fbf_roc_issues)
     fbf_roc.to_csv(
-        f"AA/data/{params.iso}/outputs/Districts_FbF/{params.index}/fbf.districts.roc.{params.index}.{params.year}.txt",
+        f"data/{params.iso}/outputs/Districts_FbF/{params.index}/fbf.districts.roc.{params.index}.{params.year}.txt",
         index=False,
     )
 
@@ -395,17 +395,17 @@ def save_districts_results(
     probs_bc_district = aggregate_by_district(probabilities_bc, gdf, params)
 
     obs_district.to_zarr(
-        f"AA/data/{params.iso}/outputs/zarr/obs/2022/{params.index.upper()} {period_name}/observations.zarr",
+        f"data/{params.iso}/outputs/zarr/obs/2022/{params.index.upper()} {period_name}/observations.zarr",
         mode="w",
     )
 
     probs_district.to_zarr(
-        f"AA/data/{params.iso}/outputs/zarr/2022/{issue}/{params.index.upper()} {period_name}/probabilities.zarr",
+        f"data/{params.iso}/outputs/zarr/2022/{issue}/{params.index.upper()} {period_name}/probabilities.zarr",
         mode="w",
     )
 
     probs_bc_district.to_zarr(
-        f"AA/data/{params.iso}/outputs/zarr/2022/{issue}/{params.index.upper()} {period_name}/probabilities_bc.zarr",
+        f"data/{params.iso}/outputs/zarr/2022/{issue}/{params.index.upper()} {period_name}/probabilities_bc.zarr",
         mode="w",
     )
 

@@ -98,6 +98,6 @@ class Params:
         if self.issue is None:  # analytical / triggers
             self.issue = ["05", "06", "07", "08", "09", "10", "11", "12", "01", "02"]
         self.fbf_districts_df = read_fbf_districts(
-            f"AA/data/{self.iso}/outputs/Districts_FbF/{self.index}/fbf.districts.roc.{self.index}.2022.txt",
+            f"data/{self.iso}/outputs/Districts_FbF/{self.index}/fbf.districts.roc.{self.index}.2022.txt",
             self,
         )
