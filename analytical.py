@@ -111,7 +111,7 @@ def run_issue_verification(observations, issue, params, gdf):
     """
 
     forecasts = read_forecasts_locally(
-        f"AA/data/{params.iso}/forecast/Moz_SAB_tp_ecmwf_{issue}/*.nc"
+        f"data/{params.iso}/forecast/Moz_SAB_tp_ecmwf_{issue}/*.nc"
     )
     forecasts = forecasts.where(
         forecasts.time < np.datetime64(f"{params.year}-07-01T12:00:00.000000000"),
