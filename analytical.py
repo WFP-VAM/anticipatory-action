@@ -17,7 +17,6 @@ import numpy as np
 import xarray as xr
 import pandas as pd
 import geopandas as gpd
-import xskillscore as xss
 
 from config.params import Params
 
@@ -35,6 +34,7 @@ from hip.analysis.analyses.drought import (
     compute_probabilities,
     concat_obs_levels,
 )
+from hip.analysis.ops._statistics import evaluate_roc_forecasts
 
 
 @click.command()
@@ -183,10 +183,10 @@ def verify_index_across_districts(
         issue,
     )
 
-    auc, auc_bc = evaluate_forecast_probabilities(
-        probs,
-        probs_bc,
-        obs_bool,
+    auc, auc_bc = evaluate_roc_forecasts(
+        obs_bool.precip,
+        probs.tp,
+        probs_bc.scen,
     )
 
     if params.save_zarr:
@@ -326,37 +326,6 @@ def calculate_forecast_probabilities(
     )
 
     return probabilities, probabilities_bc, anomaly_obs, levels_obs
-
-
-def evaluate_forecast_probabilities(probabilities, probabilities_bc, obs_bool):
-    """
-    Calculate ROC scores of probabilities computed both with and without bias correction
-
-    Args:
-        probabilities: xarray.Dataset, raw probabilities at the pixel level for specified period and issue month
-        probabilities_bc: xarray.Dataset, bias-corrected probabilities at the pixel level for specified period and issue month
-        levels_obs: xarray.Dataset, categorical observations at the pixel level for specified index
-    Returns:
-        auc: xarray.Dataset, roc scores related to raw probabilities at the pixel level
-        auc_bc: xarray.Dataset, roc scores related to bias-corrected probabilities at the pixel level
-    """
-    # Compute AUC without BC
-    auc = xss.roc(obs_bool.precip, probabilities.tp, dim="year", return_results="area")
-    # Compute AUC with BC
-    auc_bc = xss.roc(
-        obs_bool.precip, probabilities_bc.scen, dim="year", return_results="area"
-    )
-
-    # set AUC as NaN where no rain in either chirps or forecasts (replicate R method)
-    auc = auc.where(
-        (obs_bool.precip.sum("year") != 0) & (probabilities.tp.sum("year") != 0), np.nan
-    )
-    auc_bc = auc_bc.where(
-        (obs_bool.precip.sum("year") != 0) & (probabilities_bc.scen.sum("year") != 0),
-        np.nan,
-    )
-
-    return auc, auc_bc
 
 
 def get_verification_df(auc, auc_bc):
