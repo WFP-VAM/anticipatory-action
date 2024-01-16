@@ -96,6 +96,8 @@ $ python analytical.py <ISO> <SPI/DRYSPELL>
 $ python triggers.py <ISO> <SPI/DRYSPELL>
 ```
 
+After running this script for SPI / DRYSPELL and General / Non-Regret Triggers you can use `triggers-df-and-vulnerability-sorting.ipynb` to filter the triggers for each district regarding the selected vulnerability. It actually provides the very final output. 
+
 **Operational script**
 
 ```commandline
