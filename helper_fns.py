@@ -84,7 +84,7 @@ def merge_un_biased_probs(probs_district, probs_bc_district, params, period_name
     # Combination of both probabilities datasets
     probs_merged = (
         1 - fbf_bc_da
-    ) * probs_district.raw + fbf_bc_da * probs_bc_district.bc
+    ) * probs_district.tp + fbf_bc_da * probs_bc_district.scen
 
     probs_merged = probs_merged.to_dataset(name="prob")
 

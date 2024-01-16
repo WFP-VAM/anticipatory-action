@@ -263,13 +263,12 @@ def calculate_forecast_probabilities(
 
     # Anomaly
     anomaly_fc = run_gamma_standardization(
-        accumulation_fc, params.calibration_start, params.calibration_stop
+        accumulation_fc, params.calibration_start, params.calibration_stop, members=True,
     )
     anomaly_obs = run_gamma_standardization(
         accumulation_obs,
         params.calibration_start,
         params.calibration_stop,
-        members=False,
     )
     logging.info(f"Completed anomaly")
 
