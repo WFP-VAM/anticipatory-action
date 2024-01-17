@@ -10,7 +10,7 @@ from helper_fns import read_fbf_districts
 DRYSPELL_THRESHOLD = 2.0
 
 AGGREGATES = {
-    "spi": lambda x: x.sum("time"),
+    "spi": lambda x: x.sum("time", skipna=False),
     "dryspell": lambda x: ((x <= DRYSPELL_THRESHOLD) * 1)
     .astype(np.uint8)
     .hdc.algo.lroo(),

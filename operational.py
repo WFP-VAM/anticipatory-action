@@ -195,13 +195,12 @@ def run_aa_probabilities(forecasts, observations, params, period_months):
 
     # Anomaly
     anomaly_fc = run_gamma_standardization(
-        accumulation_fc, params.calibration_start, params.calibration_stop
+        accumulation_fc, params.calibration_start, params.calibration_stop, members=True,
     )
     anomaly_obs = run_gamma_standardization(
         accumulation_obs,
         params.calibration_start,
         params.calibration_stop,
-        members=False,
     )
     logging.info(f"Completed anomaly")
 
