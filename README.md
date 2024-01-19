@@ -56,7 +56,7 @@ $ python analytical.py <ISO> <SPI/DRYSPELL>
 $ python triggers.py <ISO> <SPI/DRYSPELL>
 ```
 
-After running this script for SPI / DRYSPELL and General / Non-Regret Triggers you can use the `triggers-df-and-vulnerability-sorting.py` notebook to filter the triggers for each district regarding the selected vulnerability. It actually provides the very final output. 
+After running this script for SPI / DRYSPELL and General / Non-Regret Triggers you can use the `merge-spi-dryspell-gt-nrt-triggers.py` notebook to filter the triggers for each district regarding the selected vulnerability and merge spi and dryspell. It actually provides the very final output. 
 
 **Operational script**
 
