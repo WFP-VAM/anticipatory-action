@@ -29,6 +29,17 @@ $ conda activate aa-env
 - Make sure you are in the anticipatory-action folder: use the `cd` command to move to the anticipatory-action folder.
 
 
+### How to run jupytext files 
+
+In the different folders of this repository, you will find different notebooks with the extension `.py`. These are jupytext files that can be run as notebooks. They facilitate version control and have a much smaller memory size. They are simple to use, after activating the environment: 
+
+1. Open jupyter lab by executing the command `jupyter lab` in the terminal. 
+2. Find the file you need to work on in the file explorer.
+3. Right-click on it and select `Open with -> Notebook`. You can now execute your notebook cell by cell.
+
+An `.ipynb` file will immediately be created, storing the cell outputs. As these two files are paired, any changes you make to one will immediately be reflected in the other, and vice versa. You can also work directly on the `.ipynb` file when you return to your workspace. Be careful, however, not to modify both files at the same time, as this may create conflicts and errors when you save or reopen them. 
+
+
 ### Full workflow through the script
 
 You can now run the workflow for a given country.
@@ -45,17 +56,13 @@ $ python analytical.py <ISO> <SPI/DRYSPELL>
 $ python triggers.py <ISO> <SPI/DRYSPELL>
 ```
 
-After running this script for SPI / DRYSPELL and General / Non-Regret Triggers you can use `triggers-df-and-vulnerability-sorting.ipynb` to filter the triggers for each district regarding the selected vulnerability. It actually provides the very final output. 
+After running this script for SPI / DRYSPELL and General / Non-Regret Triggers you can use the `merge-spi-dryspell-gt-nrt-triggers.py` notebook to filter the triggers for each district regarding the selected vulnerability and merge spi and dryspell. It actually provides the very final output. 
 
 **Operational script**
 
 ```commandline
 $ python operational.py <ISO> <issue-month> <SPI/DRYSPELL>
 ```
-
-### Operational workflow through a Notebook
-
-If you prefer to run the operational script more interactively, you can use the Jupyter Notebook `operational_nb.ipynb`. Open it and follow the steps.
 
 
 ### Check outputs

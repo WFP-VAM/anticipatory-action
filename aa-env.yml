@@ -7,6 +7,7 @@ dependencies:
   - pip >=22
   - hdc-algo >=0.1.2
   - jupyterlab
+  - jupytext
   - ipykernel
   - hip-analysis
   - netcdf4
