@@ -172,7 +172,7 @@ def run(country, index):
     )
 
     df_window.to_csv(
-        "data/MOZ/outputs/Plots/triggers.aa.python.{params.index}.{params.year}.NRT.csv",
+        f"data/MOZ/outputs/Plots/triggers.aa.python.{params.index}.{params.year}.NRT.csv",
         index=False,
     )
 
