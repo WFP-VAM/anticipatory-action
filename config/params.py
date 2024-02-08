@@ -5,7 +5,7 @@ import pandas as pd
 
 from dataclasses import dataclass, field
 
-from helper_fns import read_fbf_districts
+from AA.helper_fns import read_fbf_districts
 
 DRYSPELL_THRESHOLD = 2.0
 

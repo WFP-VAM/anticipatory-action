@@ -17,7 +17,7 @@ import geopandas as gpd
 
 from config.params import Params
 
-from helper_fns import (
+from AA.helper_fns import (
     read_forecasts_locally,
     read_observations_locally,
     aggregate_by_district,
