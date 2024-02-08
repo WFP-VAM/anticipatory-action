@@ -13,7 +13,6 @@ from dask.distributed import Client
 
 import datetime
 import pandas as pd
-import geopandas as gpd
 
 from config.params import Params
 
@@ -62,16 +61,6 @@ def run(country, issue, index):
         f"data/{params.iso}/outputs/Plots/triggers.aa.python.spi.dryspell.2022.csv"
     )
 
-    if params.iso == "MOZ":
-        gdf = gpd.read_file(
-            f"data/{params.iso}/shapefiles/moz_admbnda_2019_SHP/moz_admbnda_adm2_2019.shp"
-        )
-    else:
-        gdf = gpd.read_file(
-            f"data/{params.iso}/shapefiles/global_adm2_wfpGE_UN_final/global_adm2_wfpGE_UN_final.shp"
-        )
-        gdf = gdf.loc[gdf.iso3 == params.iso]
-
     # Get accumulation periods (DJ, JF, FM, DJF, JFM...)
     accumulation_periods = get_accumulation_periods(
         forecasts,
@@ -90,7 +79,7 @@ def run(country, issue, index):
             observations,
             params,
             triggers_df,
-            gdf,
+            params.gdf,
             period_name,
             period_months,
         )
