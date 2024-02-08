@@ -13,3 +13,7 @@ The following ones are more specific and thus can also be used for exploratory /
 - `evaluate-roc-scores.py` allows to compute the forecast skill (roc scores) with given forecasts and observations for a specific issue month and a specific index. It can then be used to compare parameters or datasets at a more granular level, or for instance to try a different downscaling / bias correction method.
 
 - `inspect-operational-steps.py` allows to inspect each step of the operational workflow and play with the data or parameters. It can be used as a tutorial for the core methodology of the system but also to check probability values for a specific index and issue month. 
+
+
+
+Recently, the [run-full-pipeline-and-evaluate.py](run-full-pipeline-and-evaluate.py) notebook was added. The aim of this notebook is to be able to run the whole process and visualise the results. It is primarily intended for analysts wishing to experiment with different parameters or datasets in a completely autonomous way. However, this is still a work in progress. 
