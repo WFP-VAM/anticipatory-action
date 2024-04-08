@@ -8,6 +8,8 @@ import warnings
 warnings.simplefilter(action="ignore")
 
 from numba import jit
+from numba.core import types
+from numba.typed import Dict
 from dask.distributed import Client
 
 import os
@@ -15,8 +17,6 @@ import glob
 import numpy as np
 import xarray as xr
 import pandas as pd
-from scipy.optimize import brute
-from sklearn.metrics import confusion_matrix
 
 from config.params import Params
 
@@ -99,6 +99,8 @@ def run(country, index):
     probs_set = probs.sel(issue=np.uint8(params.issue)[1:]).load()
     probs_set["issue"] = [i - 1 if i != 1 else 12 for i in probs_set.issue.values]
 
+
+
     # Distribute computation of triggers
     trigs, score = xr.apply_ufunc(
         find_optimal_triggers,
@@ -128,10 +130,10 @@ def run(country, index):
     score["index"] = score.index.astype(str)
 
     trigs.to_zarr(
-        f"data/MOZ/outputs/Plots/triggers_{params.index}_{params.year}_NRT.zarr", mode="w"
+        f"data/MOZ/outputs/Plots/all_districts/triggers_{params.index}_{params.year}_NRT.zarr", mode="w"
     )
     score.to_zarr(
-        f"data/MOZ/outputs/Plots/score_{params.index}_{params.year}_NRT.zarr", mode="w"
+        f"data/MOZ/outputs/Plots/all_districts/score_{params.index}_{params.year}_NRT.zarr", mode="w"
     )
     logging.info(f"Triggers and score datasets saved as a back-up")
 
@@ -180,66 +182,52 @@ def run(country, index):
 
 
 # Define some constants
-TOLERANCE = dict(Leve=0, Moderado=-0.44, Severo=-0.68)
-GENERAL_T = dict(HR=0.5, SR=0.65, FR=0.35, RP=dict(Leve=4, Moderado=5, Severo=7))
-NON_REGRET_T = dict(HR=0.65, SR=0.55, FR=0.45, RP=dict(Leve=3, Moderado=4, Severo=6))
+# The Dict.empty() constructs a typed dictionary.
+TOLERANCE = Dict.empty(
+    key_type=types.unicode_type,
+    value_type=types.f8,
+)
+TOLERANCE['Leve'] = 0; TOLERANCE['Moderado'] = -0.44; TOLERANCE['Severo'] = -0.68
+
+GENERAL_T = Dict.empty(
+    key_type=types.unicode_type,
+    value_type=types.f8,
+)
+GENERAL_T['HR'] = 0.5; GENERAL_T['SR'] = 0.65; GENERAL_T['FR'] = 0.35; GENERAL_T['RP'] = 4.
+
+NON_REGRET_T = Dict.empty(
+    key_type=types.unicode_type,
+    value_type=types.f8,
+)
+NON_REGRET_T['HR']=0.65; NON_REGRET_T['SR']=0.55; NON_REGRET_T['FR']=0.45; NON_REGRET_T['RP'] = 3.
 
 
-def find_optimal_triggers(
-    observations_bool,
-    observations_val,
-    prob_issue0,
-    prob_issue1,
-    lead_time,
-    issue,
-    category,
-    vulnerability,
-):
-    """
-    Calculate optimal triggers by minimizing Hit Rate (1) and False Alarm Ratio (2) for two consecutive months
+@jit(nopython=True, cache=True)
+def _compute_confusion_matrix(true, pred):
+  '''
+  Computes a confusion matrix using numpy for two np.arrays
+  true and pred.
 
-    Args:
-        observations_bool: list or np.array, rainfall observations (categorical) for specific index
-        observations_val: list or np.array, rainfall observations (numerical) for specific index
-        prob_issue0: list or np.array, rainfall forecasts for specific index and issue month
-        prob_issue1: list or np.array, rainfall forecasts for specific index and issue month (+1)
-        lead_time: int, first month of index period
-        issue: int, issue month of forecasts
-        category: str, category name
-        vulnerability: str, "GT" for General Triggers or "NRT" for Non-Regret Triggers
-    Returns:
-        best_triggers: np.array, couple of optimal triggers
-        best_score: float, score corresponding to selected triggers
-    """
+  Results are identical (and similar in computation time) to: 
+    "from sklearn.metrics import confusion_matrix"
 
-    # Define grid
-    threshold_range = (0.0, 1.0)
-    grid = (
-        slice(threshold_range[0], threshold_range[1], 0.01),
-        slice(threshold_range[0], threshold_range[1], 0.01),
-    )
+  However, this function avoids the dependency on sklearn and 
+  allows to use numba in nopython mode.
+  '''
 
-    # Launch research
-    best_triggers, best_score, _, _ = brute(
-        objective,
-        grid,
-        args=(
-            observations_val,
-            observations_bool,
-            prob_issue0,
-            prob_issue1,
-            lead_time,
-            issue,
-            category,
-            vulnerability,
-        ),
-        full_output=True,
-        finish=None,
-    )
+  K = len(np.unique(true)) # Number of classes 
+  result = np.zeros((K, K))
 
-    return best_triggers, best_score
+  for i in range(len(true)):
+    result[true[i]][pred[i]] += 1
+
+  return result
 
 
+@jit(
+    nopython=True, 
+    cache=True,
+)
 def objective(
     t,
     obs_val,
@@ -250,6 +238,9 @@ def objective(
     issue,
     category,
     vulnerability,
+    tolerance,
+    general_req,
+    non_regret_req,
     end_season=5,
     penalty=1e6,
     alpha=10e-3,
@@ -260,42 +251,182 @@ def objective(
         obs_bool = obs_bool[1:]
         prob_issue0 = prob_issue0[:-1]
         prob_issue1 = prob_issue1[:-1]
+    
+    prediction = np.logical_and(prob_issue0 > t[0], prob_issue1 > t[1]).astype(np.int16)
 
-    t = np.array(t).reshape(2, 1)
-
-    prediction = np.logical_and(prob_issue0 > t[0, :], prob_issue1 > t[1, :])
-
-    cm = confusion_matrix(obs_bool, prediction, labels=[0, 1])
-    _, false, fn, hits = cm.ravel()
+    cm = _compute_confusion_matrix(obs_bool, prediction)
+    _, false, fn, hits = cm.astype(np.int16).ravel()
 
     number_actions = np.sum(prediction)
 
+    if hits + false == 0: # avoid divisions by zero
+       return [penalty]
+    
     far = false / (false + hits)
-    false_tol = np.sum(prediction & (obs_val > TOLERANCE[category]))
+    false_tol = np.sum(prediction & (obs_val > tolerance[category]))
     hit_rate = hits / (hits + fn)
     success_rate = hits + false - false_tol
     failure_rate = false_tol
-
+    
     freq = number_actions / len(obs_val)
     return_period = np.round(1 / freq if freq != 0 else 0, 0)
-
-    requirements = GENERAL_T if vulnerability == "GT" else NON_REGRET_T
-
-    constraints = [
+    
+    requirements = general_req if vulnerability == "GT" else non_regret_req
+    req_RP = requirements['RP'] + 1 * (category[0]=='M') + 3 * (category[0]=='S')
+    
+    constraints = np.array([
         hit_rate >= requirements["HR"],
         success_rate >= (requirements["SR"] * number_actions),
         failure_rate <= (requirements["FR"] * number_actions),
-        return_period >= requirements["RP"][category],
+        return_period >= req_RP,
         (leadtime - (issue + 1)) % 12 > 1,
-    ]
-
-    if not sorting:
-        if not (all(constraints)):
-            return penalty
-        else:
-            return -hit_rate + alpha * far
+    ]).astype(np.int16)
+    
+    if sorting:
+        return [-hit_rate, failure_rate / number_actions]
     else:
-        return -hit_rate, failure_rate / number_actions
+      if np.all(constraints):
+          return [-hit_rate + alpha * far]
+      else:
+          return [penalty]
+
+
+@jit(nopython=True)
+def _make_grid(arraylist):
+    n = len(arraylist)
+    k = arraylist[0].shape[0]
+    a2d = np.zeros((n, k, k))
+    for i in range(n):
+        a2d[i] = arraylist[i]
+    return(a2d)
+
+
+@jit(nopython=True)
+def _meshxy(x, y):
+    xx = np.empty(shape=(x.size, y.size), dtype=x.dtype)
+    yy = np.empty(shape=(x.size, y.size), dtype=y.dtype)
+    for i in range(y.size):
+        for j in range(x.size):
+            xx[i,j] = x[i]  # change to x[j] if indexing xy
+            yy[i,j] = y[j]  # change to y[i] if indexing xy
+    return xx, yy
+
+
+@jit(nopython=True)
+def brute_numba(func, ranges, args=()):
+    """
+    Numba-compatible implementation of scipy.optimize.brute designed only for 2d minimizations. 
+    Minimize a function over a given range by brute force.
+
+    Uses the “brute force” method, i.e., computes the function's value at each point of a 
+    multidimensional grid of points, to find the global minimum of the function.
+
+    Args:
+        func: callable, objective function to be minimized. Must be in the form f(x, *args),
+                        where x is the argument in the form of a 1-D array and args is a tuple 
+                        of any additional fixed parameters needed to completely specify the 
+                        function.
+        ranges: tuple,  each component of the ranges tuple must be a numpy.array. The program uses
+                        these to create the grid of points on which the objective function will be
+                        computed.
+        args: tuple, optional, any additional fixed parameters needed to completely specify the 
+                        function.
+    Returns:
+        xmin: numpy.ndarray, a 1-D array containing the coordinates of a point at which the 
+                        objective function had its minimum value.
+        Jmin: float, function values at the point xmin.
+    """
+    assert len(ranges) == 2
+    
+    x, y = _meshxy(*ranges)
+    grid = _make_grid([x, y])
+    
+    # obtain an array of parameters that is iterable by a map-like callable
+    inpt_shape = np.array(grid.shape)
+    grid = np.reshape(grid, (inpt_shape[0], np.prod(inpt_shape[1:]))).T
+    
+    # iterate over input arrays
+    Jout = np.array([
+        func(np.asarray(candidate).flatten(), *args)[0]
+        for candidate in grid
+    ])
+    
+    indx = np.argmin(Jout)
+
+    Jout = np.reshape(Jout, (inpt_shape[1], inpt_shape[2]))
+    grid = np.reshape(grid.T, (inpt_shape[0], inpt_shape[1], inpt_shape[2]))
+    
+    Nshape = np.shape(Jout)
+    Nindx = np.empty(2, dtype=np.uint8)    
+    Nindx[1] = indx % Nshape[1]
+    indx = indx // Nshape[1]
+    Nindx[0] = indx % Nshape[0]
+    indx = indx // Nshape[0]
+    
+    xmin = np.array([grid[k][Nindx[0], Nindx[1]] for k in range(2)])
+
+    Jmin = Jout[Nindx[0], Nindx[1]]
+
+    return xmin, Jmin
+
+
+def find_optimal_triggers(
+    observations_bool,
+    observations_val,
+    prob_ready,
+    prob_set,
+    lead_time,
+    issue,
+    category,
+    vulnerability,
+):
+    """
+    Find the optimal triggers pair by evaluating the objective function on each couple of 
+    values of a 100 * 100 grid and selecting the minimizer.
+
+    Args:
+        observations_bool: np.array, time series of categorical observations for the 
+                        specified category
+        observations_val: np.array, time series of the observed rainfall values (or SPI) 
+        prob_ready: np.array, time series of forecasts probabilities for the ready month
+        prob_ready: np.array, time series of forecasts probabilities for the set month
+        lead_time: int, lead time month
+        issue: int, issue month
+        category: str, intensity level
+        vulnerability: str, should be either 'GT' for General Triggers or 'NRT' for 'Non-
+                        Regret Triggers'
+    Returns:
+        best_triggers: np.array, array of size 2 containing best triggers for Ready / Set
+        best_score: int, score (mainly hit rate) corresponding to the best triggers
+    """
+
+    # Define grid
+    threshold_range = (0.0, 1.0)
+    grid = (
+        np.arange(threshold_range[0], threshold_range[1], step=0.01),
+        np.arange(threshold_range[0], threshold_range[1], step=0.01),
+    )
+    
+    # Launch research
+    best_triggers, best_score = brute_numba(
+        objective,
+        grid,
+        args=(
+            observations_val,
+            observations_bool,
+            prob_ready,
+            prob_set,
+            lead_time,
+            issue,
+            category,
+            vulnerability,
+            TOLERANCE,
+            GENERAL_T,
+            NON_REGRET_T,
+        ),
+    )
+
+    return best_triggers, best_score
 
 
 def filter_triggers_by_window(df_leadtime, probs_ready, probs_set, obs):
