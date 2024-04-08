@@ -34,7 +34,8 @@ from hip.analysis.analyses.drought import (
 @click.command()
 @click.argument("country", required=True, type=str)
 @click.argument("index", default="SPI")
-def run(country, index):
+@click.argument("vulnerability", default="GT")
+def run(country, index, vulnerability):
     client = Client()
 
     params = Params(iso=country, index=index)
@@ -62,12 +63,6 @@ def run(country, index):
     )
     obs = obs.assign_coords(
         lead_time=("index", [periods[i.split(" ")[-1]][0] for i in obs.index.values])
-    )
-    obs = obs.assign_coords(
-        vulnerability=(
-            "district",
-            [params.districts_vulnerability[d] for d in obs.district.values],
-        )
     )
     logging.info(
         f"Completed reading of aggregated observations for the whole {params.iso} country"
@@ -111,7 +106,7 @@ def run(country, index):
         obs.lead_time,
         probs.issue,
         obs.category,
-        obs.vulnerability,
+        vulnerability,
         vectorize=True,
         join="outer",
         input_core_dims=[["year"], ["time"], ["year"], ["year"], [], [], [], []],
@@ -565,6 +560,6 @@ def read_aggregated_probs(path_to_zarr, params):
 
 if __name__ == "__main__":
     # From AA repository:
-    # $ python triggers.py MOZ SPI
+    # $ python triggers.py MOZ SPI NRT
 
     run()
