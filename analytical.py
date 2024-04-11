@@ -17,7 +17,6 @@ import numpy as np
 import xarray as xr
 import pandas as pd
 import geopandas as gpd
-import xskillscore as xss
 
 from config.params import Params
 
@@ -35,6 +34,7 @@ from hip.analysis.analyses.drought import (
     compute_probabilities,
     concat_obs_levels,
 )
+from hip.analysis.ops._statistics import evaluate_roc_forecasts
 
 
 @click.command()
@@ -111,7 +111,7 @@ def run_issue_verification(observations, issue, params, gdf):
     """
 
     forecasts = read_forecasts_locally(
-        f"AA/data/{params.iso}/forecast/Moz_SAB_tp_ecmwf_{issue}/*.nc"
+        f"data/{params.iso}/forecast/Moz_SAB_tp_ecmwf_{issue}/*.nc"
     )
     forecasts = forecasts.where(
         forecasts.time < np.datetime64(f"{params.year}-07-01T12:00:00.000000000"),
@@ -183,10 +183,10 @@ def verify_index_across_districts(
         issue,
     )
 
-    auc, auc_bc = evaluate_forecast_probabilities(
-        probs,
-        probs_bc,
-        obs_bool,
+    auc, auc_bc = evaluate_roc_forecasts(
+        obs_bool.precip,
+        probs.tp,
+        probs_bc.scen,
     )
 
     if params.save_zarr:
@@ -263,13 +263,12 @@ def calculate_forecast_probabilities(
 
     # Anomaly
     anomaly_fc = run_gamma_standardization(
-        accumulation_fc, params.calibration_start, params.calibration_stop
+        accumulation_fc, params.calibration_start, params.calibration_stop, members=True,
     )
     anomaly_obs = run_gamma_standardization(
         accumulation_obs,
         params.calibration_start,
         params.calibration_stop,
-        members=False,
     )
     logging.info(f"Completed anomaly")
 
@@ -328,37 +327,6 @@ def calculate_forecast_probabilities(
     return probabilities, probabilities_bc, anomaly_obs, levels_obs
 
 
-def evaluate_forecast_probabilities(probabilities, probabilities_bc, obs_bool):
-    """
-    Calculate ROC scores of probabilities computed both with and without bias correction
-
-    Args:
-        probabilities: xarray.Dataset, raw probabilities at the pixel level for specified period and issue month
-        probabilities_bc: xarray.Dataset, bias-corrected probabilities at the pixel level for specified period and issue month
-        levels_obs: xarray.Dataset, categorical observations at the pixel level for specified index
-    Returns:
-        auc: xarray.Dataset, roc scores related to raw probabilities at the pixel level
-        auc_bc: xarray.Dataset, roc scores related to bias-corrected probabilities at the pixel level
-    """
-    # Compute AUC without BC
-    auc = xss.roc(obs_bool.precip, probabilities.tp, dim="year", return_results="area")
-    # Compute AUC with BC
-    auc_bc = xss.roc(
-        obs_bool.precip, probabilities_bc.scen, dim="year", return_results="area"
-    )
-
-    # set AUC as NaN where no rain in either chirps or forecasts (replicate R method)
-    auc = auc.where(
-        (obs_bool.precip.sum("year") != 0) & (probabilities.tp.sum("year") != 0), np.nan
-    )
-    auc_bc = auc_bc.where(
-        (obs_bool.precip.sum("year") != 0) & (probabilities_bc.scen.sum("year") != 0),
-        np.nan,
-    )
-
-    return auc, auc_bc
-
-
 def get_verification_df(auc, auc_bc):
     # Convert AUC datasets to dataframes
     auc_df = auc.to_dataframe().drop("spatial_ref", axis=1)
@@ -395,17 +363,17 @@ def save_districts_results(
     probs_bc_district = aggregate_by_district(probabilities_bc, gdf, params)
 
     obs_district.to_zarr(
-        f"data/{params.iso}/outputs/zarr/obs/2022/{params.index.upper()} {period_name}/observations.zarr",
+        f"data/{params.iso}/outputs/zarr/obs/2022_all_districts/{params.index.upper()} {period_name}/observations.zarr",
         mode="w",
     )
 
     probs_district.to_zarr(
-        f"data/{params.iso}/outputs/zarr/2022/{issue}/{params.index.upper()} {period_name}/probabilities.zarr",
+        f"data/{params.iso}/outputs/zarr/2022_all_districts/{issue}/{params.index.upper()} {period_name}/probabilities.zarr",
         mode="w",
     )
 
     probs_bc_district.to_zarr(
-        f"data/{params.iso}/outputs/zarr/2022/{issue}/{params.index.upper()} {period_name}/probabilities_bc.zarr",
+        f"data/{params.iso}/outputs/zarr/2022_all_districts/{issue}/{params.index.upper()} {period_name}/probabilities_bc.zarr",
         mode="w",
     )
 

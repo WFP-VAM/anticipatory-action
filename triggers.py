@@ -17,6 +17,7 @@ import glob
 import numpy as np
 import xarray as xr
 import pandas as pd
+import geopandas as gpd
 
 from config.params import Params
 
@@ -40,6 +41,10 @@ def run(country, index, vulnerability):
 
     params = Params(iso=country, index=index)
 
+    gdf = gpd.read_file(
+        f"data/{params.iso}/shapefiles/moz_admbnda_2019_SHP/moz_admbnda_adm2_2019.shp"
+    )
+
     rfh = xr.DataArray(
         np.arange(1, 9),
         coords=dict(
@@ -58,9 +63,10 @@ def run(country, index, vulnerability):
     )
 
     obs = read_aggregated_obs(
-        f"data/{params.iso}/outputs/zarr/obs/2022",
+        f"data/{params.iso}/outputs/zarr/obs/2022_all_districts",
         params,
     )
+    obs = obs.where(obs.index != f"{index} JDJ", drop=True)
     obs = obs.assign_coords(
         lead_time=("index", [periods[i.split(" ")[-1]][0] for i in obs.index.values])
     )
@@ -69,9 +75,11 @@ def run(country, index, vulnerability):
     )
 
     probs_ds = read_aggregated_probs(
-        f"data/{params.iso}/outputs/zarr/2022",
+        f"data/{params.iso}/outputs/zarr/2022_all_districts",
         params,
+        
     )
+    probs_ds = probs_ds.where(probs_ds.index != f"{index} JDJ", drop=True)
     probs = xr.concat(
         [
             merge_un_biased_probs(probs_ds, probs_ds, params, i.split(" ")[-1])
@@ -93,8 +101,6 @@ def run(country, index, vulnerability):
     ).load()  # use start/end season here
     probs_set = probs.sel(issue=np.uint8(params.issue)[1:]).load()
     probs_set["issue"] = [i - 1 if i != 1 else 12 for i in probs_set.issue.values]
-
-
 
     # Distribute computation of triggers
     trigs, score = xr.apply_ufunc(
@@ -125,10 +131,10 @@ def run(country, index, vulnerability):
     score["index"] = score.index.astype(str)
 
     trigs.to_zarr(
-        f"data/MOZ/outputs/Plots/all_districts/triggers_{params.index}_{params.year}_NRT.zarr", mode="w"
+        f"data/MOZ/outputs/Plots/all_districts/triggers_{params.index}_{params.year}_{vulnerability}.zarr", mode="w"
     )
     score.to_zarr(
-        f"data/MOZ/outputs/Plots/all_districts/score_{params.index}_{params.year}_NRT.zarr", mode="w"
+        f"data/MOZ/outputs/Plots/all_districts/score_{params.index}_{params.year}_{vulnerability}.zarr", mode="w"
     )
     logging.info(f"Triggers and score datasets saved as a back-up")
 
@@ -144,7 +150,7 @@ def run(country, index, vulnerability):
 
     # Add window information depending on district
     trigs_df["Window"] = [
-        get_window_district("MOZ", row["index"].split(" ")[-1], row.district)
+        get_window_district("MOZ", gdf, row["index"].split(" ")[-1], row.district)
         for _, row in trigs_df.iterrows()
     ]
 
@@ -166,10 +172,11 @@ def run(country, index, vulnerability):
         probs_ready,
         probs_set,
         obs,
+        vulnerability,
     )
 
     df_window.to_csv(
-        "data/MOZ/outputs/Plots/triggers.aa.python.{params.index}.{params.year}.NRT.csv",
+        "data/MOZ/outputs/Plots/triggers.aa.python.{params.index}.{params.year}.{vulnerability}.all.districts.csv",
         index=False,
     )
 
@@ -210,7 +217,7 @@ def _compute_confusion_matrix(true, pred):
   allows to use numba in nopython mode.
   '''
 
-  K = len(np.unique(true)) # Number of classes 
+  K = 2 #len(np.unique(true)) # Number of classes 
   result = np.zeros((K, K))
 
   for i in range(len(true)):
@@ -240,6 +247,7 @@ def objective(
     penalty=1e6,
     alpha=10e-3,
     sorting=False,
+    eps=1e-6,
 ):
     if leadtime <= end_season:
         obs_val = obs_val[1:]
@@ -249,7 +257,7 @@ def objective(
     
     prediction = np.logical_and(prob_issue0 > t[0], prob_issue1 > t[1]).astype(np.int16)
 
-    cm = _compute_confusion_matrix(obs_bool, prediction)
+    cm = _compute_confusion_matrix(obs_bool.astype(np.int16), prediction)
     _, false, fn, hits = cm.astype(np.int16).ravel()
 
     number_actions = np.sum(prediction)
@@ -257,9 +265,9 @@ def objective(
     if hits + false == 0: # avoid divisions by zero
        return [penalty]
     
-    far = false / (false + hits)
+    far = false / (false + hits + eps)
     false_tol = np.sum(prediction & (obs_val > tolerance[category]))
-    hit_rate = hits / (hits + fn)
+    hit_rate = hits / (hits + fn + eps)
     success_rate = hits + false - false_tol
     failure_rate = false_tol
     
@@ -278,7 +286,7 @@ def objective(
     ]).astype(np.int16)
     
     if sorting:
-        return [-hit_rate, failure_rate / number_actions]
+        return [-hit_rate, failure_rate / (number_actions + eps)]
     else:
       if np.all(constraints):
           return [-hit_rate + alpha * far]
@@ -424,7 +432,7 @@ def find_optimal_triggers(
     return best_triggers, best_score
 
 
-def filter_triggers_by_window(df_leadtime, probs_ready, probs_set, obs):
+def filter_triggers_by_window(df_leadtime, probs_ready, probs_set, obs, vulnerability):
     def sel_row(da, row, index, issue=None):
         da_sel = da.sel(district=row.district.unique(), index=index)
         if "issue" in da.dims:
@@ -444,9 +452,12 @@ def filter_triggers_by_window(df_leadtime, probs_ready, probs_set, obs):
                 sel_row(probs_ready.prob, tdf, ind, issue).values[0][0][0],
                 sel_row(probs_set.prob, tdf, ind, issue).values[0][0][0],
                 sel_row(obs, tdf, ind).lead_time.values,
-                sel_row(probs_ready.prob, tdf, ind, issue).issue.values,
+                sel_row(probs_ready.prob, tdf, ind, issue).issue.values[0],
                 str(sel_row(obs.bool, tdf, ind).category.values[0]),
-                str(sel_row(obs.bool, tdf, ind).vulnerability.values),
+                vulnerability,
+                TOLERANCE,
+                GENERAL_T,
+                NON_REGRET_T,
                 sorting=True,
             )
             tdf.loc[(tdf["index"] == ind) & (tdf.issue == iss), "HR"] = hr
@@ -467,36 +478,42 @@ def filter_triggers_by_window(df_leadtime, probs_ready, probs_set, obs):
     return pd.concat(triggers_window_list)
 
 
-def get_window_district(iso, index, district):
+WINDOW1_INDEXES_MOZ = {
+    'Cabo_Delgado': ['DJ', 'DJF', 'JF', 'JFM', 'FM'], 
+    'Gaza': ['ON', 'OND', 'ND', 'NDJ', 'DJ'], 
+    'Inhambane': ['ON', 'OND', 'ND', 'NDJ', 'DJ'], 
+    'Manica': ['ND', 'NDJ', 'DJ', 'DJF', 'JF'], 
+    'Maputo': ['ON', 'OND', 'ND', 'NDJ', 'DJ'],
+    'Maputo City': ['ON', 'OND', 'ND', 'NDJ', 'DJ'], 
+    'Nampula': ['DJ', 'DJF', 'JF', 'JFM', 'FM'], 
+    'Niassa': ['DJ', 'DJF', 'JF', 'JFM', 'FM'], 
+    'Sofala': ['ND', 'NDJ', 'DJ', 'DJF', 'JF'],  
+    'Tete': ['ND', 'NDJ', 'DJ', 'DJF', 'JF'],  
+    'Zambezia': ['ND', 'NDJ', 'DJ', 'DJF', 'JF'], 
+}
+
+WINDOW2_INDEXES_MOZ = {
+    'Cabo_Delgado': ['FMA', 'MA', 'MAM', 'AM', 'AMJ', 'MJ'], 
+    'Gaza': ['DJF', 'JF', 'JFM', 'FM', 'FMA', 'MA'], 
+    'Inhambane': ['DJF', 'JF', 'JFM', 'FM', 'FMA', 'MA'], 
+    'Manica': ['JFM', 'FM', 'FMA', 'MA', 'MAM', 'AM'], 
+    'Maputo': ['DJF', 'JF', 'JFM', 'FM', 'FMA', 'MA'], 
+    'Maputo City': ['DJF', 'JF', 'JFM', 'FM', 'FMA', 'MA'], 
+    'Nampula': ['FMA', 'MA', 'MAM', 'AM', 'AMJ', 'MJ'], 
+    'Niassa': ['FMA', 'MA', 'MAM', 'AM', 'AMJ', 'MJ'], 
+    'Sofala': ['JFM', 'FM', 'FMA', 'MA', 'MAM', 'AM'], 
+    'Tete': ['JFM', 'FM', 'FMA', 'MA', 'MAM', 'AM'], 
+    'Zambezia': ['JFM', 'FM', 'FMA', 'MA', 'MAM', 'AM'], 
+}
+
+def get_window_district(iso, shp, index, district):
+    province = shp.loc[shp.ADM2_PT == district].ADM1_PT.unique()[0]
     if iso == "MOZ":
-        if district == "Chiure":
-            if index in ["DJ", "DJF", "JF", "JFM", "FM"]:
-                return "Window1"
-            elif index in ["FMA", "MA", "MAM", "AM", "AMJ", "MJ"]:
+        if index in WINDOW1_INDEXES_MOZ[province]:
+            return "Window1"
+        elif index in WINDOW2_INDEXES_MOZ[province]:
                 return "Window2"
-            else:
-                return np.nan
-        elif district in ["Changara", "Marara", "Caia", "Chemba"]:
-            if index in ["ND", "NDJ", "DJ", "DJF", "JF"]:
-                return "Window1"
-            elif index in ["JFM", "FM", "FMA", "MA", "MAM", "AM"]:
-                return "Window2"
-            else:
-                return np.nan
         else:
-            assert district in [
-                "Chicualacuala",
-                "Guija",
-                "Massingir",
-                "Chibuto",
-                "Mabalane",
-                "Mapai",
-            ]
-            if index in ["ON", "OND", "ND", "NDJ", "DJ"]:
-                return "Window1"
-            elif index in ["DJF", "JF", "JFM", "FM", "FMA", "MA"]:
-                return "Window2"
-            else:
                 return np.nan
 
 

@@ -24,7 +24,7 @@ def aggregate_spi_dryspell_triggers(spi_window, dry_window):
 def triggers_da_to_df(triggers_da, hr_da):
     triggers_df = (
         triggers_da.to_dataframe()
-        .drop(["spatial_ref", "vulnerability"], axis=1)
+        .drop(["spatial_ref"], axis=1)
         .dropna()
     )
     triggers_df = triggers_df.reset_index().set_index(
@@ -39,7 +39,7 @@ def triggers_da_to_df(triggers_da, hr_da):
     )
     triggers_df = triggers_df.join(hr_df)
     triggers_df = triggers_df.drop(["spatial_ref"], axis=1)
-    triggers_df.columns = ["trigger", "trigger_value", "lead_time", "HR", "type"]
+    triggers_df.columns = ["trigger", "trigger_value", "lead_time", "HR"]
     return triggers_df.reset_index().drop_duplicates()
 
 
@@ -51,21 +51,22 @@ def aggregate_by_district(ds, gdf, params):
         adm2_coord = "adm2_name"
 
     # Keep only provided districts
-    shp = gdf.loc[gdf[adm2_coord].isin(params.districts )]
+    shp = gdf #.loc[gdf[adm2_coord].isin(params.districts)]
 
     PROJ = "+proj=longlat +ellps=clrk66 +towgs84=-80,-100,-228,0,0,0,0 +no_defs"
 
-    # TODO add downscaling part
+    # TODO better zonal aggregation
 
     # Clip ds to districts
-    list_districts = [
-        ds.rio.write_crs(PROJ)
-        .rio.clip(gpd.GeoSeries(geo))
-        .mean(dim=["latitude", "longitude"])
-        for geo in shp.geometry
-    ]
+    list_districts = {}
+    for _, row in shp.iterrows():
+        try: 
+            list_districts[row[adm2_coord]] = ds.rio.write_crs(PROJ).rio.clip(gpd.GeoSeries(row.geometry)).mean(dim=["latitude", "longitude"])
+        except:
+            continue
+
     ds_by_district = xr.concat(
-        list_districts, pd.Index(shp[adm2_coord].values, name="district")
+        list_districts.values(), pd.Index(list_districts.keys(), name="district")
     )
 
     return ds_by_district
