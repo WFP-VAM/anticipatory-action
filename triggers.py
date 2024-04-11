@@ -79,6 +79,7 @@ def run(country, index, vulnerability):
         params,
         
     )
+    # TODO fix in get_accumulation_periods
     probs_ds = probs_ds.where(probs_ds.index != f"{index} JDJ", drop=True)
     probs = xr.concat(
         [
@@ -206,6 +207,7 @@ NON_REGRET_T['HR']=0.65; NON_REGRET_T['SR']=0.55; NON_REGRET_T['FR']=0.45; NON_R
 
 @jit(nopython=True, cache=True)
 def _compute_confusion_matrix(true, pred):
+  # TODO move to hip-analysis
   '''
   Computes a confusion matrix using numpy for two np.arrays
   true and pred.
@@ -249,6 +251,8 @@ def objective(
     sorting=False,
     eps=1e-6,
 ):
+    # Align obs and probs when leadtime between Jan and end_season
+    # TODO align these time steps at the analytical level
     if leadtime <= end_season:
         obs_val = obs_val[1:]
         obs_bool = obs_bool[1:]
@@ -265,7 +269,7 @@ def objective(
     if hits + false == 0: # avoid divisions by zero
        return [penalty]
     
-    far = false / (false + hits + eps)
+    false_alarm_rate = false / (false + hits + eps)
     false_tol = np.sum(prediction & (obs_val > tolerance[category]))
     hit_rate = hits / (hits + fn + eps)
     success_rate = hits + false - false_tol
@@ -289,7 +293,7 @@ def objective(
         return [-hit_rate, failure_rate / (number_actions + eps)]
     else:
       if np.all(constraints):
-          return [-hit_rate + alpha * far]
+          return [-hit_rate + alpha * false_alarm_rate]
       else:
           return [penalty]
 
@@ -317,6 +321,7 @@ def _meshxy(x, y):
 
 @jit(nopython=True)
 def brute_numba(func, ranges, args=()):
+    # TODO Move to hip-analysis
     """
     Numba-compatible implementation of scipy.optimize.brute designed only for 2d minimizations. 
     Minimize a function over a given range by brute force.
@@ -348,26 +353,30 @@ def brute_numba(func, ranges, args=()):
     inpt_shape = np.array(grid.shape)
     grid = np.reshape(grid, (inpt_shape[0], np.prod(inpt_shape[1:]))).T
     
-    # iterate over input arrays
+    # iterate over input arrays and evaluate func (1D array)
     Jout = np.array([
         func(np.asarray(candidate).flatten(), *args)[0]
         for candidate in grid
     ])
     
+    # identify index of minimizer in 1D array
     indx = np.argmin(Jout)
 
+    # reshape to recover 2D grid
     Jout = np.reshape(Jout, (inpt_shape[1], inpt_shape[2]))
     grid = np.reshape(grid.T, (inpt_shape[0], inpt_shape[1], inpt_shape[2]))
     
+    # identify index of minimizer in grid
     Nshape = np.shape(Jout)
     Nindx = np.empty(2, dtype=np.uint8)    
     Nindx[1] = indx % Nshape[1]
     indx = indx // Nshape[1]
     Nindx[0] = indx % Nshape[0]
-    indx = indx // Nshape[0]
     
+    # get candidate value that minimizes func
     xmin = np.array([grid[k][Nindx[0], Nindx[1]] for k in range(2)])
 
+    # retrieve func minimum when evaluated on ranges
     Jmin = Jout[Nindx[0], Nindx[1]]
 
     return xmin, Jmin
