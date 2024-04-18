@@ -28,6 +28,9 @@ MANIFEST
 
 # Data
 data/
+*.zarr/
+*.png
+*.tif
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
