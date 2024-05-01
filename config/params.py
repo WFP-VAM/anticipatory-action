@@ -1,3 +1,4 @@
+import os
 import datetime
 import hdc.algo
 import numpy as np
@@ -64,7 +65,7 @@ class Params:
     min_index_period: int = 2
     max_index_period: int = 3
     start_season: int = 10
-    end_season: int = 5
+    end_season: int = 6
     calibration_start: datetime.datetime = None
     calibration_stop: datetime.datetime = datetime.datetime(2018, 12, 31)
     save_zarr: bool = True
@@ -97,7 +98,8 @@ class Params:
             self.intensity_thresholds = {"Severe": -1, "Moderate": -0.85, "Mild": -0.68}
         if self.issue is None:  # analytical / triggers
             self.issue = ["05", "06", "07", "08", "09", "10", "11", "12", "01", "02"]
-        self.fbf_districts_df = read_fbf_districts(
-            f"data/{self.iso}/outputs/Districts_FbF/{self.index}/fbf.districts.roc.{self.index}.2022.txt",
-            self,
-        )
+        if os.path.exists(f"data/{self.iso}/outputs/Districts_FbF/{self.index}/fbf.districts.roc.{self.index}.{self.year}.txt"):
+            self.fbf_districts_df = read_fbf_districts(
+                f"data/{self.iso}/outputs/Districts_FbF/{self.index}/fbf.districts.roc.{self.index}.{self.year}.txt",
+                self,
+            )
