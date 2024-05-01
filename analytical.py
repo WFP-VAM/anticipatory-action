@@ -271,7 +271,8 @@ def calculate_forecast_probabilities(
         .round(2)
     )
     probabilities = probabilities.where(probabilities.year < params.year, drop=True)
-
+    logging.info(f"Completed probabilities")
+    
     # Convert obs-based SPIs to booleans
     levels_obs = concat_obs_levels(
         anomaly_obs,
@@ -285,6 +286,7 @@ def calculate_forecast_probabilities(
     levels_obs["time"] = levels_obs.time.dt.year.values
     levels_obs = levels_obs.rename({"time": "year"})
     levels_obs = levels_obs.sel(year=probabilities.year)
+    logging.info(f"Completed categorical observations")
 
     # Bias correction
     anomaly_bc = xr.concat(
@@ -302,6 +304,7 @@ def calculate_forecast_probabilities(
         ],
         dim="time",
     )
+    logging.info(f"Completed bias correction")
 
     # Probabilities after Bias Correction
     probabilities_bc = (
@@ -312,10 +315,10 @@ def calculate_forecast_probabilities(
         )
         .round(2)
     )
-
     probabilities_bc = probabilities_bc.where(
         probabilities_bc.year < params.year, drop=True
     )
+    logging.info(f"Completed probabilities with bias correction")
 
     return probabilities, probabilities_bc, anomaly_obs, levels_obs
 
