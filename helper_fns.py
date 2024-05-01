@@ -24,7 +24,7 @@ def aggregate_spi_dryspell_triggers(spi_window, dry_window):
 def triggers_da_to_df(triggers_da, hr_da):
     triggers_df = (
         triggers_da.to_dataframe()
-        .drop(["spatial_ref", "vulnerability"], axis=1)
+        .drop(["spatial_ref"], axis=1)
         .dropna()
     )
     triggers_df = triggers_df.reset_index().set_index(
@@ -39,7 +39,7 @@ def triggers_da_to_df(triggers_da, hr_da):
     )
     triggers_df = triggers_df.join(hr_df)
     triggers_df = triggers_df.drop(["spatial_ref"], axis=1)
-    triggers_df.columns = ["trigger", "trigger_value", "lead_time", "HR", "type"]
+    triggers_df.columns = ["trigger", "trigger_value", "lead_time", "HR"]
     return triggers_df.reset_index().drop_duplicates()
 
 
