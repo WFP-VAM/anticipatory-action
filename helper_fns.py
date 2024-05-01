@@ -44,12 +44,6 @@ def triggers_da_to_df(triggers_da, hr_da):
 
 
 def aggregate_by_district(ds, gdf, params):
-    # As the shapefiles are not harmonized
-    if params.iso == "MOZ":
-        adm2_coord = "ADM2_PT"
-    else:
-        adm2_coord = "adm2_name"
-
     PROJ = "+proj=longlat +ellps=clrk66 +towgs84=-80,-100,-228,0,0,0,0 +no_defs"
 
     # Clip ds to districts
@@ -60,7 +54,7 @@ def aggregate_by_district(ds, gdf, params):
         for geo in gdf.geometry
     ]
     ds_by_district = xr.concat(
-        list_districts, pd.Index(gdf[adm2_coord].values, name="district")
+        list_districts, pd.Index(gdf['adm2_name'].values, name="district")
     )
 
     return ds_by_district
