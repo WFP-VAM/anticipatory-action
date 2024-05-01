@@ -1,5 +1,6 @@
-import click
 import logging
+
+import click
 
 logging.basicConfig(level="INFO")
 
@@ -7,33 +8,26 @@ import warnings
 
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
-import dask
-import traceback
-from dask.distributed import Client
-
-import os
 import datetime
+import os
+import traceback
+
+import dask
 import numpy as np
-import xarray as xr
 import pandas as pd
+import xarray as xr
+from dask.distributed import Client
+from hip.analysis.analyses.drought import (compute_probabilities,
+                                           concat_obs_levels,
+                                           get_accumulation_periods,
+                                           run_accumulation_index,
+                                           run_bias_correction,
+                                           run_gamma_standardization)
+from hip.analysis.ops._statistics import evaluate_roc_forecasts
 
 from config.params import Params
-
-from helper_fns import (
-    read_forecasts_locally,
-    read_observations_locally,
-    aggregate_by_district,
-)
-
-from hip.analysis.analyses.drought import (
-    get_accumulation_periods,
-    run_accumulation_index,
-    run_gamma_standardization,
-    run_bias_correction,
-    compute_probabilities,
-    concat_obs_levels,
-)
-from hip.analysis.ops._statistics import evaluate_roc_forecasts
+from helper_fns import (aggregate_by_district, read_forecasts_locally,
+                        read_observations_locally)
 
 
 @click.command()
@@ -43,25 +37,31 @@ def run(country, index):
     # End to end workflow for a country using pre-stored ECMWF forecasts and CHIRPS
 
     params = Params(iso=country, index=index)
-    
-    area = AnalysisArea.from_admin_boundaries(iso3=country.upper(), admin_level=2, resolution=0.25, datetime_range=f"1981-01-01/{params.year}-07-01")
-    
+
+    area = AnalysisArea.from_admin_boundaries(
+        iso3=country.upper(),
+        admin_level=2,
+        resolution=0.25,
+        datetime_range=f"1981-01-01/{params.year}-07-01",
+    )
+
     gdf = area.get_dataset([area.BASE_AREA_DATASET])
 
-    observations = area.get_dataset(['CHIRPS', 'RFH_DAILY'],                      
+    observations = area.get_dataset(
+        ["CHIRPS", "RFH_DAILY"],
         load_config={
             "gridded_load_kwargs": {
-                 "resampling": "bilinear",
+                "resampling": "bilinear",
             }
-        }
+        },
     ).load()
     logging.info(
         f"Completed reading of observations for the whole {params.iso} country"
     )
-    
+
     fbf_roc_issues = [
         run_issue_verification(
-            area, 
+            area,
             observations,
             issue,
             params,
@@ -97,14 +97,15 @@ def run_issue_verification(area, observations, issue, params, gdf):
         fbf_issue: pandas.DataFrame, dataframe with roc scores for all indexes, districts, categories and a specified issue month
     """
 
-    forecasts = area.get_dataset(['ECMWF', f'RFH_FORECASTS_SEAS5_ISSUE{int(issue)}_DAILY'],                      
+    forecasts = area.get_dataset(
+        ["ECMWF", f"RFH_FORECASTS_SEAS5_ISSUE{int(issue)}_DAILY"],
         load_config={
             "gridded_load_kwargs": {
-                 "resampling": "bilinear",
+                "resampling": "bilinear",
             }
-        }
+        },
     ).load()
-    forecasts.attrs['nodata'] = np.nan
+    forecasts.attrs["nodata"] = np.nan
     logging.info(f"Completed reading of forecasts for the issue month {issue}")
 
     # Get accumulation periods (DJ, JF, FM, DJF, JFM...)
@@ -248,7 +249,10 @@ def calculate_forecast_probabilities(
 
     # Anomaly
     anomaly_fc = run_gamma_standardization(
-        accumulation_fc, params.calibration_start, params.calibration_stop, members=True,
+        accumulation_fc,
+        params.calibration_start,
+        params.calibration_stop,
+        members=True,
     )
     anomaly_obs = run_gamma_standardization(
         accumulation_obs,

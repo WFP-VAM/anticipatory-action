@@ -1,9 +1,9 @@
 import glob
+
+import geopandas as gpd
 import numpy as np
 import pandas as pd
 import xarray as xr
-import geopandas as gpd
-
 
 PORTUGUESE_CATEGORIES = dict(
     Normal="Normal", Mild="Leve", Moderate="Moderado", Severe="Severo"
@@ -75,7 +75,7 @@ def merge_un_biased_probs(probs_district, probs_bc_district, params, period_name
     fbf_bc_da = fbf_bc_da.expand_dims(
         dim={"index": [f"{params.index.upper()} {period_name}"]}
     )
-    
+
     # Combination of both probabilities datasets
     probs_merged = (
         1 - fbf_bc_da
@@ -97,10 +97,12 @@ def merge_probabilities_triggers_dashboard(probs, triggers, params, period):
 
     # Filter triggers df to index
     triggers_index = triggers.copy()
-    triggers_index.loc[triggers_index.trigger == 'trigger2', 'issue'] = triggers_index.loc[triggers_index.trigger == 'trigger2'].issue.values + 1
+    triggers_index.loc[triggers_index.trigger == "trigger2", "issue"] = (
+        triggers_index.loc[triggers_index.trigger == "trigger2"].issue.values + 1
+    )
     triggers_index = triggers_index.loc[
-        (triggers_index['index'] == f"{params.index.upper()} {period}")
-        & (triggers_index['issue'] == params.issue)
+        (triggers_index["index"] == f"{params.index.upper()} {period}")
+        & (triggers_index["issue"] == params.issue)
     ]
     # Merge both dataframes
     df_merged = (
@@ -111,7 +113,7 @@ def merge_probabilities_triggers_dashboard(probs, triggers, params, period):
 
     df_merged = df_merged.drop("aggregation", axis=1)
 
-    df_merged["type"] = [i.split(" ")[0] for i in df_merged['index'].values]
+    df_merged["type"] = [i.split(" ")[0] for i in df_merged["index"].values]
     df_merged["year"] = [
         f"{y}-{str(params.year+1)[-2:]}" for y in df_merged.year.values
     ]
@@ -125,9 +127,11 @@ def merge_probabilities_triggers_dashboard(probs, triggers, params, period):
         df_merged["Window"] = [WINDOWS_PORTUGUESE[w] for w in df_merged.Window.values]
 
         df_merged["trigger_type"] = [
-            "Acionadores de Crise"
-            if d in ["Chibuto", "Guija"]
-            else "Acionadores Gerais"
+            (
+                "Acionadores de Crise"
+                if d in ["Chibuto", "Guija"]
+                else "Acionadores Gerais"
+            )
             for d in df_merged.district.values
         ]
 
@@ -205,7 +209,14 @@ def read_spi_references(path_ref, bc: bool = False, obs: bool = False):
     df_ref_spi = pd.concat(list_index_csv)
     df_ref = pd.concat([df_ref, df_ref_spi])
     if bc:
-        df_ref.columns = ["longitude", "latitude", "ensemble", "spi_ref", "period", "year"]
+        df_ref.columns = [
+            "longitude",
+            "latitude",
+            "ensemble",
+            "spi_ref",
+            "period",
+            "year",
+        ]
     elif obs:
         df_ref.columns = ["longitude", "latitude", "year", "spi_ref", "period"]
     else:

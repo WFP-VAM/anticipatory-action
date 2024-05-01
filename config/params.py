@@ -1,10 +1,10 @@
-import os
 import datetime
+import os
+from dataclasses import dataclass, field
+
 import hdc.algo
 import numpy as np
 import pandas as pd
-
-from dataclasses import dataclass, field
 
 from helper_fns import read_fbf_districts
 
@@ -81,24 +81,26 @@ class Params:
         if self.iso == "MOZ":
             self.intensity_thresholds = {"Severo": -1, "Moderado": -0.85, "Leve": -0.68}
             self.districts_vulnerability = {
-                "Chiure": "GT", #"GT",
-                "Caia": "GT", #"NRT",
-                "Changara": "GT", #"GT",
-                "Chemba": "GT", #"GT",
-                "Chibuto": "GT", #"NRT",
-                "Chicualacuala": "GT", #"NRT",
-                "Guija": "GT", #"NRT",
-                "Mabalane": "GT", #"NRT",
-                "Mapai": "GT", #"NRT",
-                "Marara": "GT", #"GT",
-                "Massingir": "GT", #"NRT",
+                "Chiure": "GT",  # "GT",
+                "Caia": "GT",  # "NRT",
+                "Changara": "GT",  # "GT",
+                "Chemba": "GT",  # "GT",
+                "Chibuto": "GT",  # "NRT",
+                "Chicualacuala": "GT",  # "NRT",
+                "Guija": "GT",  # "NRT",
+                "Mabalane": "GT",  # "NRT",
+                "Mapai": "GT",  # "NRT",
+                "Marara": "GT",  # "GT",
+                "Massingir": "GT",  # "NRT",
             }
             self.districts = self.districts_vulnerability.keys()
         else:
             self.intensity_thresholds = {"Severe": -1, "Moderate": -0.85, "Mild": -0.68}
         if self.issue is None:  # analytical / triggers
             self.issue = ["05", "06", "07", "08", "09", "10", "11", "12", "01", "02"]
-        if os.path.exists(f"data/{self.iso}/outputs/Districts_FbF/{self.index}/fbf.districts.roc.{self.index}.{self.year}.txt"):
+        if os.path.exists(
+            f"data/{self.iso}/outputs/Districts_FbF/{self.index}/fbf.districts.roc.{self.index}.{self.year}.txt"
+        ):
             self.fbf_districts_df = read_fbf_districts(
                 f"data/{self.iso}/outputs/Districts_FbF/{self.index}/fbf.districts.roc.{self.index}.{self.year}.txt",
                 self,
