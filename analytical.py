@@ -17,6 +17,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 from dask.distributed import Client
+from hip.analysis.aoi.analysis_area import AnalysisArea
 from hip.analysis.analyses.drought import (compute_probabilities,
                                            concat_obs_levels,
                                            get_accumulation_periods,
