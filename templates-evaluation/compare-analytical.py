@@ -19,20 +19,14 @@
 
 # +
 import numpy as np
-import xarray as xr
 import pandas as pd
 import seaborn as sns
 import geopandas as gpd
-import xskillscore as xss
-
-from odc.geo.geobox import GeoBox
 # -
 
-from helper_fns import read_observations_locally, read_forecasts_locally, aggregate_by_district
+from AA.helper_fns import read_observations_locally, read_forecasts_locally
 from config.params import Params
-from analytical import calculate_forecast_probabilities, evaluate_forecast_probabilities, get_verification_df
 from hip.analysis.analyses.drought import get_accumulation_periods
-from hip.analysis.aoi import AnalysisArea
 
 # Prepare input data
 
@@ -40,6 +34,7 @@ fc = read_forecasts_locally('data/MOZ/forecast/Moz_SAB_tp_ecmwf_01/*.nc')
 
 params = Params(iso='MOZ', index='SPI')
 params.issue=1
+params.year = 2022
 
 obs = read_observations_locally(f"data/MOZ/chirps")
 
@@ -57,99 +52,6 @@ accumulation_periods
 period = accumulation_periods['AM']
 
 fc = fc.where(fc.time < np.datetime64('2022-07-01T12:00:00.000000000'), drop=True)
-
-# Test functions for ```calculate_forecast_probabilities``` and ```evaluate_forecast_probabilities```
-
-params.year = 2022
-
-
-def get_test_input(month="01"):
-    np.random.seed(42)
-    test_input_fc = xr.Dataset(
-        data_vars=dict(
-            tp=(["time", "ensemble", "longitude", "latitude"], np.random.rand(len(range(1993, 2022)) * 31, 5, 3, 3)),
-        ),
-        coords = dict(
-            time=pd.concat([pd.Series(pd.date_range(f"{yyyy}-{month}-01", f"{yyyy}-{month}-31")) for yyyy in range(1993, 2022)]),
-            ensemble=range(5),
-            longitude=[-1, 0, 1],
-            latitude=[-1, 0, 1],
-        )
-    )
-    test_input_obs = xr.Dataset(
-        data_vars=dict(precip=(["time", "longitude", "latitude"], np.random.rand(len(range(1993, 2022)) * 31, 3, 3))),
-        coords = dict(
-            time=pd.concat([pd.Series(pd.date_range(f"{yyyy}-{month}-01", f"{yyyy}-{month}-31")) for yyyy in range(1993, 2022)]),
-            longitude=[-1, 0, 1],
-            latitude=[-1, 0, 1],
-        )
-    )
-    test_input_probas = xr.Dataset(
-        data_vars=dict(tp=(["year"], np.random.rand(len(range(1993, 2022))))),
-        coords = dict(year=range(1993, 2022))
-    )
-    np.random.seed(43)
-    test_input_probas_bc = xr.Dataset(
-        data_vars=dict(scen=(["year"], np.random.rand(len(range(1993, 2022))))),
-        coords = dict(year=range(1993, 2022))
-    )
-    test_input_levels = xr.Dataset(
-        data_vars=dict(precip=(["year"], np.random.randint(0, 2, len(range(1993, 2022))))),
-        coords = dict(year=range(1993, 2022))
-    )
-    return test_input_fc, test_input_obs, test_input_probas, test_input_probas_bc, test_input_levels
-
-
-def test_calculate_forecast_probabilities():
-    np.random.seed(42)
-    test_input_fc1, test_input_obs1, _, _, _ = get_test_input("01")
-    probabilities_a, bc_a, _, levels_obs_a = calculate_forecast_probabilities(test_input_fc1, test_input_obs1, params, (1), 1) 
-    probabilities_b, bc_b, _, levels_obs_b = calculate_forecast_probabilities(test_input_fc1, test_input_obs1, params, (1), 12) 
-    
-    ref_probas_month1 = xr.DataArray(
-        np.array([0.2, 0.2, 0.2, 0.2, 0.2, 0.13333333, 0.2, 0.2, 0.4, 0.2, 0., 0.06666667, 0., 0.2, 0.33333333, 0., 0.2, 0.2, 0.13333333, 0.2, 0.6, 0, 0.6, 0.33333333, 0.2, 0.2, 0.26666667, 0.13333333, 0.]),
-        coords=dict(year=range(1993, 2022))
-    ).assign_coords(dict(longitude=0, latitude=0))
-    ref_bc_month1_issue1 = xr.DataArray(
-        np.array([0.2, 0.26666667, 0.2, 0.33333333, 0.2, 0.06666667, 0.26666667, 0.2, 0.4, 0.26666667, 0., 0.06666667, 0., 0.2, 0.26666667, 0.06666667, 0.2, 0.13333333, 0.2, 0.2, 0.73333333, 0., 0.6, 0.33333333, 0.2, 0.2, 0.26666667, 0.2, 0.]),
-        coords=dict(year=range(1993, 2022))
-    ).assign_coords(dict(longitude=0, latitude=0))
-    ref_bc_month1_issue12 = xr.DataArray(
-        np.array([0.13333333, 0.26666667, 0.2, 0.13333333, 0.2, 0.2 , 0.26666667, 0.2 , 0.4, 0.26666667, 0., 0.06666667, 0., 0.2, 0.4, 0., 0.2, 0.2, 0.26666667, 0.2, 0.66666667, 0., 0.6, 0.46666667, 0.2, 0.2, 0.33333333, 0.2, 0]),
-        coords=dict(year=range(1993, 2022))
-    ).assign_coords(dict(longitude=0, latitude=0))
-    ref_obs_month1 = xr.DataArray(
-        np.array([0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0.66666667, 0, 0, 1, 0, 1, 0.33333333, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0.33333333]),
-        coords=dict(year=range(1993, 2022))
-    ).assign_coords(dict(longitude=0, latitude=0))
-
-    xr.testing.assert_allclose(probabilities_a.sel(latitude=0, longitude=0).mean('category').tp, ref_probas_month1)
-    xr.testing.assert_allclose(probabilities_b.sel(latitude=0, longitude=0).mean('category').tp, ref_probas_month1)
-
-    xr.testing.assert_allclose(bc_a.sel(latitude=0, longitude=0).mean('category').scen, ref_bc_month1_issue1)
-    xr.testing.assert_allclose(bc_b.sel(latitude=0, longitude=0).mean('category').scen, ref_bc_month1_issue12)
-    
-    xr.testing.assert_allclose(levels_obs_a.sel(latitude=0, longitude=0).mean('category').precip, ref_obs_month1)
-    xr.testing.assert_allclose(levels_obs_b.sel(latitude=0, longitude=0).mean('category').precip, ref_obs_month1)
-
-    print("\nFORECASTS PROBABILITIES TESTS PASSED")
-ref_probas_month1_issue1 = test_calculate_forecast_probabilities()
-
-
-# +
-def test_evaluate_forecast_probabilities():
-    _, _, test_probas, test_probas_bc, test_obs_levels = get_test_input()
-    test_auc, test_auc_bc = evaluate_forecast_probabilities(test_probas, test_probas_bc, test_obs_levels)
-
-    xr.testing.assert_allclose(test_auc, xr.DataArray(0.45192308))
-    xr.testing.assert_allclose(test_auc_bc, xr.DataArray(0.19230769))
-
-    print("\nFORECASTS VERIFICATION TESTS PASSED")
-
-test_evaluate_forecast_probabilities()
-
-
-# -
 
 # ### Comparison on the full output at the district level
 
