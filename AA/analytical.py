@@ -362,17 +362,17 @@ def save_districts_results(
     probs_bc_district = aggregate_by_district(probabilities_bc, gdf, params)
 
     obs_district.to_zarr(
-        f"data/{params.iso}/outputs/zarr/obs/2022/{params.index.upper()} {period_name}/observations.zarr",
+        f"data/{params.iso}/outputs/zarr/obs/2022_all_districts/{params.index.upper()} {period_name}/observations.zarr",
         mode="w",
     )
 
     probs_district.to_zarr(
-        f"data/{params.iso}/outputs/zarr/2022/{issue}/{params.index.upper()} {period_name}/probabilities.zarr",
+        f"data/{params.iso}/outputs/zarr/2022_all_districts/{issue}/{params.index.upper()} {period_name}/probabilities.zarr",
         mode="w",
     )
 
     probs_bc_district.to_zarr(
-        f"data/{params.iso}/outputs/zarr/2022/{issue}/{params.index.upper()} {period_name}/probabilities_bc.zarr",
+        f"data/{params.iso}/outputs/zarr/2022_all_districts/{issue}/{params.index.upper()} {period_name}/probabilities_bc.zarr",
         mode="w",
     )
 
