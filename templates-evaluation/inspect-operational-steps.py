@@ -18,7 +18,6 @@
 # +
 import datetime
 import pandas as pd
-import geopandas as gpd
 
 from config.params import Params 
 
@@ -57,10 +56,6 @@ observations
 # Read triggers file
 triggers_df = pd.read_csv(
     f"data/{params.iso}/outputs/Plots/triggers.aa.python.spi.dryspell.2022.csv"
-)
-
-gdf = gpd.read_file(
-    f"data/{params.iso}/shapefiles/moz_admbnda_2019_SHP/moz_admbnda_adm2_2019.shp"
 )
 
 # Get accumulation periods (DJ, JF, FM, DJF, JFM...)
@@ -133,8 +128,8 @@ display(probabilities_bc)
 
 # +
 # Aggregate by district
-probs_district = aggregate_by_district(probabilities, gdf, params)
-probs_bc_district = aggregate_by_district(probabilities_bc, gdf, params)
+probs_district = aggregate_by_district(probabilities, params.gdf, params)
+probs_bc_district = aggregate_by_district(probabilities_bc, params.gdf, params)
 
 # Build single xarray with merged unbiased/biased probabilities
 probs_by_district = merge_un_biased_probs(

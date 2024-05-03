@@ -20,7 +20,7 @@ import geopandas as gpd
 
 from config.params import Params
 
-from helper_fns import (
+from AA.helper_fns import (
     read_forecasts_locally,
     read_observations_locally,
     aggregate_by_district,
@@ -69,16 +69,18 @@ def run(country, index):
         f"Completed reading of observations for the whole {params.iso} country"
     )
 
-    gdf = gpd.read_file(
-        f"data/{params.iso}/shapefiles/moz_admbnda_2019_SHP/moz_admbnda_adm2_2019.shp"
-    )
+    def get_forecasts(issue):
+        return read_forecasts_locally(
+            f"data/{params.iso}/forecast/Moz_SAB_tp_ecmwf_{issue}/*.nc"
+        )
 
     fbf_roc_issues = [
         run_issue_verification(
+            get_forecasts(issue),
             observations,
             issue,
             params,
-            gdf,
+            params.gdf,
         )
         for issue in params.issue
     ]
@@ -97,7 +99,7 @@ def run(country, index):
     client.close()
 
 
-def run_issue_verification(observations, issue, params, gdf):
+def run_issue_verification(forecasts, observations, issue, params, gdf):
     """
     Run analytical / verification pipeline for one issue month
 
@@ -110,14 +112,11 @@ def run_issue_verification(observations, issue, params, gdf):
         fbf_issue: pandas.DataFrame, dataframe with roc scores for all indexes, districts, categories and a specified issue month
     """
 
-    forecasts = read_forecasts_locally(
-        f"data/{params.iso}/forecast/Moz_SAB_tp_ecmwf_{issue}/*.nc"
-    )
+    # Make sure forecasts dates are aligned with obs
     forecasts = forecasts.where(
         forecasts.time < np.datetime64(f"{params.year}-07-01T12:00:00.000000000"),
         drop=True,
     )
-    logging.info(f"Completed reading of forecasts for the issue month {issue}")
 
     # Get accumulation periods (DJ, JF, FM, DJF, JFM...)
     accumulation_periods = get_accumulation_periods(
