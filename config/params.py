@@ -81,17 +81,17 @@ class Params:
         if self.iso == "MOZ":
             self.intensity_thresholds = {"Severo": -1, "Moderado": -0.85, "Leve": -0.68}
             self.districts_vulnerability = {
-                "Chiure": "GT",  # "GT",
-                "Caia": "GT",  # "NRT",
-                "Changara": "GT",  # "GT",
-                "Chemba": "GT",  # "GT",
-                "Chibuto": "GT",  # "NRT",
-                "Chicualacuala": "GT",  # "NRT",
-                "Guija": "GT",  # "NRT",
-                "Mabalane": "GT",  # "NRT",
-                "Mapai": "GT",  # "NRT",
-                "Marara": "GT",  # "GT",
-                "Massingir": "GT",  # "NRT",
+                "Chiure": "GT",
+                "Caia": "NRT",
+                "Changara": "GT",
+                "Chemba": "GT",
+                "Chibuto": "NRT",
+                "Chicualacuala": "NRT",
+                "Guija": "NRT",
+                "Mabalane": "NRT",
+                "Mapai": "NRT",
+                "Marara": "GT",
+                "Massingir": "NRT",
             }
             self.districts = self.districts_vulnerability.keys()
         else:
