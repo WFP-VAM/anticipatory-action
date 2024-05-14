@@ -22,11 +22,7 @@ def aggregate_spi_dryspell_triggers(spi_window, dry_window):
 
 
 def triggers_da_to_df(triggers_da, hr_da):
-    triggers_df = (
-        triggers_da.to_dataframe()
-        .drop(["spatial_ref"], axis=1)
-        .dropna()
-    )
+    triggers_df = triggers_da.to_dataframe().drop(["spatial_ref"], axis=1).dropna()
     triggers_df = triggers_df.reset_index().set_index(
         ["index", "category", "district", "issue"]
     )
@@ -47,14 +43,19 @@ def aggregate_by_district(ds, gdf, params):
     PROJ = "+proj=longlat +ellps=clrk66 +towgs84=-80,-100,-228,0,0,0,0 +no_defs"
 
     # Clip ds to districts
-    list_districts = [
-        ds.rio.write_crs(PROJ)
-        .rio.clip(gpd.GeoSeries(geo))
-        .mean(dim=["latitude", "longitude"])
-        for geo in gdf.geometry
-    ]
+    list_districts = {}
+    for _, row in gdf.iterrows():
+        try:
+            list_districts[row["Name"]] = (
+                ds.rio.write_crs(PROJ)
+                .rio.clip(gpd.GeoSeries(row.geometry))
+                .mean(dim=["latitude", "longitude"])
+            )
+        except:
+            continue
+
     ds_by_district = xr.concat(
-        list_districts, pd.Index(gdf['adm2_name'].values, name="district")
+        list_districts.values(), pd.Index(list_districts.keys(), name="district")
     )
 
     return ds_by_district
@@ -139,35 +140,37 @@ def read_fbf_districts(path_fbf, params):
     return fbf_districts
 
 
-# Temporary local reading function before ingestion of ECMWF data
-def read_forecasts_locally(rfh_path):
-    files = glob.glob(rfh_path)
-    list_years = []
-    for f in files:
-        rfh_year = xr.open_dataset(f, engine="netcdf4")
-        list_years.append(rfh_year)
-    rfh_all = xr.concat(list_years, dim="time")
-    return rfh_all
+def read_forecasts(area, issue, local_path):
+    if os.path.exists(local_path):
+        forecasts = xr.open_zarr(local_path).tp.persist()
+    else:
+        forecasts = area.get_dataset(
+            ["ECMWF", f"RFH_FORECASTS_SEAS5_ISSUE{int(issue)}_DAILY"],
+            load_config={
+                "gridded_load_kwargs": {
+                    "resampling": "bilinear",
+                }
+            },
+        ).persist()
+        forecasts.attrs["nodata"] = np.nan
+        forecasts.chunk(dict(time=-1)).to_zarr(local_path, consolidated=True)
+    return forecasts
 
 
-# Temporary local reading function before ingestion of HDC data
-def read_observations_locally(rfh_path):
-    ds1 = xr.open_dataset(
-        f"{rfh_path}/RemapMoz-Tot.days_p25_15072021.nc", engine="netcdf4"
-    )
-    ds2 = xr.open_dataset(
-        f"{rfh_path}/RemapMoz-Tot.1990-Mar2022_days_p25.nc", engine="netcdf4"
-    )
-    ds2 = ds2.where(ds2.time > ds1.time.values[-1], drop=True)
-    ds2022 = xr.open_dataset(
-        f"{rfh_path}/RemapMoz-chirps-v2.0.2022.days_p25.nc", engine="netcdf4"
-    )
-    ds2022 = ds2022.where(ds2022.time > ds2.time.values[-1], drop=True)
-    ds2023 = xr.open_dataset(
-        f"{rfh_path}/RemapMoz-chirps-v2.0.2023.days_p25.nc", engine="netcdf4"
-    )
-    rfh_all = xr.concat([ds1, ds2, ds2022, ds2023], dim="time")
-    return rfh_all
+def read_observations(area, local_path):
+    if os.path.exists(local_path):
+        observations = xr.open_zarr(local_path).band.persist()
+    else:
+        observations = area.get_dataset(
+            ["CHIRPS", "RFH_DAILY"],
+            load_config={
+                "gridded_load_kwargs": {
+                    "resampling": "bilinear",
+                }
+            },
+        ).persist()
+        observations.to_zarr(local_path)
+    return observations
 
 
 ## Get SPI/probabilities of reference produced with R script from Gabriela Nobre for validation ##

@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import geopandas as gpd
 
-from helper_fns import read_fbf_districts
+from AA.helper_fns import read_fbf_districts
 
 DRYSPELL_THRESHOLD = 2.0
 
@@ -87,9 +87,6 @@ class Params:
         self.index = self.index.lower()
         self.aggregate = AGGREGATES[self.index]
         if self.iso == "MOZ":
-            self.gdf = gpd.read_file(
-                f"data/{self.iso}/shapefiles/moz_admbnda_2019_SHP/moz_admbnda_adm2_2019.shp"
-            )
             self.intensity_thresholds = {"Severo": -1, "Moderado": -0.85, "Leve": -0.68}
             self.districts_vulnerability = {
                 "Chiure": "GT",
@@ -106,17 +103,13 @@ class Params:
             }
             self.districts = self.districts_vulnerability.keys()
         else:
-            self.gdf = gpd.read_file(
-                f"data/{self.iso}/shapefiles/global_adm2_wfpGE_UN_final/global_adm2_wfpGE_UN_final.shp"
-            )
-            self.gdf = self.gdf.loc[self.gdf.iso3 == self.iso]
             self.intensity_thresholds = {"Severe": -1, "Moderate": -0.85, "Mild": -0.68}
         if self.issue is None:  # analytical / triggers
             self.issue = ["05", "06", "07", "08", "09", "10", "11", "12", "01", "02"]
         if os.path.exists(
-            f"data/{self.iso}/outputs/Districts_FbF/{self.index}/fbf.districts.roc.{self.index}.{self.year}.txt"
+            f"data/{self.iso}/outputs/Districts_FbF/{self.index}/fbf.districts.roc.{self.index}.{self.year}.csv"
         ):
             self.fbf_districts_df = read_fbf_districts(
-                f"data/{self.iso}/outputs/Districts_FbF/{self.index}/fbf.districts.roc.{self.index}.{self.year}.txt",
+                f"data/{self.iso}/outputs/Districts_FbF/{self.index}/fbf.districts.roc.{self.index}.{self.year}.csv",
                 self,
             )
