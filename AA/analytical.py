@@ -292,7 +292,6 @@ def calculate_forecast_probabilities(
     logging.info(f"Completed bias correction")
 
     if params.index == "dryspell":
-        print("reversed dryspells")
         anomaly_fc *= -1
         anomaly_bc *= -1
         anomaly_obs *= -1

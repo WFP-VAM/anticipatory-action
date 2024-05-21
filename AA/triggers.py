@@ -1,3 +1,6 @@
+import sys
+sys.path.append('..')
+
 import click
 import logging
 
@@ -17,7 +20,8 @@ import glob
 import numpy as np
 import xarray as xr
 import pandas as pd
-import geopandas as gpd
+
+from hip.analysis.aoi.analysis_area import AnalysisArea
 
 from config.params import Params
 
@@ -40,13 +44,22 @@ def run(country, index, vulnerability):
     client = Client()
 
     params = Params(iso=country, index=index)
-
-    gdf = gpd.read_file(
-        f"data/{params.iso}/shapefiles/moz_admbnda_2019_SHP/moz_admbnda_adm2_2019.shp"
+    
+    area = AnalysisArea.from_admin_boundaries(
+        iso3=country.upper(),
+        admin_level=2,
+        resolution=0.25,
+        datetime_range=f"1981-01-01/{params.year}-06-30",
     )
-
+    
+    gdf = area.get_dataset([area.BASE_AREA_DATASET])
+    admin1 = area.get_admin_boundaries(iso3=params.iso, admin_level=1).drop(['geometry', 'adm0_Code'], axis=1)
+    admin1.columns = ['Code_1', 'adm1_name']
+    gdf = pd.merge(gdf, admin1, how='left', left_on=['adm1_Code'],right_on=['Code_1'])
+    
+    # TODO make this generic
     rfh = xr.DataArray(
-        np.arange(1, 9),
+        np.arange(1, 10),
         coords=dict(
             time=(
                 ["time"],
@@ -63,10 +76,9 @@ def run(country, index, vulnerability):
     )
 
     obs = read_aggregated_obs(
-        f"data/{params.iso}/outputs/zarr/obs/2022_all_districts",
+        f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/zarr/{params.year}/obs",
         params,
     )
-    obs = obs.where(obs.index != f"{index} JDJ", drop=True)
     obs = obs.assign_coords(
         lead_time=("index", [periods[i.split(" ")[-1]][0] for i in obs.index.values])
     )
@@ -75,15 +87,13 @@ def run(country, index, vulnerability):
     )
 
     probs_ds = read_aggregated_probs(
-        f"data/{params.iso}/outputs/zarr/2022_all_districts",
+        f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/zarr/{params.year}",
         params,
         
     )
-    # TODO fix in get_accumulation_periods
-    probs_ds = probs_ds.where(probs_ds.index != f"{index} JDJ", drop=True)
     probs = xr.concat(
         [
-            merge_un_biased_probs(probs_ds, probs_ds, params, i.split(" ")[-1])
+            merge_un_biased_probs(probs_ds.raw, probs_ds.bc, params, i.split(" ")[-1])
             for i in probs_ds.index.values
         ],
         dim="index",
@@ -92,8 +102,7 @@ def run(country, index, vulnerability):
         f"Completed reading of aggregated probabilities for the whole {params.iso} country"
     )
 
-    # Filter year/time dimension: temporary before harmonization with analytical script
-    obs = obs.sel(year=probs.year.values).load()
+    # Filter year dimension: temporary before harmonization with analytical script
     obs = obs.sel(time=probs.year.values).load()
 
     # Trick to align couples of issue months inside apply_ufunc
@@ -116,7 +125,7 @@ def run(country, index, vulnerability):
         vulnerability,
         vectorize=True,
         join="outer",
-        input_core_dims=[["year"], ["time"], ["year"], ["year"], [], [], [], []],
+        input_core_dims=[["time"], ["time"], ["year"], ["year"], [], [], [], []],
         output_core_dims=[["trigger"], []],
         dask="parallelized",
         keep_attrs=True,
@@ -132,10 +141,10 @@ def run(country, index, vulnerability):
     score["index"] = score.index.astype(str)
 
     trigs.to_zarr(
-        f"data/MOZ/outputs/Plots/all_districts/triggers_{params.index}_{params.year}_{vulnerability}.zarr", mode="w"
+        f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/triggers/triggers_{params.index}_{params.year}_{vulnerability}.zarr", mode="w"
     )
     score.to_zarr(
-        f"data/MOZ/outputs/Plots/all_districts/score_{params.index}_{params.year}_{vulnerability}.zarr", mode="w"
+        f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/triggers/score_{params.index}_{params.year}_{vulnerability}.zarr", mode="w"
     )
     logging.info(f"Triggers and score datasets saved as a back-up")
 
@@ -151,7 +160,7 @@ def run(country, index, vulnerability):
 
     # Add window information depending on district
     trigs_df["Window"] = [
-        get_window_district("MOZ", gdf, row["index"].split(" ")[-1], row.district)
+        get_window_district(params.iso, gdf, row["index"].split(" ")[-1], row.district)
         for _, row in trigs_df.iterrows()
     ]
 
@@ -167,7 +176,7 @@ def run(country, index, vulnerability):
         ]
     )
 
-    # Keep two pairs of triggers per window of activation
+    # Keep 4 pairs of triggers per window of activation
     df_window = filter_triggers_by_window(
         df_leadtime,
         probs_ready,
@@ -177,7 +186,7 @@ def run(country, index, vulnerability):
     )
 
     df_window.to_csv(
-        "data/MOZ/outputs/Plots/triggers.aa.python.{params.index}.{params.year}.{vulnerability}.all.districts.csv",
+        f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/triggers/triggers.{params.index}.{params.year}.{vulnerability}.csv",
         index=False,
     )
 
@@ -207,25 +216,25 @@ NON_REGRET_T['HR']=0.65; NON_REGRET_T['SR']=0.55; NON_REGRET_T['FR']=0.45; NON_R
 
 @jit(nopython=True, cache=True)
 def _compute_confusion_matrix(true, pred):
-  # TODO move to hip-analysis
-  '''
-  Computes a confusion matrix using numpy for two np.arrays
-  true and pred.
+    # TODO move to hip-analysis
+    '''
+    Computes a confusion matrix using numpy for two np.arrays
+    true and pred.
 
-  Results are identical (and similar in computation time) to: 
+    Results are identical (and similar in computation time) to: 
     "from sklearn.metrics import confusion_matrix"
 
-  However, this function avoids the dependency on sklearn and 
-  allows to use numba in nopython mode.
-  '''
+    However, this function avoids the dependency on sklearn and 
+    allows to use numba in nopython mode.
+    '''
 
-  K = 2 #len(np.unique(true)) # Number of classes 
-  result = np.zeros((K, K))
+    K = 2 #len(np.unique(true)) # Number of classes 
+    result = np.zeros((K, K))
 
-  for i in range(len(true)):
-    result[true[i]][pred[i]] += 1
+    for i in range(len(true)):
+        result[true[i]][pred[i]] += 1
 
-  return result
+    return result
 
 
 @jit(
@@ -267,11 +276,11 @@ def objective(
     number_actions = np.sum(prediction)
 
     if hits + false == 0: # avoid divisions by zero
-       return [penalty]
+        return [penalty, penalty] if sorting else [penalty]
     
     false_alarm_rate = false / (false + hits + eps)
     false_tol = np.sum(prediction & (obs_val > tolerance[category]))
-    hit_rate = hits / (hits + fn + eps)
+    hit_rate = np.round(hits / (hits + fn + eps), 3)
     success_rate = hits + false - false_tol
     failure_rate = false_tol
     
@@ -292,10 +301,10 @@ def objective(
     if sorting:
         return [-hit_rate, failure_rate / (number_actions + eps)]
     else:
-      if np.all(constraints):
-          return [-hit_rate + alpha * false_alarm_rate]
-      else:
-          return [penalty]
+        if np.all(constraints):
+            return [-hit_rate + alpha * false_alarm_rate]
+        else:
+            return [penalty]
 
 
 @jit(nopython=True)
@@ -450,11 +459,11 @@ def filter_triggers_by_window(df_leadtime, probs_ready, probs_set, obs, vulnerab
             da_sel = da_sel.sel(category=row.category.unique())
         return da_sel
 
-    def get_two_pairs_per_window(tdf):
+    def get_top_pairs_per_window(tdf, n_to_keep=4):
         for (ind, iss), sub_tdf in tdf.groupby(["index", "issue"]):
             t = sub_tdf.sort_values("trigger").trigger_value.values
             issue = sub_tdf.issue.unique()
-            hr, fr = objective(
+            stats = tuple(objective(
                 t,
                 sel_row(obs.val, tdf, ind).values[0],
                 sel_row(obs.bool, tdf, ind).values[0][0],
@@ -468,10 +477,11 @@ def filter_triggers_by_window(df_leadtime, probs_ready, probs_set, obs, vulnerab
                 GENERAL_T,
                 NON_REGRET_T,
                 sorting=True,
-            )
+            ))
+            hr, fr = stats[0], stats[1]
             tdf.loc[(tdf["index"] == ind) & (tdf.issue == iss), "HR"] = hr
             tdf.loc[(tdf["index"] == ind) & (tdf.issue == iss), "FR"] = fr
-        if len(tdf) < 4:  # more than two pairs otherwise no need
+        if len(tdf) < (2 * n_to_keep):  # more than two pairs otherwise no need
             return tdf
         else:
             best_four = (
@@ -480,7 +490,7 @@ def filter_triggers_by_window(df_leadtime, probs_ready, probs_set, obs, vulnerab
             return best_four
 
     triggers_window_list = [
-        get_two_pairs_per_window(r)
+        get_top_pairs_per_window(r)
         for _, r in df_leadtime.groupby(["district", "category", "Window"])
     ]
 
@@ -515,8 +525,9 @@ WINDOW2_INDEXES_MOZ = {
     'Zambezia': ['JFM', 'FM', 'FMA', 'MA', 'MAM', 'AM'], 
 }
 
+
 def get_window_district(iso, shp, index, district):
-    province = shp.loc[shp.ADM2_PT == district].ADM1_PT.unique()[0]
+    province = shp.loc[shp.Name == district].adm1_name.unique()[0]
     if iso == "MOZ":
         if index in WINDOW1_INDEXES_MOZ[province]:
             return "Window1"
@@ -524,7 +535,7 @@ def get_window_district(iso, shp, index, district):
                 return "Window2"
         else:
                 return np.nan
-
+            
 
 def read_aggregated_obs(path_to_zarr, params):
     list_index_paths = glob.glob(f"{path_to_zarr}/{params.index} *")
@@ -533,7 +544,7 @@ def read_aggregated_obs(path_to_zarr, params):
     obs_val = xr.open_mfdataset(
         list_val_paths,
         engine="zarr",
-        preprocess=lambda ds: ds["precip"],
+        preprocess=lambda ds: ds["band"],
         combine="nested",
         concat_dim="index",
     )
@@ -541,12 +552,12 @@ def read_aggregated_obs(path_to_zarr, params):
 
     obs = xr.Dataset({"bool": obs_bool, "val": obs_val})
     obs["time"] = [pd.to_datetime(t).year for t in obs.time.values]
-    obs["index"] = [i.split("\\")[-2] for i in list_val_paths]
+    obs["index"] = [i.split("/")[-2] for i in list_val_paths]
     return obs
 
 
 def read_aggregated_probs(path_to_zarr, params):
-    list_issue_paths = glob.glob(f"{path_to_zarr}/*")
+    list_issue_paths = glob.glob(f"{path_to_zarr}/*")[:-1] # remove obs folder
     list_index = {}
     for l in list_issue_paths:
         list_index_raw = [
@@ -557,7 +568,7 @@ def read_aggregated_probs(path_to_zarr, params):
             os.path.join(i, "probabilities_bc.zarr")
             for i in glob.glob(f"{l}/{params.index} *")
         ]
-        index_names = [i.split("\\")[-2] for i in list_index_raw]
+        index_names = [i.split("/")[-2] for i in list_index_raw]
 
         try:
             index_raw = xr.open_mfdataset(
@@ -577,10 +588,10 @@ def read_aggregated_probs(path_to_zarr, params):
 
             ds_index = xr.Dataset({"raw": index_raw, "bc": index_bc})
             ds_index["index"] = index_names
-            list_index[int(l.split("\\")[-1])] = ds_index
+            list_index[int(l.split("/")[-1])] = ds_index
         except:
             continue
-
+    
     return xr.concat(list_index.values(), dim=pd.Index(list_index.keys(), name="issue"))
 
 
