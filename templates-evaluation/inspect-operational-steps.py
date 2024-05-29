@@ -6,14 +6,18 @@
 #       extension: .py
 #       format_name: light
 #       format_version: '1.5'
-#       jupytext_version: 1.15.2
+#       jupytext_version: 1.16.1
 #   kernelspec:
-#     display_name: Python 3 (ipykernel)
+#     display_name: hdc
 #     language: python
-#     name: python3
+#     name: conda-env-hdc-py
 # ---
 
+#
 # This notebook is not used operationally or for any validation, its purpose is to have a clear understanding of the core functions of the AA workflow. The outputs and dimensions of each main step can thus be identified here. It can also be used to run the operational workflow for a very specific index or issue month. However, in order to better compare the outputs with the reference ones, some very simple analysis plots/tables will be added. 
+
+import sys
+sys.path.append('..')
 
 # +
 import datetime
@@ -21,15 +25,15 @@ import pandas as pd
 
 from config.params import Params 
 
-from helper_fns import (
-    read_forecasts_locally,
-    read_observations_locally,
+from AA.helper_fns import (
+    read_forecasts,
+    read_observations,
     aggregate_by_district,
     merge_un_biased_probs,
     merge_probabilities_triggers_dashboard,
 )
 
-# from analysis.aoi import AnalysisArea, AnalysisAreaData, Country
+from hip.analysis.aoi.analysis_area import AnalysisArea
 from hip.analysis.analyses.drought import (
     get_accumulation_periods,
     run_accumulation_index,
@@ -37,26 +41,46 @@ from hip.analysis.analyses.drought import (
     run_bias_correction,
     compute_probabilities,
 )
-
-# %cd ../
 # -
 
-params = Params(iso='MOZ', issue=10, index='SPI')
+params = Params(iso='MOZ', issue=12, index='SPI')
 
-# To replace with HDC dataset
-forecasts = read_forecasts_locally(
-    f"data/{params.iso}/forecast/{params.iso}_SAB_tp_ecmwf_{str(params.issue).zfill(2)}/*.nc"
+# +
+area = AnalysisArea.from_admin_boundaries(
+    iso3=params.iso,
+    admin_level=2,
+    resolution=0.25,
+)
+
+gdf = area.get_dataset([area.BASE_AREA_DATASET])
+# -
+
+forecasts = read_forecasts(
+    area,
+    params.issue,
+    f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/zarr/{params.year}/{params.issue}/forecasts.zarr",
+    #update=True,
 )
 forecasts
 
-# To replace with CHIRPS (rfh_daily for DRYSPELL or r1h_dekad if SPI)
-observations = read_observations_locally(f"data/{params.iso}/chirps")
+forecasts
+
+observations = read_observations(
+    area,
+    f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/zarr/{params.year}/obs/observations.zarr",
+)
 observations
 
+forecasts.time
+
+observations.time
+
+# +
 # Read triggers file
-triggers_df = pd.read_csv(
-    f"data/{params.iso}/outputs/Plots/triggers.aa.python.spi.dryspell.2022.csv"
-)
+#triggers_df = pd.read_csv(
+#    f"data/{params.iso}/outputs/Plots/triggers.aa.python.spi.dryspell.2022.csv"
+#)
+# -
 
 # Get accumulation periods (DJ, JF, FM, DJF, JFM...)
 accumulation_periods = get_accumulation_periods(
@@ -68,7 +92,7 @@ accumulation_periods = get_accumulation_periods(
 )
 
 # Get single use case
-period_name, period_months = list(accumulation_periods.items())[6]
+period_name, period_months = list(accumulation_periods.items())[3]
 period_name, period_months
 
 # Remove 1980 season to harmonize observations between different indexes
@@ -91,14 +115,18 @@ accumulation_obs = accumulation_obs.sel(
     time=slice(datetime.date(1979, 1, 1), datetime.date(params.year - 1, 12, 31))
 )
 
+anomaly_fc.where(anomaly_fc.time.dt.day == 1, drop=True).isel(latitude=0, longitude=0).plot.line()
+anomaly_obs.isel(latitude=0, longitude=0).plot.line()
+
 # Anomaly
 anomaly_fc = run_gamma_standardization(
-    accumulation_fc, params.calibration_start, params.calibration_stop, members=True
+    accumulation_fc.load(), params.calibration_start, params.calibration_stop, members=True,
 )
 anomaly_obs = run_gamma_standardization(
-    accumulation_obs,
+    accumulation_obs.load(),
     params.calibration_start,
     params.calibration_stop,
+    members=False,
 )
 display(anomaly_fc)
 
@@ -116,6 +144,7 @@ index_bc = run_bias_correction(
     params.end_season,
     params.year,
     int(params.issue),
+    nearest_neighbours=8,
     enso=True,
 )
 display(index_bc)
