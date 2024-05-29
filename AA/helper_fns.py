@@ -1,5 +1,5 @@
-import os
 import glob
+import os
 
 import geopandas as gpd
 import numpy as np
@@ -68,14 +68,10 @@ def merge_un_biased_probs(probs_district, probs_bc_district, params, period_name
     fbf_bc = fbf_bc.loc[fbf_bc["Index"] == f"{params.index.upper()} {period_name}"]
     fbf_bc = fbf_bc[["district", "category", "issue", "BC"]]
     fbf_bc_da = fbf_bc.set_index(["district", "category", "issue"]).to_xarray().BC
-    fbf_bc_da = fbf_bc_da.expand_dims(
-        dim={"index": [f"{params.index} {period_name}"]}
-    )
+    fbf_bc_da = fbf_bc_da.expand_dims(dim={"index": [f"{params.index} {period_name}"]})
 
     # Combination of both probabilities datasets
-    probs_merged = (
-        1 - fbf_bc_da
-    ) * probs_district + fbf_bc_da * probs_bc_district
+    probs_merged = (1 - fbf_bc_da) * probs_district + fbf_bc_da * probs_bc_district
 
     probs_merged = probs_merged.to_dataset(name="prob")
 
@@ -97,12 +93,12 @@ def merge_probabilities_triggers_dashboard(probs, triggers, params, period):
         )
         triggers["prob"] = np.nan
         triggers["aggregation"] = np.nan
-        
+
     triggers_index = triggers.loc[
         (triggers["index"] == f"{params.index} {period}")
         & (triggers["issue"] == params.issue)
-    ].drop(['prob', 'aggregation'], axis=1)
-    
+    ].drop(["prob", "aggregation"], axis=1)
+
     # Merge both dataframes
     df_merged = (
         triggers_index.set_index(["index", "category", "district", "issue"])
@@ -110,18 +106,20 @@ def merge_probabilities_triggers_dashboard(probs, triggers, params, period):
         .reset_index()
     )
     df_merged.index = triggers_index.index
-    
+
     triggers.loc[
         (triggers["index"] == f"{params.index} {period}")
         & (triggers["issue"] == params.issue)
     ] = df_merged
-    
+
     for ind, row in triggers.iterrows():
         triggers.loc[ind, "year"] = f"{params.year}-{str(params.year+1)[-2:]}"
-        triggers.loc[ind, "trigger_type"] = params.districts_vulnerability[row["district"]]
-        
-    triggers['HR'] = triggers['HR'].abs()
-    
+        triggers.loc[ind, "trigger_type"] = params.districts_vulnerability[
+            row["district"]
+        ]
+
+    triggers["HR"] = triggers["HR"].abs()
+
     return probs_df, triggers
 
 
@@ -145,7 +143,7 @@ def read_forecasts(area, issue, local_path, update=False):
             },
         ).persist()
         forecasts.attrs["nodata"] = np.nan
-        forecasts.chunk(dict(time=-1)).to_zarr(local_path, mode='w', consolidated=True)
+        forecasts.chunk(dict(time=-1)).to_zarr(local_path, mode="w", consolidated=True)
     return forecasts
 
 

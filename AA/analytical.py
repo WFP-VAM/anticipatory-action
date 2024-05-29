@@ -16,20 +16,18 @@ import dask
 import numpy as np
 import pandas as pd
 import xarray as xr
-
+from config.params import Params
+from hip.analysis.analyses.drought import (compute_probabilities,
+                                           concat_obs_levels,
+                                           get_accumulation_periods,
+                                           run_accumulation_index,
+                                           run_bias_correction,
+                                           run_gamma_standardization)
 from hip.analysis.aoi.analysis_area import AnalysisArea
-from hip.analysis.analyses.drought import (
-    compute_probabilities,
-    concat_obs_levels,
-    get_accumulation_periods,
-    run_accumulation_index,
-    run_bias_correction,
-    run_gamma_standardization,
-)
 from hip.analysis.ops._statistics import evaluate_roc_forecasts
 
-from config.params import Params
-from AA.helper_fns import aggregate_by_district, read_forecasts, read_observations
+from AA.helper_fns import (aggregate_by_district, read_forecasts,
+                           read_observations)
 
 
 @click.command()
