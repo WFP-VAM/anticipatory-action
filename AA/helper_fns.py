@@ -1,3 +1,4 @@
+import os
 import glob
 
 import geopandas as gpd
@@ -68,13 +69,13 @@ def merge_un_biased_probs(probs_district, probs_bc_district, params, period_name
     fbf_bc = fbf_bc[["district", "category", "issue", "BC"]]
     fbf_bc_da = fbf_bc.set_index(["district", "category", "issue"]).to_xarray().BC
     fbf_bc_da = fbf_bc_da.expand_dims(
-        dim={"index": [f"{params.index.upper()} {period_name}"]}
+        dim={"index": [f"{params.index} {period_name}"]}
     )
 
     # Combination of both probabilities datasets
     probs_merged = (
         1 - fbf_bc_da
-    ) * probs_district.tp + fbf_bc_da * probs_bc_district.scen
+    ) * probs_district + fbf_bc_da * probs_bc_district
 
     probs_merged = probs_merged.to_dataset(name="prob")
 
@@ -84,53 +85,44 @@ def merge_un_biased_probs(probs_district, probs_bc_district, params, period_name
 def merge_probabilities_triggers_dashboard(probs, triggers, params, period):
     # Format probabilities
     probs_df = probs.to_dataframe().reset_index().drop("spatial_ref", axis=1)
-    probs_df["year"] = [str(params.year) for _ in probs_df.iterrows()]
     probs_df["prob"] = [np.round(p, 2) for p in probs_df.prob.values]
     probs_df["aggregation"] = np.repeat(
         f"{params.index.upper()} {len(period)}", len(probs_df)
     )
 
     # Filter triggers df to index
-    triggers_index = triggers.copy()
-    triggers_index.loc[triggers_index.trigger == "trigger2", "issue"] = (
-        triggers_index.loc[triggers_index.trigger == "trigger2"].issue.values + 1
-    )
-    triggers_index = triggers_index.loc[
-        (triggers_index["index"] == f"{params.index.upper()} {period}")
-        & (triggers_index["issue"] == params.issue)
-    ]
+    if len(triggers.head(2).issue.unique()) == 1:
+        triggers.loc[triggers.trigger == "trigger2", "issue"] = (
+            triggers.loc[triggers.trigger == "trigger2"].issue.values + 1
+        )
+        triggers["prob"] = np.nan
+        triggers["aggregation"] = np.nan
+        
+    triggers_index = triggers.loc[
+        (triggers["index"] == f"{params.index} {period}")
+        & (triggers["issue"] == params.issue)
+    ].drop(['prob', 'aggregation'], axis=1)
+    
     # Merge both dataframes
     df_merged = (
-        triggers_index.set_index(["district", "index", "category", "issue"])
-        .join(probs_df.set_index(["district", "index", "category", "issue"]))
+        triggers_index.set_index(["index", "category", "district", "issue"])
+        .join(probs_df.set_index(["index", "category", "district", "issue"]))
         .reset_index()
     )
-
-    df_merged = df_merged.drop("aggregation", axis=1)
-
-    df_merged["type"] = [i.split(" ")[0] for i in df_merged["index"].values]
-    df_merged["year"] = [
-        f"{y}-{str(params.year+1)[-2:]}" for y in df_merged.year.values
-    ]
-
-    if params.iso in ["MOZ"]:
-        WINDOWS_PORTUGUESE = {
-            "Window1": "Janela 1",
-            "Window2": "Janela 2",
-            "Window3": "Janela 3",
-        }
-        df_merged["Window"] = [WINDOWS_PORTUGUESE[w] for w in df_merged.Window.values]
-
-        df_merged["trigger_type"] = [
-            (
-                "Acionadores de Crise"
-                if d in ["Chibuto", "Guija"]
-                else "Acionadores Gerais"
-            )
-            for d in df_merged.district.values
-        ]
-
-    return probs_df, df_merged
+    df_merged.index = triggers_index.index
+    
+    triggers.loc[
+        (triggers["index"] == f"{params.index} {period}")
+        & (triggers["issue"] == params.issue)
+    ] = df_merged
+    
+    for ind, row in triggers.iterrows():
+        triggers.loc[ind, "year"] = f"{params.year}-{str(params.year+1)[-2:]}"
+        triggers.loc[ind, "trigger_type"] = params.districts_vulnerability[row["district"]]
+        
+    triggers['HR'] = triggers['HR'].abs()
+    
+    return probs_df, triggers
 
 
 def read_fbf_districts(path_fbf, params):
@@ -140,8 +132,8 @@ def read_fbf_districts(path_fbf, params):
     return fbf_districts
 
 
-def read_forecasts(area, issue, local_path):
-    if os.path.exists(local_path):
+def read_forecasts(area, issue, local_path, update=False):
+    if os.path.exists(local_path) and not update:
         forecasts = xr.open_zarr(local_path).tp.persist()
     else:
         forecasts = area.get_dataset(
@@ -153,7 +145,7 @@ def read_forecasts(area, issue, local_path):
             },
         ).persist()
         forecasts.attrs["nodata"] = np.nan
-        forecasts.chunk(dict(time=-1)).to_zarr(local_path, consolidated=True)
+        forecasts.chunk(dict(time=-1)).to_zarr(local_path, mode='w', consolidated=True)
     return forecasts
 
 
