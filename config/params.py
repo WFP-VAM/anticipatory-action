@@ -87,29 +87,30 @@ class Params:
         self.index = self.index.lower()
         self.aggregate = AGGREGATES[self.index]
         if self.iso == "MOZ":
-            self.intensity_thresholds = {"Severo": -1, "Moderado": -0.85, "Leve": -0.68}
+            self.intensity_thresholds = {"Severe": -1, "Moderate": -0.85, "Mild": -0.68}
             self.districts_vulnerability = {
-                "Chiure": "GT",
                 "Caia": "NRT",
                 "Changara": "GT",
                 "Chemba": "GT",
                 "Chibuto": "NRT",
                 "Chicualacuala": "NRT",
+                "Chiure": "GT",
                 "Guija": "NRT",
                 "Mabalane": "NRT",
                 "Mapai": "NRT",
-                "Marara": "GT",
+                "Mapai": "GT",
+                "Magude": "GT",
                 "Massingir": "NRT",
             }
             self.districts = self.districts_vulnerability.keys()
         else:
-            self.intensity_thresholds = {"Severe": -1, "Moderate": -0.85, "Mild": -0.68}
+            self.intensity_thresholds = {"Moderate": -0.85, "Normal": -0.44}
         if self.issue is None:  # analytical / triggers
             self.issue = ["05", "06", "07", "08", "09", "10", "11", "12", "01", "02"]
         if os.path.exists(
-            f"data/{self.iso}/outputs/Districts_FbF/{self.index}/fbf.districts.roc.{self.index}.{self.year}.csv"
+            f"/s3/scratch/amine.barkaoui/aa/data/{self.iso.lower()}/auc/fbf.districts.roc.{self.index}.2022.csv"
         ):
             self.fbf_districts_df = read_fbf_districts(
-                f"data/{self.iso}/outputs/Districts_FbF/{self.index}/fbf.districts.roc.{self.index}.{self.year}.csv",
+                f"/s3/scratch/amine.barkaoui/aa/data/{self.iso.lower()}/auc/fbf.districts.roc.{self.index}.2022.csv",
                 self,
             )
