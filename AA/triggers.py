@@ -152,13 +152,9 @@ def run(country, index, vulnerability):
     # Format trigs and score into a dataframe
     trigs_df = triggers_da_to_df(trigs, score).dropna()
     trigs_df = trigs_df.loc[
-        trigs_df["HR"] < 0
+        trigs_df['HR'] < 0
     ]  # remove row when trigger not found (penalty)
-
-    # Filter out dryspell 3
-    if params.index == "dryspell":
-        trigs_df = trigs_df.loc[trigs_df["index"].str.split(" ").str[1].map(len) != 3]
-
+    
     # Add window information depending on district
     trigs_df["Window"] = [
         get_window_district(
@@ -336,7 +332,7 @@ def objective(
             success_rate >= (requirements["SR"] * number_actions),
             failure_rate <= (requirements["FR"] * number_actions),
             return_period >= req_RP,
-            (leadtime - (issue + 1)) % 12 > 0,
+            (leadtime - (issue + 1)) % 12 > 1,
         ]
     ).astype(np.int16)
 

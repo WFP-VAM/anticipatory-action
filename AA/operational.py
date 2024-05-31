@@ -52,8 +52,8 @@ def run(country, issue, index):
     forecasts = read_forecasts(
         area,
         issue,
-        f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/zarr/2022/{issue}/forecasts.zarr",
-        update=False,  # True,
+        f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/zarr/2022/{str(issue).zfill(2)}/forecasts.zarr",
+        update=False, #True,
     )
     logging.info(f"Completed reading of forecasts for the whole {params.iso} country")
 
@@ -102,15 +102,15 @@ def run(country, issue, index):
 
     probs_df, merged_df = zip(*probs_merged_dataframes)
 
-    probs_dashboard = pd.concat(probs_df)
+    probs_dashboard = pd.concat(probs_df).drop_duplicates()
     probs_dashboard.to_csv(
         f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/probs/aa_probabilities_{params.index}_{params.issue}.csv",
         index=False,
     )
 
-    merged_dashboard = pd.concat(merged_df)
+    merged_dashboard = pd.concat(merged_df).drop_duplicates()
     merged_dashboard.to_csv(
-        f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/probs/aa_pilots_probabilities_triggers_pilots.csv",
+        f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/probs/aa_probabilities_triggers_pilots.csv",
         index=False,
     )
 
