@@ -1,3 +1,6 @@
+import sys
+sys.path.append('..')
+
 import logging
 
 import click
@@ -186,8 +189,11 @@ def run(country, index, vulnerability):
         vulnerability,
         params,
     )
-
-    df_window.to_csv(
+    
+    # Format triggers dataframe for dashboard
+    triggers = format_triggers_df_for_dashboard(df_window, params)
+    
+    triggers.to_csv(
         f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/triggers/triggers.{params.index}.{params.year}.{vulnerability}.csv",
         index=False,
     )
@@ -237,7 +243,7 @@ def _get_skill_requirements(iso):
         GENERAL_T["HR"] = 0.50
         GENERAL_T["SR"] = 0.55
         GENERAL_T["FR"] = 0.45
-        GENERAL_T["RP"] = 5.0  # W/out exceptions: HR=0.55
+        GENERAL_T["RP"] = 4.0  # W/out exceptions: HR=0.55
         NON_REGRET_T["HR"] = 0.50
         NON_REGRET_T["SR"] = 0.55
         NON_REGRET_T["FR"] = 0.45
