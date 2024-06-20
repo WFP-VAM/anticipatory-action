@@ -78,49 +78,54 @@ def merge_un_biased_probs(probs_district, probs_bc_district, params, period_name
     return probs_merged
 
 
-def merge_probabilities_triggers_dashboard(probs, triggers, params, period):
+def format_triggers_df_for_dashboard(triggers, params):
+    triggers["index"] = triggers["index"].str.upper()
+    triggers.loc[(triggers.trigger == "trigger2") & (triggers.issue == 12), "issue"] = 0
+    triggers.loc[triggers.trigger == "trigger2", "issue"] = (
+        triggers.loc[triggers.trigger == "trigger2"].issue.values + 1
+    )
+
+    triggers["prob"] = np.nan
+    triggers["HR"] = triggers["HR"].abs()
+    triggers["season"] = f"{params.year}-{str(params.year+1)[-2:]}"
+    triggers['date'] = [params.year if r.issue >= 5 else params.year+1 for _, r in triggers.iterrows()]
+    triggers['date'] = [pd.to_datetime(f"{r.issue}-1-{r.date}") for _, r in triggers.iterrows()]
+    
+    def substract(issue): return 2 if issue == 1 else 1
+    triggers['mready'] = [r.issue if r.trigger == 'trigger1' else (r.issue-substract(int(r.issue))) % 13 for _, r in triggers.iterrows()]
+
+    triggers_pivot = triggers.pivot_table(index=['district', 'index', 'category', 'Window', 'season', 'vulnerability', 'mready'], columns='trigger', values=['trigger_value', 'prob', 'issue', 'date']).reset_index()
+    triggers_pivot.columns = ['district', 'index', 'category', 'window', 'season', 'vulnerability', 'mready', 'date_ready', 'date_set', 'issue_ready', 'issue_set', 'trigger_ready', 'trigger_set']
+    triggers_pivot = triggers_pivot.drop('mready', axis=1)
+
+    return triggers_pivot
+
+
+def merge_probabilities_triggers_dashboard(probs_df, triggers, params, period):
     # Format probabilities
     probs_df = probs.to_dataframe().reset_index().drop("spatial_ref", axis=1)
     probs_df["prob"] = [np.round(p, 2) for p in probs_df.prob.values]
+    probs_df["index"] = probs_df["index"].str.upper()
     probs_df["aggregation"] = np.repeat(
         f"{params.index.upper()} {len(period)}", len(probs_df)
     )
+    
+    triggers_merged = triggers.copy()
+    
+    # Create prob columns if reading empty triggers df
+    if 'prob_ready' not in triggers_merged.columns:
+        triggers_merged['prob_ready'] = np.nan
+        triggers_merged['prob_set'] = np.nan
+    
+    # Fill in probabilities columns matching with triggers
+    for l, row in triggers_merged.iterrows(): 
+        if row.issue_ready == params.issue:
+            triggers_merged.loc[l, 'prob_ready'] = probs_df.loc[(probs_df["index"] == row["index"]) & (probs_df["category"] == row.category) & (probs_df["district"] == row.district)].prob.values[0]
+        elif row.issue_set == params.issue:
+            triggers_merged.loc[l, 'prob_set'] = probs_df.loc[(probs_df["index"] == row["index"]) & (probs_df["category"] == row.category) & (probs_df["district"] == row.district)].prob.values[0]
 
-    # Filter triggers df to index
-    if len(triggers.head(2).issue.unique()) == 1:
-        triggers.loc[triggers.trigger == "trigger2", "issue"] = (
-            triggers.loc[triggers.trigger == "trigger2"].issue.values + 1
-        )
-        triggers["prob"] = np.nan
-        triggers["aggregation"] = np.nan
-
-    triggers_index = triggers.loc[
-        (triggers["index"] == f"{params.index} {period}")
-        & (triggers["issue"] == params.issue)
-    ].drop(["prob", "aggregation"], axis=1)
-
-    # Merge both dataframes
-    df_merged = (
-        triggers_index.set_index(["index", "category", "district", "issue"])
-        .join(probs_df.set_index(["index", "category", "district", "issue"]))
-        .reset_index()
-    )
-    df_merged.index = triggers_index.index
-
-    triggers.loc[
-        (triggers["index"] == f"{params.index} {period}")
-        & (triggers["issue"] == params.issue)
-    ] = df_merged
-
-    for ind, row in triggers.iterrows():
-        triggers.loc[ind, "year"] = f"{params.year}-{str(params.year+1)[-2:]}"
-        triggers.loc[ind, "trigger_type"] = params.districts_vulnerability[
-            row["district"]
-        ]
-
-    triggers["HR"] = triggers["HR"].abs()
-
-    return probs_df, triggers
+    return probs_df, triggers_merged
+   
 
 
 def read_fbf_districts(path_fbf, params):
