@@ -66,10 +66,10 @@ def run(country, issue, index):
     )
 
     if os.path.exists(
-        f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/probs/aa_pilots_probabilities_triggers_pilots.csv"
+        f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/probs/aa_probabilities_triggers_pilots.csv"
     ):
         triggers_df = pd.read_csv(
-            f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/probs/aa_pilots_probabilities_triggers_pilots.csv",
+            f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/probs/aa_probabilities_triggers_pilots.csv",
         )
     else:
         triggers_df = pd.read_csv(
@@ -108,9 +108,11 @@ def run(country, issue, index):
         index=False,
     )
 
-    merged_dashboard = pd.concat(merged_df).drop_duplicates()
-    merged_dashboard.to_csv(
-        f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/probs/aa_probabilities_triggers_pilots.csv",
+    
+    merged_db = pd.concat(merged_df).sort_values(['prob_ready', 'prob_set'])
+    merged_db = merged_db.drop_duplicates(merged_db.columns.difference(['prob_ready', 'prob_set']), keep='first')
+    merged_db.sort_values(['district', 'index', 'category']).to_csv(
+        f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/probs/aa_probabilities_triggers_pilots_6.csv",
         index=False,
     )
 
