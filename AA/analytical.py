@@ -1,5 +1,6 @@
-import click
 import logging
+
+import click
 
 logging.basicConfig(level="INFO")
 
@@ -7,80 +8,59 @@ import warnings
 
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
-import dask
-import traceback
-from dask.distributed import Client
-
-import os
 import datetime
+import os
+import traceback
+
+import dask
 import numpy as np
-import xarray as xr
 import pandas as pd
-import geopandas as gpd
-
+import xarray as xr
 from config.params import Params
-
-from AA.helper_fns import (
-    read_forecasts_locally,
-    read_observations_locally,
-    aggregate_by_district,
-)
-
-from hip.analysis.analyses.drought import (
-    get_accumulation_periods,
-    run_accumulation_index,
-    run_gamma_standardization,
-    run_bias_correction,
-    compute_probabilities,
-    concat_obs_levels,
-)
+from hip.analysis.analyses.drought import (compute_probabilities,
+                                           concat_obs_levels,
+                                           get_accumulation_periods,
+                                           run_accumulation_index,
+                                           run_bias_correction,
+                                           run_gamma_standardization)
+from hip.analysis.aoi.analysis_area import AnalysisArea
 from hip.analysis.ops._statistics import evaluate_roc_forecasts
+
+from AA.helper_fns import (aggregate_by_district, read_forecasts,
+                           read_observations)
 
 
 @click.command()
 @click.argument("country", required=True, type=str)
 @click.argument("index", default="SPI")
 def run(country, index):
-    # End to end workflow for a country using pre-stored ECMWF forecasts and CHIRPS
-
-    # if dashboard.link set to default value and running behind hub, make dashboard link go via proxy
-    domain = ""
-    if (
-        dask.config.get("distributed.dashboard.link")
-        == "{scheme}://{host}:{port}/status"
-    ):
-        jup_prefix = os.environ.get("JUPYTERHUB_SERVICE_PREFIX")
-        if jup_prefix is not None:
-            jup_prefix = jup_prefix.rstrip("/")
-            dask.config.set(
-                {"distributed.dashboard.link": f"{jup_prefix}/proxy/{{port}}/status"}
-            )
-            domain = "https://jupyter.earthobservation.vam.wfp.org"
-
-    client = Client()
-    logging.info("+++++++++++++")
-    logging.info(f"Dask dashboard: {domain}{client.dashboard_link}")
-    logging.info("+++++++++++++")
-
+    # End to end workflow for a country using ECMWF forecasts and CHIRPS from HDC
     params = Params(iso=country, index=index)
 
-    observations = read_observations_locally(f"data/{params.iso}/chirps")
+    area = AnalysisArea.from_admin_boundaries(
+        iso3=country.upper(),
+        admin_level=2,
+        resolution=0.25,
+        datetime_range=f"1981-01-01/{params.year}-06-30",
+    )
+
+    gdf = area.get_dataset([area.BASE_AREA_DATASET])
+
+    observations = read_observations(
+        area,
+        f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/zarr/{params.year}/obs/observations.zarr",
+    )
     logging.info(
         f"Completed reading of observations for the whole {params.iso} country"
     )
 
-    def get_forecasts(issue):
-        return read_forecasts_locally(
-            f"data/{params.iso}/forecast/Moz_SAB_tp_ecmwf_{issue}/*.nc"
-        )
-
     fbf_roc_issues = [
         run_issue_verification(
-            get_forecasts(issue),
+            area,
             observations,
             issue,
             params,
-            params.gdf,
+            gdf,
         )
         for issue in params.issue
     ]
@@ -90,16 +70,14 @@ def run(country, index):
 
     fbf_roc = pd.concat(fbf_roc_issues)
     fbf_roc.to_csv(
-        f"data/{params.iso}/outputs/Districts_FbF/{params.index}/fbf.districts.roc.{params.index}.{params.year}.txt",
+        f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/auc/fbf.districts.roc.{params.index}.{params.year}.csv",
         index=False,
     )
 
     logging.info(f"FbF dataframe saved for {country}")
 
-    client.close()
 
-
-def run_issue_verification(forecasts, observations, issue, params, gdf):
+def run_issue_verification(area, observations, issue, params, gdf):
     """
     Run analytical / verification pipeline for one issue month
 
@@ -112,43 +90,62 @@ def run_issue_verification(forecasts, observations, issue, params, gdf):
         fbf_issue: pandas.DataFrame, dataframe with roc scores for all indexes, districts, categories and a specified issue month
     """
 
-    # Make sure forecasts dates are aligned with obs
-    forecasts = forecasts.where(
-        forecasts.time < np.datetime64(f"{params.year}-07-01T12:00:00.000000000"),
-        drop=True,
-    )
+    if os.path.exists(
+        f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/auc/split_by_issue/fbf.districts.roc.{params.index}.{params.year}.{issue}.csv"
+    ):
 
-    # Get accumulation periods (DJ, JF, FM, DJF, JFM...)
-    accumulation_periods = get_accumulation_periods(
-        forecasts,
-        params.start_season,
-        params.end_season,
-        params.min_index_period,
-        params.max_index_period,
-    )
-
-    # TODO chunk rfh datasets on lat and lon dim only
-
-    fbf_indexes = [
-        # TODO handle distributed computation
-        verify_index_across_districts(
-            forecasts,
-            observations,
-            params,
-            gdf,
-            period_name,
-            period_months,
-            issue,
+        logging.info(
+            f"FbF ROC verification by district for the issue month {issue} read from disk"
         )
-        for period_name, period_months in accumulation_periods.items()
-    ]
 
-    fbf_issue = pd.concat(fbf_indexes)
-    fbf_issue["issue"] = int(issue)
+        return pd.read_csv(
+            f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/auc/split_by_issue/fbf.districts.roc.{params.index}.{params.year}.{issue}.csv"
+        )
 
-    logging.info(f"FbF ROC verification by district for the issue month {issue} done")
+    else:
 
-    return fbf_issue
+        forecasts = read_forecasts(
+            area,
+            issue,
+            f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/zarr/{params.year}/{issue}/forecasts.zarr",
+        )
+        logging.info(f"Completed reading of forecasts for the issue month {issue}")
+
+        # Get accumulation periods (DJ, JF, FM, DJF, JFM...)
+        accumulation_periods = get_accumulation_periods(
+            forecasts,
+            params.start_season,
+            params.end_season,
+            params.min_index_period,
+            params.max_index_period,
+        )
+
+        fbf_indexes = [
+            verify_index_across_districts(
+                forecasts,
+                observations,
+                params,
+                gdf,
+                period_name,
+                period_months,
+                issue,
+            )
+            for period_name, period_months in accumulation_periods.items()
+        ]
+
+        fbf_issue = pd.concat(fbf_indexes)
+        fbf_issue["issue"] = int(issue)
+
+        fbf_issue.to_csv(
+            f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/auc/split_by_issue/fbf.districts.roc.{params.index}.{params.year}.{issue}.csv",
+            index=False,
+        )
+
+        logging.info(
+            f"FbF ROC verification by district for the issue month {issue} done"
+        )
+
+        return fbf_issue
 
 
 def verify_index_across_districts(
@@ -183,9 +180,9 @@ def verify_index_across_districts(
     )
 
     auc, auc_bc = evaluate_roc_forecasts(
-        obs_bool.precip,
-        probs.tp,
-        probs_bc.scen,
+        obs_bool,
+        probs,
+        probs_bc,
     )
 
     if params.save_zarr:
@@ -248,10 +245,10 @@ def calculate_forecast_probabilities(
 
     # Accumulation
     accumulation_fc = run_accumulation_index(
-        forecasts, params.aggregate, period_months, forecasts=True
+        forecasts.chunk(dict(time=-1)), params.aggregate, period_months, forecasts=True
     )
     accumulation_obs = run_accumulation_index(
-        observations, params.aggregate, period_months
+        observations.chunk(dict(time=-1)), params.aggregate, period_months
     )
     logging.info(f"Completed accumulation")
 
@@ -262,14 +259,40 @@ def calculate_forecast_probabilities(
 
     # Anomaly
     anomaly_fc = run_gamma_standardization(
-        accumulation_fc, params.calibration_start, params.calibration_stop, members=True,
+        accumulation_fc.load(),
+        params.calibration_start,
+        params.calibration_stop,
+        members=True,
     )
     anomaly_obs = run_gamma_standardization(
-        accumulation_obs,
+        accumulation_obs.load(),
         params.calibration_start,
         params.calibration_stop,
     )
     logging.info(f"Completed anomaly")
+
+    # Bias correction
+    anomaly_bc = xr.concat(
+        [
+            run_bias_correction(
+                anomaly_fc,
+                anomaly_obs,
+                params.end_season,
+                year,
+                int(issue),
+                nearest_neighbours=8,
+                enso=True,
+            )
+            for year in np.unique(anomaly_fc.time.dt.year)
+        ],
+        dim="time",
+    )
+    logging.info(f"Completed bias correction")
+
+    if params.index == "dryspell":
+        anomaly_fc *= -1
+        anomaly_bc *= -1
+        anomaly_obs *= -1
 
     # Probabilities without Bias Correction
     probabilities = (
@@ -281,6 +304,7 @@ def calculate_forecast_probabilities(
         .round(2)
     )
     probabilities = probabilities.where(probabilities.year < params.year, drop=True)
+    logging.info(f"Completed probabilities")
 
     # Convert obs-based SPIs to booleans
     levels_obs = concat_obs_levels(
@@ -291,23 +315,11 @@ def calculate_forecast_probabilities(
         latitude=probabilities.latitude,
         longitude=probabilities.longitude,
     )
+    # Harmonize coordinates with forecasts
+    levels_obs["time"] = levels_obs.time.dt.year.values
+    levels_obs = levels_obs.rename({"time": "year"})
     levels_obs = levels_obs.sel(year=probabilities.year)
-
-    # Bias correction
-    anomaly_bc = xr.concat(
-        [
-            run_bias_correction(
-                anomaly_fc,
-                anomaly_obs,
-                params.end_season,
-                year,
-                int(issue),
-                enso=True,
-            )
-            for year in np.unique(anomaly_fc.time.dt.year)
-        ],
-        dim="time",
-    )
+    logging.info(f"Completed categorical observations")
 
     # Probabilities after Bias Correction
     probabilities_bc = (
@@ -318,10 +330,10 @@ def calculate_forecast_probabilities(
         )
         .round(2)
     )
-
     probabilities_bc = probabilities_bc.where(
         probabilities_bc.year < params.year, drop=True
     )
+    logging.info(f"Completed probabilities with bias correction")
 
     return probabilities, probabilities_bc, anomaly_obs, levels_obs
 
@@ -362,17 +374,17 @@ def save_districts_results(
     probs_bc_district = aggregate_by_district(probabilities_bc, gdf, params)
 
     obs_district.to_zarr(
-        f"data/{params.iso}/outputs/zarr/obs/2022_all_districts/{params.index.upper()} {period_name}/observations.zarr",
+        f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/zarr/{params.year}/obs/{params.index} {period_name}/observations.zarr",
         mode="w",
     )
 
     probs_district.to_zarr(
-        f"data/{params.iso}/outputs/zarr/2022_all_districts/{issue}/{params.index.upper()} {period_name}/probabilities.zarr",
+        f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/zarr/{params.year}/{issue}/{params.index} {period_name}/probabilities.zarr",
         mode="w",
     )
 
     probs_bc_district.to_zarr(
-        f"data/{params.iso}/outputs/zarr/2022_all_districts/{issue}/{params.index.upper()} {period_name}/probabilities_bc.zarr",
+        f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/zarr/{params.year}/{issue}/{params.index} {period_name}/probabilities_bc.zarr",
         mode="w",
     )
 

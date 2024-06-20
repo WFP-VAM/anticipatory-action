@@ -1,9 +1,10 @@
 import glob
+import os
+
+import geopandas as gpd
 import numpy as np
 import pandas as pd
 import xarray as xr
-import geopandas as gpd
-
 
 PORTUGUESE_CATEGORIES = dict(
     Normal="Normal", Mild="Leve", Moderate="Moderado", Severe="Severo"
@@ -22,11 +23,7 @@ def aggregate_spi_dryspell_triggers(spi_window, dry_window):
 
 
 def triggers_da_to_df(triggers_da, hr_da):
-    triggers_df = (
-        triggers_da.to_dataframe()
-        .drop(["spatial_ref"], axis=1)
-        .dropna()
-    )
+    triggers_df = triggers_da.to_dataframe().drop(["spatial_ref"], axis=1).dropna()
     triggers_df = triggers_df.reset_index().set_index(
         ["index", "category", "district", "issue"]
     )
@@ -44,24 +41,17 @@ def triggers_da_to_df(triggers_da, hr_da):
 
 
 def aggregate_by_district(ds, gdf, params):
-    # As the shapefiles are not harmonized
-    if params.iso == "MOZ":
-        adm2_coord = "ADM2_PT"
-    else:
-        adm2_coord = "adm2_name"
-
-    # Keep only provided districts
-    shp = gdf #.loc[gdf[adm2_coord].isin(params.districts)]
-
     PROJ = "+proj=longlat +ellps=clrk66 +towgs84=-80,-100,-228,0,0,0,0 +no_defs"
-
-    # TODO better zonal aggregation
 
     # Clip ds to districts
     list_districts = {}
-    for _, row in shp.iterrows():
-        try: 
-            list_districts[row[adm2_coord]] = ds.rio.write_crs(PROJ).rio.clip(gpd.GeoSeries(row.geometry)).mean(dim=["latitude", "longitude"])
+    for _, row in gdf.iterrows():
+        try:
+            list_districts[row["Name"]] = (
+                ds.rio.write_crs(PROJ)
+                .rio.clip(gpd.GeoSeries(row.geometry))
+                .mean(dim=["latitude", "longitude"])
+            )
         except:
             continue
 
@@ -78,66 +68,64 @@ def merge_un_biased_probs(probs_district, probs_bc_district, params, period_name
     fbf_bc = fbf_bc.loc[fbf_bc["Index"] == f"{params.index.upper()} {period_name}"]
     fbf_bc = fbf_bc[["district", "category", "issue", "BC"]]
     fbf_bc_da = fbf_bc.set_index(["district", "category", "issue"]).to_xarray().BC
-    fbf_bc_da = fbf_bc_da.expand_dims(
-        dim={"index": [f"{params.index.upper()} {period_name}"]}
-    )
-    
+    fbf_bc_da = fbf_bc_da.expand_dims(dim={"index": [f"{params.index} {period_name}"]})
+
     # Combination of both probabilities datasets
-    probs_merged = (
-        1 - fbf_bc_da
-    ) * probs_district.tp + fbf_bc_da * probs_bc_district.scen
+    probs_merged = (1 - fbf_bc_da) * probs_district + fbf_bc_da * probs_bc_district
 
     probs_merged = probs_merged.to_dataset(name="prob")
 
     return probs_merged
 
 
-def merge_probabilities_triggers_dashboard(probs, triggers, params, period):
+def format_triggers_df_for_dashboard(triggers, params):
+    triggers["index"] = triggers["index"].str.upper()
+    triggers.loc[(triggers.trigger == "trigger2") & (triggers.issue == 12), "issue"] = 0
+    triggers.loc[triggers.trigger == "trigger2", "issue"] = (
+        triggers.loc[triggers.trigger == "trigger2"].issue.values + 1
+    )
+
+    triggers["prob"] = np.nan
+    triggers["HR"] = triggers["HR"].abs()
+    triggers["season"] = f"{params.year}-{str(params.year+1)[-2:]}"
+    triggers['date'] = [params.year if r.issue >= 5 else params.year+1 for _, r in triggers.iterrows()]
+    triggers['date'] = [pd.to_datetime(f"{r.issue}-1-{r.date}") for _, r in triggers.iterrows()]
+    
+    def substract(issue): return 2 if issue == 1 else 1
+    triggers['mready'] = [r.issue if r.trigger == 'trigger1' else (r.issue-substract(int(r.issue))) % 13 for _, r in triggers.iterrows()]
+
+    triggers_pivot = triggers.pivot_table(index=['district', 'index', 'category', 'Window', 'season', 'vulnerability', 'mready'], columns='trigger', values=['trigger_value', 'prob', 'issue', 'date']).reset_index()
+    triggers_pivot.columns = ['district', 'index', 'category', 'window', 'season', 'vulnerability', 'mready', 'date_ready', 'date_set', 'issue_ready', 'issue_set', 'trigger_ready', 'trigger_set']
+    triggers_pivot = triggers_pivot.drop('mready', axis=1)
+
+    return triggers_pivot
+
+
+def merge_probabilities_triggers_dashboard(probs_df, triggers, params, period):
     # Format probabilities
     probs_df = probs.to_dataframe().reset_index().drop("spatial_ref", axis=1)
-    probs_df["year"] = [str(params.year) for _ in probs_df.iterrows()]
     probs_df["prob"] = [np.round(p, 2) for p in probs_df.prob.values]
+    probs_df["index"] = probs_df["index"].str.upper()
     probs_df["aggregation"] = np.repeat(
         f"{params.index.upper()} {len(period)}", len(probs_df)
     )
+    
+    triggers_merged = triggers.copy()
+    
+    # Create prob columns if reading empty triggers df
+    if 'prob_ready' not in triggers_merged.columns:
+        triggers_merged['prob_ready'] = np.nan
+        triggers_merged['prob_set'] = np.nan
+    
+    # Fill in probabilities columns matching with triggers
+    for l, row in triggers_merged.iterrows(): 
+        if row.issue_ready == params.issue:
+            triggers_merged.loc[l, 'prob_ready'] = probs_df.loc[(probs_df["index"] == row["index"]) & (probs_df["category"] == row.category) & (probs_df["district"] == row.district)].prob.values[0]
+        elif row.issue_set == params.issue:
+            triggers_merged.loc[l, 'prob_set'] = probs_df.loc[(probs_df["index"] == row["index"]) & (probs_df["category"] == row.category) & (probs_df["district"] == row.district)].prob.values[0]
 
-    # Filter triggers df to index
-    triggers_index = triggers.copy()
-    triggers_index.loc[triggers_index.trigger == 'trigger2', 'issue'] = triggers_index.loc[triggers_index.trigger == 'trigger2'].issue.values + 1
-    triggers_index = triggers_index.loc[
-        (triggers_index['index'] == f"{params.index.upper()} {period}")
-        & (triggers_index['issue'] == params.issue)
-    ]
-    # Merge both dataframes
-    df_merged = (
-        triggers_index.set_index(["district", "index", "category", "issue"])
-        .join(probs_df.set_index(["district", "index", "category", "issue"]))
-        .reset_index()
-    )
-
-    df_merged = df_merged.drop("aggregation", axis=1)
-
-    df_merged["type"] = [i.split(" ")[0] for i in df_merged['index'].values]
-    df_merged["year"] = [
-        f"{y}-{str(params.year+1)[-2:]}" for y in df_merged.year.values
-    ]
-
-    if params.iso in ["MOZ"]:
-        WINDOWS_PORTUGUESE = {
-            "Window1": "Janela 1",
-            "Window2": "Janela 2",
-            "Window3": "Janela 3",
-        }
-        df_merged["Window"] = [WINDOWS_PORTUGUESE[w] for w in df_merged.Window.values]
-
-        df_merged["trigger_type"] = [
-            "Acionadores de Crise"
-            if d in ["Chibuto", "Guija"]
-            else "Acionadores Gerais"
-            for d in df_merged.district.values
-        ]
-
-    return probs_df, df_merged
+    return probs_df, triggers_merged
+   
 
 
 def read_fbf_districts(path_fbf, params):
@@ -147,35 +135,37 @@ def read_fbf_districts(path_fbf, params):
     return fbf_districts
 
 
-# Temporary local reading function before ingestion of ECMWF data
-def read_forecasts_locally(rfh_path):
-    files = glob.glob(rfh_path)
-    list_years = []
-    for f in files:
-        rfh_year = xr.open_dataset(f, engine="netcdf4")
-        list_years.append(rfh_year)
-    rfh_all = xr.concat(list_years, dim="time")
-    return rfh_all
+def read_forecasts(area, issue, local_path, update=False):
+    if os.path.exists(local_path) and not update:
+        forecasts = xr.open_zarr(local_path).tp.persist()
+    else:
+        forecasts = area.get_dataset(
+            ["ECMWF", f"RFH_FORECASTS_SEAS5_ISSUE{int(issue)}_DAILY"],
+            load_config={
+                "gridded_load_kwargs": {
+                    "resampling": "bilinear",
+                }
+            },
+        ).persist()
+        forecasts.attrs["nodata"] = np.nan
+        forecasts.chunk(dict(time=-1)).to_zarr(local_path, mode="w", consolidated=True)
+    return forecasts
 
 
-# Temporary local reading function before ingestion of HDC data
-def read_observations_locally(rfh_path):
-    ds1 = xr.open_dataset(
-        f"{rfh_path}/RemapMoz-Tot.days_p25_15072021.nc", engine="netcdf4"
-    )
-    ds2 = xr.open_dataset(
-        f"{rfh_path}/RemapMoz-Tot.1990-Mar2022_days_p25.nc", engine="netcdf4"
-    )
-    ds2 = ds2.where(ds2.time > ds1.time.values[-1], drop=True)
-    ds2022 = xr.open_dataset(
-        f"{rfh_path}/RemapMoz-chirps-v2.0.2022.days_p25.nc", engine="netcdf4"
-    )
-    ds2022 = ds2022.where(ds2022.time > ds2.time.values[-1], drop=True)
-    ds2023 = xr.open_dataset(
-        f"{rfh_path}/RemapMoz-chirps-v2.0.2023.days_p25.nc", engine="netcdf4"
-    )
-    rfh_all = xr.concat([ds1, ds2, ds2022, ds2023], dim="time")
-    return rfh_all
+def read_observations(area, local_path):
+    if os.path.exists(local_path):
+        observations = xr.open_zarr(local_path).band.persist()
+    else:
+        observations = area.get_dataset(
+            ["CHIRPS", "RFH_DAILY"],
+            load_config={
+                "gridded_load_kwargs": {
+                    "resampling": "bilinear",
+                }
+            },
+        ).persist()
+        observations.to_zarr(local_path)
+    return observations
 
 
 ## Get SPI/probabilities of reference produced with R script from Gabriela Nobre for validation ##
@@ -211,7 +201,14 @@ def read_spi_references(path_ref, bc: bool = False, obs: bool = False):
     df_ref_spi = pd.concat(list_index_csv)
     df_ref = pd.concat([df_ref, df_ref_spi])
     if bc:
-        df_ref.columns = ["longitude", "latitude", "ensemble", "spi_ref", "period", "year"]
+        df_ref.columns = [
+            "longitude",
+            "latitude",
+            "ensemble",
+            "spi_ref",
+            "period",
+            "year",
+        ]
     elif obs:
         df_ref.columns = ["longitude", "latitude", "year", "spi_ref", "period"]
     else:

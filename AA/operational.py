@@ -1,5 +1,11 @@
-import click
+import sys
+
+sys.path.append("..")
+
 import logging
+import os
+
+import click
 
 logging.basicConfig(level="INFO")
 
@@ -7,31 +13,23 @@ import warnings
 
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
-import dask
-import traceback
-from dask.distributed import Client
-
 import datetime
+import traceback
+
+import dask
 import pandas as pd
-
 from config.params import Params
+from hip.analysis.analyses.drought import (compute_probabilities,
+                                           get_accumulation_periods,
+                                           run_accumulation_index,
+                                           run_bias_correction,
+                                           run_gamma_standardization)
+from hip.analysis.aoi.analysis_area import AnalysisArea
 
-from AA.helper_fns import (
-    read_forecasts_locally,
-    read_observations_locally,
-    aggregate_by_district,
-    merge_un_biased_probs,
-    merge_probabilities_triggers_dashboard,
-)
-
-# from analysis.aoi import AnalysisArea, AnalysisAreaData, Country
-from hip.analysis.analyses.drought import (
-    get_accumulation_periods,
-    run_accumulation_index,
-    run_gamma_standardization,
-    run_bias_correction,
-    compute_probabilities,
-)
+from AA.helper_fns import (aggregate_by_district,
+                           merge_probabilities_triggers_dashboard,
+                           merge_un_biased_probs, read_forecasts,
+                           read_observations)
 
 
 @click.command()
@@ -41,25 +39,42 @@ from hip.analysis.analyses.drought import (
 def run(country, issue, index):
     # End to end workflow for a country using pre-stored ECMWF forecasts and CHIRPS
 
-    client = Client()
-
     params = Params(iso=country, issue=issue, index=index)
 
-    # TODO when local reading available: area, forecasts, observations = set_up_analysis_area(params)
+    area = AnalysisArea.from_admin_boundaries(
+        iso3=country.upper(),
+        admin_level=2,
+        resolution=0.25,
+    )
 
-    forecasts = read_forecasts_locally(
-        f"data/{params.iso}/forecast/{params.iso}_SAB_tp_ecmwf_{str(params.issue).zfill(2)}/*.nc"
+    gdf = area.get_dataset([area.BASE_AREA_DATASET])
+
+    forecasts = read_forecasts(
+        area,
+        issue,
+        f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/zarr/2022/{str(issue).zfill(2)}/forecasts.zarr",
+        update=False, #True,
     )
     logging.info(f"Completed reading of forecasts for the whole {params.iso} country")
 
-    observations = read_observations_locally(f"data/{params.iso}/chirps")
+    observations = read_observations(
+        area,
+        f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/zarr/2022/obs/observations.zarr",
+    )
     logging.info(
         f"Completed reading of observations for the whole {params.iso} country"
     )
 
-    triggers_df = pd.read_csv(
-        f"data/{params.iso}/outputs/Plots/triggers.aa.python.spi.dryspell.2022.csv"
-    )
+    if os.path.exists(
+        f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/probs/aa_probabilities_triggers_pilots.csv"
+    ):
+        triggers_df = pd.read_csv(
+            f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/probs/aa_probabilities_triggers_pilots.csv",
+        )
+    else:
+        triggers_df = pd.read_csv(
+            f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/triggers/triggers.spi.dryspell.2022.pilots.csv",
+        )
 
     # Get accumulation periods (DJ, JF, FM, DJF, JFM...)
     accumulation_periods = get_accumulation_periods(
@@ -70,16 +85,14 @@ def run(country, issue, index):
         params.max_index_period,
     )
 
-    # TODO chunk rfh datasets on lat and lon dim only
-
+    # Compute probabilities for each accumulation period
     probs_merged_dataframes = [
-        # TODO handle distributed computation
         run_full_index_pipeline(
             forecasts,
             observations,
             params,
             triggers_df,
-            params.gdf,
+            gdf,
             period_name,
             period_months,
         )
@@ -89,21 +102,21 @@ def run(country, issue, index):
 
     probs_df, merged_df = zip(*probs_merged_dataframes)
 
-    probs_dashboard = pd.concat(probs_df)
+    probs_dashboard = pd.concat(probs_df).drop_duplicates()
     probs_dashboard.to_csv(
-        f"data/{params.iso}/outputs/Fbf_Pilot_MockUp/SPI_probabilities_season_{params.issue}.csv",
+        f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/probs/aa_probabilities_{params.index}_{params.issue}.csv",
         index=False,
     )
 
-    merged_dashboard = pd.concat(merged_df)
-    merged_dashboard.to_csv(
-        f"data/{params.iso}/outputs/Fbf_Pilot_MockUp/SPI_probabilities_season_triggers_{params.issue}.csv",
+    
+    merged_db = pd.concat(merged_df).sort_values(['prob_ready', 'prob_set'])
+    merged_db = merged_db.drop_duplicates(merged_db.columns.difference(['prob_ready', 'prob_set']), keep='first')
+    merged_db.sort_values(['district', 'index', 'category']).to_csv(
+        f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/probs/aa_probabilities_triggers_pilots_6.csv",
         index=False,
     )
 
     logging.info(f"Dashboard-formatted dataframe saved for {country}")
-
-    client.close()
 
 
 def run_full_index_pipeline(
@@ -170,10 +183,10 @@ def run_aa_probabilities(forecasts, observations, params, period_months):
 
     # Accumulation
     accumulation_fc = run_accumulation_index(
-        forecasts, params.aggregate, period_months, forecasts=True
+        forecasts.chunk(dict(time=-1)), params.aggregate, period_months, forecasts=True
     )
     accumulation_obs = run_accumulation_index(
-        observations, params.aggregate, period_months
+        observations.chunk(dict(time=-1)), params.aggregate, period_months
     )
     logging.info(f"Completed accumulation")
 
@@ -184,20 +197,17 @@ def run_aa_probabilities(forecasts, observations, params, period_months):
 
     # Anomaly
     anomaly_fc = run_gamma_standardization(
-        accumulation_fc, params.calibration_start, params.calibration_stop, members=True,
+        accumulation_fc.load(),
+        params.calibration_start,
+        params.calibration_stop,
+        members=True,
     )
     anomaly_obs = run_gamma_standardization(
-        accumulation_obs,
+        accumulation_obs.load(),
         params.calibration_start,
         params.calibration_stop,
     )
     logging.info(f"Completed anomaly")
-
-    # Probabilities without Bias Correction
-    probabilities = compute_probabilities(
-        anomaly_fc.where(anomaly_fc.time.dt.year == params.year, drop=True),
-        levels=params.intensity_thresholds,
-    ).round(2)
 
     # Bias correction
     index_bc = run_bias_correction(
@@ -206,9 +216,21 @@ def run_aa_probabilities(forecasts, observations, params, period_months):
         params.end_season,
         params.year,
         int(params.issue),
+        nearest_neighbours=8,
         enso=True,
     )
     logging.info(f"Completed bias correction")
+
+    if params.index == "dryspell":
+        anomaly_fc *= -1
+        index_bc *= -1
+        anomaly_obs *= -1
+
+    # Probabilities without Bias Correction
+    probabilities = compute_probabilities(
+        anomaly_fc.where(anomaly_fc.time.dt.year == params.year, drop=True),
+        levels=params.intensity_thresholds,
+    ).round(2)
 
     # Probabilities after Bias Correction
     probabilities_bc = compute_probabilities(

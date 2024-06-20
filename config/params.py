@@ -1,10 +1,11 @@
 import datetime
+import os
+from dataclasses import dataclass, field
+
 import hdc.algo
 import numpy as np
 import pandas as pd
 import geopandas as gpd
-
-from dataclasses import dataclass, field
 
 from AA.helper_fns import read_fbf_districts
 
@@ -72,7 +73,7 @@ class Params:
     min_index_period: int = 2
     max_index_period: int = 3
     start_season: int = 10
-    end_season: int = 5
+    end_season: int = 6
     calibration_start: datetime.datetime = None
     calibration_stop: datetime.datetime = datetime.datetime(2018, 12, 31)
     save_zarr: bool = True
@@ -86,33 +87,30 @@ class Params:
         self.index = self.index.lower()
         self.aggregate = AGGREGATES[self.index]
         if self.iso == "MOZ":
-            self.gdf = gpd.read_file(
-                f"data/{self.iso}/shapefiles/moz_admbnda_2019_SHP/moz_admbnda_adm2_2019.shp"
-            )
-            self.intensity_thresholds = {"Severo": -1, "Moderado": -0.85, "Leve": -0.68}
+            self.intensity_thresholds = {"Severe": -1, "Moderate": -0.85, "Mild": -0.68}
             self.districts_vulnerability = {
-                "Chiure": "GT", #"GT",
-                "Caia": "GT", #"NRT",
-                "Changara": "GT", #"GT",
-                "Chemba": "GT", #"GT",
-                "Chibuto": "GT", #"NRT",
-                "Chicualacuala": "GT", #"NRT",
-                "Guija": "GT", #"NRT",
-                "Mabalane": "GT", #"NRT",
-                "Mapai": "GT", #"NRT",
-                "Marara": "GT", #"GT",
-                "Massingir": "GT", #"NRT",
+                "Caia": "NRT",
+                "Changara": "GT",
+                "Chemba": "GT",
+                "Chibuto": "NRT",
+                "Chicualacuala": "NRT",
+                "Chiure": "GT",
+                "Guija": "NRT",
+                "Mabalane": "NRT",
+                "Mapai": "NRT",
+                "Mapai": "GT",
+                "Magude": "GT",
+                "Massingir": "NRT",
             }
             self.districts = self.districts_vulnerability.keys()
         else:
-            self.gdf = gpd.read_file(
-                f"data/{self.iso}/shapefiles/global_adm2_wfpGE_UN_final/global_adm2_wfpGE_UN_final.shp"
-            )
-            self.gdf = self.gdf.loc[self.gdf.iso3 == self.iso]
-            self.intensity_thresholds = {"Severe": -1, "Moderate": -0.85, "Mild": -0.68}
+            self.intensity_thresholds = {"Moderate": -0.85, "Normal": -0.44}
         if self.issue is None:  # analytical / triggers
             self.issue = ["05", "06", "07", "08", "09", "10", "11", "12", "01", "02"]
-        self.fbf_districts_df = read_fbf_districts(
-            f"data/{self.iso}/outputs/Districts_FbF/{self.index}/fbf.districts.roc.{self.index}.2022.txt",
-            self,
-        )
+        if os.path.exists(
+            f"/s3/scratch/amine.barkaoui/aa/data/{self.iso.lower()}/auc/fbf.districts.roc.{self.index}.2022.csv"
+        ):
+            self.fbf_districts_df = read_fbf_districts(
+                f"/s3/scratch/amine.barkaoui/aa/data/{self.iso.lower()}/auc/fbf.districts.roc.{self.index}.2022.csv",
+                self,
+            )

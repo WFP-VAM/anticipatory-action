@@ -1,5 +1,9 @@
-import click
+import sys
+sys.path.append('..')
+
 import logging
+
+import click
 
 logging.basicConfig(level="INFO")
 
@@ -7,29 +11,22 @@ import warnings
 
 warnings.simplefilter(action="ignore")
 
+import glob
+import os
+
+import numpy as np
+import pandas as pd
+import xarray as xr
+from config.params import Params
+from dask.distributed import Client
+from hip.analysis.analyses.drought import (concat_obs_levels,
+                                           get_accumulation_periods)
+from hip.analysis.aoi.analysis_area import AnalysisArea
 from numba import jit
 from numba.core import types
 from numba.typed import Dict
-from dask.distributed import Client
 
-import os
-import glob
-import numpy as np
-import xarray as xr
-import pandas as pd
-import geopandas as gpd
-
-from config.params import Params
-
-from AA.helper_fns import (
-    triggers_da_to_df,
-    merge_un_biased_probs,
-)
-
-from hip.analysis.analyses.drought import (
-    get_accumulation_periods,
-    concat_obs_levels,
-)
+from helper_fns import merge_un_biased_probs, triggers_da_to_df
 
 
 @click.command()
@@ -41,12 +38,23 @@ def run(country, index, vulnerability):
 
     params = Params(iso=country, index=index)
 
-    gdf = gpd.read_file(
-        f"data/{params.iso}/shapefiles/moz_admbnda_2019_SHP/moz_admbnda_adm2_2019.shp"
+    area = AnalysisArea.from_admin_boundaries(
+        iso3=country.upper(),
+        admin_level=2,
+        resolution=0.25,
+        datetime_range=f"1981-01-01/{params.year}-06-30",
     )
 
+    gdf = area.get_dataset([area.BASE_AREA_DATASET])
+    admin1 = area.get_admin_boundaries(iso3=params.iso, admin_level=1).drop(
+        ["geometry", "adm0_Code"], axis=1
+    )
+    admin1.columns = ["Code_1", "adm1_name"]
+    gdf = pd.merge(gdf, admin1, how="left", left_on=["adm1_Code"], right_on=["Code_1"])
+
+    # TODO make this generic
     rfh = xr.DataArray(
-        np.arange(1, 9),
+        np.arange(1, 10),
         coords=dict(
             time=(
                 ["time"],
@@ -63,27 +71,26 @@ def run(country, index, vulnerability):
     )
 
     obs = read_aggregated_obs(
-        f"data/{params.iso}/outputs/zarr/obs/2022_all_districts",
+        f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/zarr/{params.year}/obs",
         params,
     )
-    obs = obs.where(obs.index != f"{index} JDJ", drop=True)
     obs = obs.assign_coords(
         lead_time=("index", [periods[i.split(" ")[-1]][0] for i in obs.index.values])
     )
+    # Tmp fix of obs category
+    if country == "MOZ":
+        obs["category"] = ["Severo", "Moderado", "Leve"]
     logging.info(
         f"Completed reading of aggregated observations for the whole {params.iso} country"
     )
 
     probs_ds = read_aggregated_probs(
-        f"data/{params.iso}/outputs/zarr/2022_all_districts",
+        f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/zarr/{params.year}",
         params,
-        
     )
-    # TODO fix in get_accumulation_periods
-    probs_ds = probs_ds.where(probs_ds.index != f"{index} JDJ", drop=True)
     probs = xr.concat(
         [
-            merge_un_biased_probs(probs_ds, probs_ds, params, i.split(" ")[-1])
+            merge_un_biased_probs(probs_ds.raw, probs_ds.bc, params, i.split(" ")[-1])
             for i in probs_ds.index.values
         ],
         dim="index",
@@ -92,8 +99,7 @@ def run(country, index, vulnerability):
         f"Completed reading of aggregated probabilities for the whole {params.iso} country"
     )
 
-    # Filter year/time dimension: temporary before harmonization with analytical script
-    obs = obs.sel(year=probs.year.values).load()
+    # Filter year dimension: temporary before harmonization with analytical script
     obs = obs.sel(time=probs.year.values).load()
 
     # Trick to align couples of issue months inside apply_ufunc
@@ -114,9 +120,10 @@ def run(country, index, vulnerability):
         probs.issue,
         obs.category,
         vulnerability,
+        params,
         vectorize=True,
         join="outer",
-        input_core_dims=[["year"], ["time"], ["year"], ["year"], [], [], [], []],
+        input_core_dims=[["time"], ["time"], ["year"], ["year"], [], [], [], [], []],
         output_core_dims=[["trigger"], []],
         dask="parallelized",
         keep_attrs=True,
@@ -132,10 +139,12 @@ def run(country, index, vulnerability):
     score["index"] = score.index.astype(str)
 
     trigs.to_zarr(
-        f"data/MOZ/outputs/Plots/all_districts/triggers_{params.index}_{params.year}_{vulnerability}.zarr", mode="w"
+        f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/triggers/triggers_{params.index}_{params.year}_{vulnerability}.zarr",
+        mode="w",
     )
     score.to_zarr(
-        f"data/MOZ/outputs/Plots/all_districts/score_{params.index}_{params.year}_{vulnerability}.zarr", mode="w"
+        f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/triggers/score_{params.index}_{params.year}_{vulnerability}.zarr",
+        mode="w",
     )
     logging.info(f"Triggers and score datasets saved as a back-up")
 
@@ -148,10 +157,12 @@ def run(country, index, vulnerability):
     trigs_df = trigs_df.loc[
         trigs_df['HR'] < 0
     ]  # remove row when trigger not found (penalty)
-
+    
     # Add window information depending on district
     trigs_df["Window"] = [
-        get_window_district("MOZ", gdf, row["index"].split(" ")[-1], row.district)
+        get_window_district(
+            params.iso, params.index, gdf, row["index"].split(" ")[-1], row.district
+        )
         for _, row in trigs_df.iterrows()
     ]
 
@@ -159,7 +170,9 @@ def run(country, index, vulnerability):
     df_leadtime = pd.concat(
         [
             g.sort_values(["index", "issue"]).sort_values("HR", kind="stable").head(2)
-            for _, g in trigs_df.sort_values("HR").groupby(
+            for _, g in trigs_df.dropna()
+            .sort_values("HR")
+            .groupby(
                 ["category", "district", "Window", "lead_time"],
                 as_index=False,
                 sort=False,
@@ -167,69 +180,103 @@ def run(country, index, vulnerability):
         ]
     )
 
-    # Keep two pairs of triggers per window of activation
+    # Keep 4 pairs of triggers per window of activation
     df_window = filter_triggers_by_window(
         df_leadtime,
         probs_ready,
         probs_set,
         obs,
         vulnerability,
+        params,
+    )
+    
+    # Format triggers dataframe for dashboard
+    triggers = format_triggers_df_for_dashboard(df_window, params)
+    
+    triggers.to_csv(
+        f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/triggers/triggers.{params.index}.{params.year}.{vulnerability}.csv",
+        index=False,
     )
 
-    df_window.to_csv(
-        "data/MOZ/outputs/Plots/triggers.aa.python.{params.index}.{params.year}.{vulnerability}.all.districts.csv",
-        index=False,
+    logging.info(
+        f"Triggers dataframe saved as a csv for {params.index} {vulnerability}"
     )
 
     client.close()
 
 
-# Define some constants
-# The Dict.empty() constructs a typed dictionary.
-TOLERANCE = Dict.empty(
-    key_type=types.unicode_type,
-    value_type=types.f8,
-)
-TOLERANCE['Leve'] = 0; TOLERANCE['Moderado'] = -0.44; TOLERANCE['Severo'] = -0.68
+def _get_skill_requirements(iso):
+    # Define some constants
+    # The Dict.empty() constructs a typed dictionary.
+    TOLERANCE = Dict.empty(
+        key_type=types.unicode_type,
+        value_type=types.f8,
+    )
+    GENERAL_T = Dict.empty(
+        key_type=types.unicode_type,
+        value_type=types.f8,
+    )
+    NON_REGRET_T = Dict.empty(
+        key_type=types.unicode_type,
+        value_type=types.f8,
+    )
 
-GENERAL_T = Dict.empty(
-    key_type=types.unicode_type,
-    value_type=types.f8,
-)
-GENERAL_T['HR'] = 0.5; GENERAL_T['SR'] = 0.65; GENERAL_T['FR'] = 0.35; GENERAL_T['RP'] = 4.
+    if iso == "MOZ":
+        TOLERANCE["Normal"] = 0
+        TOLERANCE["Leve"] = 0
+        TOLERANCE["Moderado"] = -0.44
+        TOLERANCE["Severo"] = -0.68
+        GENERAL_T["HR"] = 0.5
+        GENERAL_T["SR"] = 0.65
+        GENERAL_T["FR"] = 0.35
+        GENERAL_T["RP"] = 4.0
+        NON_REGRET_T["HR"] = 0.5
+        NON_REGRET_T["SR"] = 0.55
+        NON_REGRET_T["FR"] = 0.45
+        NON_REGRET_T["RP"] = 3.0  # W/out exceptions: HR=0.65
 
-NON_REGRET_T = Dict.empty(
-    key_type=types.unicode_type,
-    value_type=types.f8,
-)
-NON_REGRET_T['HR']=0.65; NON_REGRET_T['SR']=0.55; NON_REGRET_T['FR']=0.45; NON_REGRET_T['RP'] = 3.
+    elif iso == "ZWE":
+        TOLERANCE["Normal"] = 0
+        TOLERANCE["Mild"] = 0
+        TOLERANCE["Moderate"] = -0.44
+        TOLERANCE["Severe"] = -0.68
+        GENERAL_T["HR"] = 0.50
+        GENERAL_T["SR"] = 0.55
+        GENERAL_T["FR"] = 0.45
+        GENERAL_T["RP"] = 4.0  # W/out exceptions: HR=0.55
+        NON_REGRET_T["HR"] = 0.50
+        NON_REGRET_T["SR"] = 0.55
+        NON_REGRET_T["FR"] = 0.45
+        NON_REGRET_T["RP"] = 3.0  # W/out exceptions: HR=0.70
+
+    return TOLERANCE, GENERAL_T, NON_REGRET_T
 
 
 @jit(nopython=True, cache=True)
 def _compute_confusion_matrix(true, pred):
-  # TODO move to hip-analysis
-  '''
-  Computes a confusion matrix using numpy for two np.arrays
-  true and pred.
+    # TODO move to hip-analysis
+    """
+    Computes a confusion matrix using numpy for two np.arrays
+    true and pred.
 
-  Results are identical (and similar in computation time) to: 
+    Results are identical (and similar in computation time) to:
     "from sklearn.metrics import confusion_matrix"
 
-  However, this function avoids the dependency on sklearn and 
-  allows to use numba in nopython mode.
-  '''
+    However, this function avoids the dependency on sklearn and
+    allows to use numba in nopython mode.
+    """
 
-  K = 2 #len(np.unique(true)) # Number of classes 
-  result = np.zeros((K, K))
+    K = 2  # len(np.unique(true)) # Number of classes
+    result = np.zeros((K, K))
 
-  for i in range(len(true)):
-    result[true[i]][pred[i]] += 1
+    for i in range(len(true)):
+        result[true[i]][pred[i]] += 1
 
-  return result
+    return result
 
 
 @jit(
-    nopython=True, 
+    nopython=True,
     cache=True,
 )
 def objective(
@@ -245,7 +292,7 @@ def objective(
     tolerance,
     general_req,
     non_regret_req,
-    end_season=5,
+    end_season=6,
     penalty=1e6,
     alpha=10e-3,
     sorting=False,
@@ -258,7 +305,7 @@ def objective(
         obs_bool = obs_bool[1:]
         prob_issue0 = prob_issue0[:-1]
         prob_issue1 = prob_issue1[:-1]
-    
+
     prediction = np.logical_and(prob_issue0 > t[0], prob_issue1 > t[1]).astype(np.int16)
 
     cm = _compute_confusion_matrix(obs_bool.astype(np.int16), prediction)
@@ -266,36 +313,42 @@ def objective(
 
     number_actions = np.sum(prediction)
 
-    if hits + false == 0: # avoid divisions by zero
-       return [penalty]
-    
+    if hits + false == 0:  # avoid divisions by zero
+        return [penalty, penalty] if sorting else [penalty]
+
     false_alarm_rate = false / (false + hits + eps)
     false_tol = np.sum(prediction & (obs_val > tolerance[category]))
-    hit_rate = hits / (hits + fn + eps)
+    hit_rate = np.round(hits / (hits + fn + eps), 3)
     success_rate = hits + false - false_tol
     failure_rate = false_tol
-    
+
     freq = number_actions / len(obs_val)
     return_period = np.round(1 / freq if freq != 0 else 0, 0)
-    
+
     requirements = general_req if vulnerability == "GT" else non_regret_req
-    req_RP = requirements['RP'] + 1 * (category[0]=='M') + 3 * (category[0]=='S')
-    
-    constraints = np.array([
-        hit_rate >= requirements["HR"],
-        success_rate >= (requirements["SR"] * number_actions),
-        failure_rate <= (requirements["FR"] * number_actions),
-        return_period >= req_RP,
-        (leadtime - (issue + 1)) % 12 > 1,
-    ]).astype(np.int16)
-    
+    req_RP = (
+        requirements["RP"]
+        + 1 * (category[:3].lower() == "mod")
+        + 3 * (category[:3].lower() == "sev")
+    )
+
+    constraints = np.array(
+        [
+            hit_rate >= requirements["HR"],
+            success_rate >= (requirements["SR"] * number_actions),
+            failure_rate <= (requirements["FR"] * number_actions),
+            return_period >= req_RP,
+            (leadtime - (issue + 1)) % 12 > 1,
+        ]
+    ).astype(np.int16)
+
     if sorting:
         return [-hit_rate, failure_rate / (number_actions + eps)]
     else:
-      if np.all(constraints):
-          return [-hit_rate + alpha * false_alarm_rate]
-      else:
-          return [penalty]
+        if np.all(constraints):
+            return [-hit_rate + alpha * false_alarm_rate]
+        else:
+            return [penalty]
 
 
 @jit(nopython=True)
@@ -305,7 +358,7 @@ def _make_grid(arraylist):
     a2d = np.zeros((n, k, k))
     for i in range(n):
         a2d[i] = arraylist[i]
-    return(a2d)
+    return a2d
 
 
 @jit(nopython=True)
@@ -314,8 +367,8 @@ def _meshxy(x, y):
     yy = np.empty(shape=(x.size, y.size), dtype=y.dtype)
     for i in range(y.size):
         for j in range(x.size):
-            xx[i,j] = x[i]  # change to x[j] if indexing xy
-            yy[i,j] = y[j]  # change to y[i] if indexing xy
+            xx[i, j] = x[i]  # change to x[j] if indexing xy
+            yy[i, j] = y[j]  # change to y[i] if indexing xy
     return xx, yy
 
 
@@ -323,56 +376,55 @@ def _meshxy(x, y):
 def brute_numba(func, ranges, args=()):
     # TODO Move to hip-analysis
     """
-    Numba-compatible implementation of scipy.optimize.brute designed only for 2d minimizations. 
+    Numba-compatible implementation of scipy.optimize.brute designed only for 2d minimizations.
     Minimize a function over a given range by brute force.
 
-    Uses the “brute force” method, i.e., computes the function's value at each point of a 
+    Uses the “brute force” method, i.e., computes the function's value at each point of a
     multidimensional grid of points, to find the global minimum of the function.
 
     Args:
         func: callable, objective function to be minimized. Must be in the form f(x, *args),
-                        where x is the argument in the form of a 1-D array and args is a tuple 
-                        of any additional fixed parameters needed to completely specify the 
+                        where x is the argument in the form of a 1-D array and args is a tuple
+                        of any additional fixed parameters needed to completely specify the
                         function.
         ranges: tuple,  each component of the ranges tuple must be a numpy.array. The program uses
                         these to create the grid of points on which the objective function will be
                         computed.
-        args: tuple, optional, any additional fixed parameters needed to completely specify the 
+        args: tuple, optional, any additional fixed parameters needed to completely specify the
                         function.
     Returns:
-        xmin: numpy.ndarray, a 1-D array containing the coordinates of a point at which the 
+        xmin: numpy.ndarray, a 1-D array containing the coordinates of a point at which the
                         objective function had its minimum value.
         Jmin: float, function values at the point xmin.
     """
     assert len(ranges) == 2
-    
+
     x, y = _meshxy(*ranges)
     grid = _make_grid([x, y])
-    
+
     # obtain an array of parameters that is iterable by a map-like callable
     inpt_shape = np.array(grid.shape)
     grid = np.reshape(grid, (inpt_shape[0], np.prod(inpt_shape[1:]))).T
-    
+
     # iterate over input arrays and evaluate func (1D array)
-    Jout = np.array([
-        func(np.asarray(candidate).flatten(), *args)[0]
-        for candidate in grid
-    ])
-    
+    Jout = np.array(
+        [func(np.asarray(candidate).flatten(), *args)[0] for candidate in grid]
+    )
+
     # identify index of minimizer in 1D array
     indx = np.argmin(Jout)
 
     # reshape to recover 2D grid
     Jout = np.reshape(Jout, (inpt_shape[1], inpt_shape[2]))
     grid = np.reshape(grid.T, (inpt_shape[0], inpt_shape[1], inpt_shape[2]))
-    
+
     # identify index of minimizer in grid
     Nshape = np.shape(Jout)
-    Nindx = np.empty(2, dtype=np.uint8)    
+    Nindx = np.empty(2, dtype=np.uint8)
     Nindx[1] = indx % Nshape[1]
     indx = indx // Nshape[1]
     Nindx[0] = indx % Nshape[0]
-    
+
     # get candidate value that minimizes func
     xmin = np.array([grid[k][Nindx[0], Nindx[1]] for k in range(2)])
 
@@ -391,22 +443,24 @@ def find_optimal_triggers(
     issue,
     category,
     vulnerability,
+    params,
 ):
     """
-    Find the optimal triggers pair by evaluating the objective function on each couple of 
+    Find the optimal triggers pair by evaluating the objective function on each couple of
     values of a 100 * 100 grid and selecting the minimizer.
 
     Args:
-        observations_bool: np.array, time series of categorical observations for the 
+        observations_bool: np.array, time series of categorical observations for the
                         specified category
-        observations_val: np.array, time series of the observed rainfall values (or SPI) 
+        observations_val: np.array, time series of the observed rainfall values (or SPI)
         prob_ready: np.array, time series of forecasts probabilities for the ready month
         prob_ready: np.array, time series of forecasts probabilities for the set month
         lead_time: int, lead time month
         issue: int, issue month
         category: str, intensity level
-        vulnerability: str, should be either 'GT' for General Triggers or 'NRT' for 'Non-
-                        Regret Triggers'
+        vulnerability: str, should be either 'GT' for General Triggers or 'NRT' for Non-
+                        Regret Triggers
+        params: Params, configuration parameters dictionary
     Returns:
         best_triggers: np.array, array of size 2 containing best triggers for Ready / Set
         best_score: int, score (mainly hit rate) corresponding to the best triggers
@@ -418,7 +472,9 @@ def find_optimal_triggers(
         np.arange(threshold_range[0], threshold_range[1], step=0.01),
         np.arange(threshold_range[0], threshold_range[1], step=0.01),
     )
-    
+
+    TOLERANCE, GENERAL_T, NON_REGRET_T = _get_skill_requirements(params.iso)
+
     # Launch research
     best_triggers, best_score = brute_numba(
         objective,
@@ -441,7 +497,11 @@ def find_optimal_triggers(
     return best_triggers, best_score
 
 
-def filter_triggers_by_window(df_leadtime, probs_ready, probs_set, obs, vulnerability):
+def filter_triggers_by_window(
+    df_leadtime, probs_ready, probs_set, obs, vulnerability, params
+):
+    TOLERANCE, GENERAL_T, NON_REGRET_T = _get_skill_requirements(params.iso)
+
     def sel_row(da, row, index, issue=None):
         da_sel = da.sel(district=row.district.unique(), index=index)
         if "issue" in da.dims:
@@ -450,80 +510,136 @@ def filter_triggers_by_window(df_leadtime, probs_ready, probs_set, obs, vulnerab
             da_sel = da_sel.sel(category=row.category.unique())
         return da_sel
 
-    def get_two_pairs_per_window(tdf):
+    def get_top_pairs_per_window(tdf, n_to_keep=4):
         for (ind, iss), sub_tdf in tdf.groupby(["index", "issue"]):
             t = sub_tdf.sort_values("trigger").trigger_value.values
             issue = sub_tdf.issue.unique()
-            hr, fr = objective(
-                t,
-                sel_row(obs.val, tdf, ind).values[0],
-                sel_row(obs.bool, tdf, ind).values[0][0],
-                sel_row(probs_ready.prob, tdf, ind, issue).values[0][0][0],
-                sel_row(probs_set.prob, tdf, ind, issue).values[0][0][0],
-                sel_row(obs, tdf, ind).lead_time.values,
-                sel_row(probs_ready.prob, tdf, ind, issue).issue.values[0],
-                str(sel_row(obs.bool, tdf, ind).category.values[0]),
-                vulnerability,
-                TOLERANCE,
-                GENERAL_T,
-                NON_REGRET_T,
-                sorting=True,
+            stats = tuple(
+                objective(
+                    t,
+                    sel_row(obs.val, tdf, ind).values[0],
+                    sel_row(obs.bool, tdf, ind).values[0][0],
+                    sel_row(probs_ready.prob, tdf, ind, issue).values[0][0][0],
+                    sel_row(probs_set.prob, tdf, ind, issue).values[0][0][0],
+                    sel_row(obs, tdf, ind).lead_time.values,
+                    sel_row(probs_ready.prob, tdf, ind, issue).issue.values[0],
+                    str(sel_row(obs.bool, tdf, ind).category.values[0]),
+                    vulnerability,
+                    TOLERANCE,
+                    GENERAL_T,
+                    NON_REGRET_T,
+                    sorting=True,
+                )
             )
+            hr, fr = stats[0], stats[1]
             tdf.loc[(tdf["index"] == ind) & (tdf.issue == iss), "HR"] = hr
             tdf.loc[(tdf["index"] == ind) & (tdf.issue == iss), "FR"] = fr
-        if len(tdf) < 4:  # more than two pairs otherwise no need
+        if len(tdf) < (2 * n_to_keep):  # more than two pairs otherwise no need
             return tdf
         else:
             best_four = (
-                tdf.sort_values("lead_time").sort_values("FR").sort_values("HR").head(4)
+                tdf.sort_values("lead_time")
+                .sort_values("FR")
+                .sort_values("HR")
+                .head(2 * n_to_keep)
             )
             return best_four
 
     triggers_window_list = [
-        get_two_pairs_per_window(r)
+        get_top_pairs_per_window(r)
         for _, r in df_leadtime.groupby(["district", "category", "Window"])
     ]
 
     return pd.concat(triggers_window_list)
 
 
-WINDOW1_INDEXES_MOZ = {
-    'Cabo_Delgado': ['DJ', 'DJF', 'JF', 'JFM', 'FM'], 
-    'Gaza': ['ON', 'OND', 'ND', 'NDJ', 'DJ'], 
-    'Inhambane': ['ON', 'OND', 'ND', 'NDJ', 'DJ'], 
-    'Manica': ['ND', 'NDJ', 'DJ', 'DJF', 'JF'], 
-    'Maputo': ['ON', 'OND', 'ND', 'NDJ', 'DJ'],
-    'Maputo City': ['ON', 'OND', 'ND', 'NDJ', 'DJ'], 
-    'Nampula': ['DJ', 'DJF', 'JF', 'JFM', 'FM'], 
-    'Niassa': ['DJ', 'DJF', 'JF', 'JFM', 'FM'], 
-    'Sofala': ['ND', 'NDJ', 'DJ', 'DJF', 'JF'],  
-    'Tete': ['ND', 'NDJ', 'DJ', 'DJF', 'JF'],  
-    'Zambezia': ['ND', 'NDJ', 'DJ', 'DJF', 'JF'], 
+WINDOW1_SPI_MOZ = {
+    "Cabo_Delgado": ["DJ", "DJF", "JF", "JFM", "FM"],  # North
+    "Gaza": ["ON", "OND", "ND", "NDJ", "DJ"],  # South
+    "Inhambane": ["ON", "OND", "ND", "NDJ", "DJ"],
+    "Manica": ["ND", "NDJ", "DJ", "DJF", "JF"],  # Central
+    "Maputo": ["ON", "OND", "ND", "NDJ", "DJ"],
+    "Maputo City": ["ON", "OND", "ND", "NDJ", "DJ"],
+    "Nampula": ["DJ", "DJF", "JF", "JFM", "FM"],
+    "Niassa": ["DJ", "DJF", "JF", "JFM", "FM"],
+    "Sofala": ["ND", "NDJ", "DJ", "DJF", "JF"],
+    "Tete": ["ND", "NDJ", "DJ", "DJF", "JF"],
+    "Zambezia": ["ND", "NDJ", "DJ", "DJF", "JF"],
 }
 
-WINDOW2_INDEXES_MOZ = {
-    'Cabo_Delgado': ['FMA', 'MA', 'MAM', 'AM', 'AMJ', 'MJ'], 
-    'Gaza': ['DJF', 'JF', 'JFM', 'FM', 'FMA', 'MA'], 
-    'Inhambane': ['DJF', 'JF', 'JFM', 'FM', 'FMA', 'MA'], 
-    'Manica': ['JFM', 'FM', 'FMA', 'MA', 'MAM', 'AM'], 
-    'Maputo': ['DJF', 'JF', 'JFM', 'FM', 'FMA', 'MA'], 
-    'Maputo City': ['DJF', 'JF', 'JFM', 'FM', 'FMA', 'MA'], 
-    'Nampula': ['FMA', 'MA', 'MAM', 'AM', 'AMJ', 'MJ'], 
-    'Niassa': ['FMA', 'MA', 'MAM', 'AM', 'AMJ', 'MJ'], 
-    'Sofala': ['JFM', 'FM', 'FMA', 'MA', 'MAM', 'AM'], 
-    'Tete': ['JFM', 'FM', 'FMA', 'MA', 'MAM', 'AM'], 
-    'Zambezia': ['JFM', 'FM', 'FMA', 'MA', 'MAM', 'AM'], 
+WINDOW1_DRY_MOZ = {
+    "Cabo_Delgado": ["DJ", "JF", "FM"],  # North
+    "Gaza": [],  # South
+    "Inhambane": [],
+    "Manica": ["DJ", "JF"],  # Central
+    "Maputo": [],
+    "Maputo City": [],
+    "Nampula": ["DJ", "JF", "FM"],
+    "Niassa": ["DJ", "JF", "FM"],
+    "Sofala": ["DJ", "JF"],
+    "Tete": ["DJ", "JF"],
+    "Zambezia": ["DJ", "JF"],
 }
 
-def get_window_district(iso, shp, index, district):
-    province = shp.loc[shp.ADM2_PT == district].ADM1_PT.unique()[0]
+WINDOW2_SPI_MOZ = {
+    "Cabo_Delgado": ["FMA", "MA", "MAM", "AM", "AMJ", "MJ"],  # North
+    "Gaza": ["DJF", "JF", "JFM", "FM", "FMA", "MA"],  # South
+    "Inhambane": ["DJF", "JF", "JFM", "FM", "FMA", "MA"],
+    "Manica": ["JFM", "FM", "FMA", "MA", "MAM", "AM"],  # Central
+    "Maputo": ["DJF", "JF", "JFM", "FM", "FMA", "MA"],
+    "Maputo City": ["DJF", "JF", "JFM", "FM", "FMA", "MA"],
+    "Nampula": ["FMA", "MA", "MAM", "AM", "AMJ", "MJ"],
+    "Niassa": ["FMA", "MA", "MAM", "AM", "AMJ", "MJ"],
+    "Sofala": ["JFM", "FM", "FMA", "MA", "MAM", "AM"],
+    "Tete": ["JFM", "FM", "FMA", "MA", "MAM", "AM"],
+    "Zambezia": ["JFM", "FM", "FMA", "MA", "MAM", "AM"],
+}
+
+WINDOW2_DRY_MOZ = {
+    "Cabo_Delgado": ["MA", "AM", "MJ"],  # North
+    "Gaza": ["DJ", "JF", "FM", "MA"],  # South
+    "Inhambane": ["DJ", "JF", "FM", "MA"],
+    "Manica": ["JF", "FM", "MA", "AM"],  # Central
+    "Maputo": ["DJ", "JF", "FM", "MA"],
+    "Maputo City": ["DJ", "JF", "FM", "MA"],
+    "Nampula": ["MA", "AM", "MJ"],
+    "Niassa": ["MA", "AM", "MJ"],
+    "Sofala": ["JF", "FM", "MA", "AM"],
+    "Tete": ["JF", "FM", "MA", "AM"],
+    "Zambezia": ["JF", "FM", "MA", "AM"],
+}
+
+WINDOW1_SPI_ZWE = ["ON", "OND", "ND", "NDJ"]
+WINDOW2_SPI_ZWE = ["DJ", "DJF", "JF", "JFM", "FM", "FMA"]
+
+WINDOW1_DRY_ZWE = []
+WINDOW2_DRY_ZWE = ["DJ", "JF", "FM"]
+
+
+def get_window_district(iso, index, shp, indicator, district):
+    province = shp.loc[shp.Name == district].adm1_name.unique()[0]
     if iso == "MOZ":
-        if index in WINDOW1_INDEXES_MOZ[province]:
-            return "Window1"
-        elif index in WINDOW2_INDEXES_MOZ[province]:
-                return "Window2"
+        if (index == "spi") and (indicator in WINDOW1_SPI_MOZ[province]):
+            return "Window 1"
+        elif (index == "spi") and (indicator in WINDOW2_SPI_MOZ[province]):
+            return "Window 2"
+        elif (index == "dryspell") and (indicator in WINDOW1_DRY_MOZ[province]):
+            return "Window 1"
+        elif (index == "dryspell") and (indicator in WINDOW2_DRY_MOZ[province]):
+            return "Window 2"
         else:
-                return np.nan
+            return np.nan
+    if iso == "ZWE":
+        if (index == "spi") and (indicator in WINDOW1_SPI_ZWE):
+            return "Window 1"
+        elif (index == "spi") and (indicator in WINDOW2_SPI_ZWE):
+            return "Window 2"
+        elif (index == "dryspell") and (indicator in WINDOW1_DRY_ZWE):
+            return "Window 1"
+        elif (index == "dryspell") and (indicator in WINDOW2_DRY_ZWE):
+            return "Window 2"
+        else:
+            return np.nan
 
 
 def read_aggregated_obs(path_to_zarr, params):
@@ -533,7 +649,7 @@ def read_aggregated_obs(path_to_zarr, params):
     obs_val = xr.open_mfdataset(
         list_val_paths,
         engine="zarr",
-        preprocess=lambda ds: ds["precip"],
+        preprocess=lambda ds: ds["band"],
         combine="nested",
         concat_dim="index",
     )
@@ -541,12 +657,12 @@ def read_aggregated_obs(path_to_zarr, params):
 
     obs = xr.Dataset({"bool": obs_bool, "val": obs_val})
     obs["time"] = [pd.to_datetime(t).year for t in obs.time.values]
-    obs["index"] = [i.split("\\")[-2] for i in list_val_paths]
+    obs["index"] = [i.split("/")[-2] for i in list_val_paths]
     return obs
 
 
 def read_aggregated_probs(path_to_zarr, params):
-    list_issue_paths = glob.glob(f"{path_to_zarr}/*")
+    list_issue_paths = glob.glob(f"{path_to_zarr}/*")[:-1]  # remove obs folder
     list_index = {}
     for l in list_issue_paths:
         list_index_raw = [
@@ -557,7 +673,7 @@ def read_aggregated_probs(path_to_zarr, params):
             os.path.join(i, "probabilities_bc.zarr")
             for i in glob.glob(f"{l}/{params.index} *")
         ]
-        index_names = [i.split("\\")[-2] for i in list_index_raw]
+        index_names = [i.split("/")[-2] for i in list_index_raw]
 
         try:
             index_raw = xr.open_mfdataset(
@@ -577,7 +693,7 @@ def read_aggregated_probs(path_to_zarr, params):
 
             ds_index = xr.Dataset({"raw": index_raw, "bc": index_bc})
             ds_index["index"] = index_names
-            list_index[int(l.split("\\")[-1])] = ds_index
+            list_index[int(l.split("/")[-1])] = ds_index
         except:
             continue
 
