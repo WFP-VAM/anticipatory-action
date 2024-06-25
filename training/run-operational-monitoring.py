@@ -6,81 +6,126 @@
 #       extension: .py
 #       format_name: light
 #       format_version: '1.5'
-#       jupytext_version: 1.16.1
+#       jupytext_version: 1.15.2
 #   kernelspec:
-#     display_name: hdc
+#     display_name: Python 3 (ipykernel)
 #     language: python
-#     name: conda-env-hdc-py
+#     name: python3
 # ---
 
+# ## Run AA operational monitoring script
 #
-# This notebook is not used operationally or for any validation, its purpose is to have a clear understanding of the core functions of the AA workflow. The outputs and dimensions of each main step can thus be identified here. It can also be used to run the operational workflow for a very specific index or issue month. However, in order to better compare the outputs with the reference ones, some very simple analysis plots/tables will be added. 
+# #### (can be used for a more user-friendly experience or for training purposes)
+#
+# #### (note: having run entirely the `run_full_verification` notebook is a prerequisite to run this one)
+#
+# This notebook reads a forecasts dataset (corresponding to a specific issue month) and computes the corresponding probabilities. These probabilities are merged with the pre-computed triggers dataframe to be displayed on the dashboard.
 
-import sys
-sys.path.append('..')
+# **Import required libraries and functions**
 
 # +
-import datetime
+import os
 import pandas as pd
 
-from config.params import Params 
+from config.params import Params
 
-from AA.helper_fns import (
-    read_forecasts,
-    read_observations,
-    aggregate_by_district,
-    merge_un_biased_probs,
-    merge_probabilities_triggers_dashboard,
-)
+from AA.helper_fns import read_observations, read_forecasts
+from AA.operational import run_full_index_pipeline
 
 from hip.analysis.aoi.analysis_area import AnalysisArea
-from hip.analysis.analyses.drought import (
-    get_accumulation_periods,
-    run_accumulation_index,
-    run_gamma_standardization,
-    run_bias_correction,
-    compute_probabilities,
-)
+from hip.analysis.analyses.drought import get_accumulation_periods
 # -
 
-params = Params(iso='MOZ', issue=12, index='SPI')
+# **First, please define the country ISO code, the issue month and the index of interest**
+
+
+country = "ZWE"
+issue = 6
+index = "SPI"  # 'SPI' or 'DRYSPELL'
+
+
+# Now, we will configure some parameters. Please feel free to edit the `{country}_config.yaml` file if you need to change the *monitoring_year* or any other relevant parameter.
+
+
+params = Params(iso=country, issue=issue, index=index)
+
+
+# ### Read data
+
+# Let's start by getting the shapefile.
 
 # +
 area = AnalysisArea.from_admin_boundaries(
-    iso3=params.iso,
+    iso3=params.iso.upper(),
     admin_level=2,
     resolution=0.25,
+    datetime_range=f"1981-01-01/{params.monitoring_year + 1}-06-30",
 )
 
 gdf = area.get_dataset([area.BASE_AREA_DATASET])
+gdf
 # -
+
+
+# The next cell reads the observations dataset. Please run it directly if you have the data stored in the specified path or have access to HDC.
+#
+#
+# *Note:*
+#
+# If you previously ran the `run-full-verification` notebook, you probably already have the dataset stored locally. In that case, you can give its path as an argument to `read_observations`.
+
+
+# Observations data reading
+observations = read_observations(
+    area,
+    f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}/obs/observations.zarr",
+)
+
+
+# As with observations, forecasts are easy to read using hip-analysis, called within the `read_forecasts` function.
+#
+# Please note the *update* parameter that allows to re-load the data from HDC in order to get the latest updates. This means that if you are running this for the second time, you can set this parameter to **False**, so the data is read directly from the local file system.
+#
+# For training purposes, we will also keep this parameter as False in order to avoid dealing with HDC credentials.
+
 
 forecasts = read_forecasts(
     area,
-    params.issue,
-    f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/zarr/{params.year}/{params.issue}/forecasts.zarr",
-    #update=True,
+    issue,
+    f"{params.data_path}/data/{params.iso}/zarr/2022/{str(issue).zfill(2)}/forecasts.zarr",
+    update=False,  # True,
 )
 forecasts
 
-forecasts
 
-observations = read_observations(
-    area,
-    f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/zarr/{params.year}/obs/observations.zarr",
+
+forecasts.isel(ensemble=0).mean("time").hip.viz.map(
+    title=f"Rainfall forecasts (issue {issue}) average over time for control member"
 )
-observations
 
-forecasts.time
 
-observations.time
+# Now that we got all the data we need, let's read the triggers file so we can merge the probabilities with it once we have them. This triggers file corresponds to the output of the `run-full-verification` notebook if we're in May. Then, we read the merged dataframe that already contains the probabilities from the previous months so we add the new probabilities to the existing merged dataframe.
+#
+# **Note:**
+#
+# This means that if you want to re-run the probabilities for May, you should delete or move the existing probabilities dataframes from the probs directory.
 
-# +
+
 # Read triggers file
-#triggers_df = pd.read_csv(
-#    f"data/{params.iso}/outputs/Plots/triggers.aa.python.spi.dryspell.2022.csv"
-#)
-# -
+if os.path.exists(f"../data/{params.iso}/probs/aa_probabilities_triggers_pilots.csv"):
+    triggers_df = pd.read_csv(
+        f"{params.data_path}/data/{params.iso}/probs/aa_probabilities_triggers_pilots.csv",
+    )
+else:
+    triggers_df = pd.read_csv(
+        f"{params.data_path}/data/{params.iso}/triggers/triggers.spi.dryspell.{params.calibration_year}.pilots.csv",
+    )
+
+
+# ### Run forecasts processing
+
+# Before calculating the accumulation, anomaly etc..., we need to obtain the accumulation periods we will be focusing on. These depend on the issue month of the forecasts that we are currently processing.
+
 
 # Get accumulation periods (DJ, JF, FM, DJF, JFM...)
 accumulation_periods = get_accumulation_periods(
@@ -90,88 +135,54 @@ accumulation_periods = get_accumulation_periods(
     params.min_index_period,
     params.max_index_period,
 )
+accumulation_periods
 
-# Get single use case
-period_name, period_months = list(accumulation_periods.items())[3]
-period_name, period_months
 
-# Remove 1980 season to harmonize observations between different indexes
-if int(params.issue) >= params.end_season:
-    observations = observations.where(
-        observations.time.dt.date >= datetime.date(1981, 10, 1), drop=True
+# Now we know which periods we will be computing the drought probabilities on. And this will be done in the next cell, by calling the `run_full_index_pipeline` function on each of them. That function derives the accumulation, the anomaly, performs the bias correction and obtains the probabilities.
+
+
+# Compute probabilities for each accumulation period
+probs_merged_dataframes = [
+    run_full_index_pipeline(
+        forecasts,
+        observations,
+        params,
+        triggers_df,
+        gdf,
+        period_name,
+        period_months,
     )
+    for period_name, period_months in accumulation_periods.items()
+]
 
-# Accumulation
-accumulation_fc = run_accumulation_index(
-    forecasts, params.aggregate, period_months, forecasts=True
-)
-accumulation_obs = run_accumulation_index(
-    observations, params.aggregate, period_months
-)
-display(accumulation_fc)
 
-# Remove inconsistent observations
-accumulation_obs = accumulation_obs.sel(
-    time=slice(datetime.date(1979, 1, 1), datetime.date(params.year - 1, 12, 31))
-)
+# We reorganise the dataframes and we are ready to save them.
 
-anomaly_fc.where(anomaly_fc.time.dt.day == 1, drop=True).isel(latitude=0, longitude=0).plot.line()
-anomaly_obs.isel(latitude=0, longitude=0).plot.line()
-
-# Anomaly
-anomaly_fc = run_gamma_standardization(
-    accumulation_fc.load(), params.calibration_start, params.calibration_stop, members=True,
-)
-anomaly_obs = run_gamma_standardization(
-    accumulation_obs.load(),
-    params.calibration_start,
-    params.calibration_stop,
-    members=False,
-)
-display(anomaly_fc)
-
-# Probabilities without Bias Correction
-probabilities = compute_probabilities(
-    anomaly_fc.where(anomaly_fc.time.dt.year == params.year, drop=True),
-    levels=params.intensity_thresholds,
-).round(2)
-display(probabilities)
-
-# Bias correction
-index_bc = run_bias_correction(
-    anomaly_fc, 
-    anomaly_obs, 
-    params.end_season,
-    params.year,
-    int(params.issue),
-    nearest_neighbours=8,
-    enso=True,
-)
-display(index_bc)
-
-# Probabilities after Bias Correction
-probabilities_bc = compute_probabilities(
-    index_bc, levels=params.intensity_thresholds
-).round(2)
-display(probabilities_bc)
 
 # +
-# Aggregate by district
-probs_district = aggregate_by_district(probabilities, params.gdf, params)
-probs_bc_district = aggregate_by_district(probabilities_bc, params.gdf, params)
+probs_df, merged_df = zip(*probs_merged_dataframes)
 
-# Build single xarray with merged unbiased/biased probabilities
-probs_by_district = merge_un_biased_probs(
-    probs_district, probs_bc_district, params, period_name
+probs_dashboard = pd.concat(probs_df).drop_duplicates()
+
+merged_db = pd.concat(merged_df).sort_values(["prob_ready", "prob_set"])
+merged_db = merged_db.drop_duplicates(
+    merged_db.columns.difference(["prob_ready", "prob_set"]), keep="first"
 )
-display(probs_by_district)
+merged_db = merged_db.sort_values(["district", "index", "category"])
+merged_db
 # -
 
-# Merge probabilities with triggers
-probs_df, merged_df = merge_probabilities_triggers_dashboard(
-    probs_by_district, triggers_df, params, period_name
+
+# ### Save drought probabilities
+
+# Save all probabilities
+probs_dashboard.to_csv(
+    f"{params.data_path}/data/{params.iso}/probs/aa_probabilities_{params.index}_{params.issue}.csv",
+    index=False,
 )
 
-probs_df
-
-merged_df
+# Save probabilities merged with triggers
+merged_db.sort_values(["district", "index", "category"]).to_csv(
+    f"{params.data_path}/data/{params.iso}/probs/aa_probabilities_triggers_pilots.csv",
+    index=False,
+)
