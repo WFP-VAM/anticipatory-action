@@ -1,6 +1,7 @@
 import glob
 import os
 
+import datetime
 import geopandas as gpd
 import numpy as np
 import pandas as pd
@@ -36,7 +37,7 @@ def triggers_da_to_df(triggers_da, hr_da):
     )
     triggers_df = triggers_df.join(hr_df)
     triggers_df = triggers_df.drop(["spatial_ref"], axis=1)
-    triggers_df.columns = ["trigger", "trigger_value", "lead_time", "HR"]
+    triggers_df.columns = ["trigger", "lead_time", "trigger_value", "HR"]
     return triggers_df.reset_index().drop_duplicates()
 
 
@@ -87,21 +88,66 @@ def format_triggers_df_for_dashboard(triggers, params):
 
     triggers["prob"] = np.nan
     triggers["HR"] = triggers["HR"].abs()
-    triggers["season"] = f"{params.year}-{str(params.year+1)[-2:]}"
-    triggers['date'] = [params.year if r.issue >= 5 else params.year+1 for _, r in triggers.iterrows()]
-    triggers['date'] = [pd.to_datetime(f"{r.issue}-1-{r.date}") for _, r in triggers.iterrows()]
-    
-    def substract(issue): return 2 if issue == 1 else 1
-    triggers['mready'] = [r.issue if r.trigger == 'trigger1' else (r.issue-substract(int(r.issue))) % 13 for _, r in triggers.iterrows()]
+    # triggers["season"] = f"{params.monitoring_year}-{str(params.monitoring_year+1)[-2:]}"
+    # triggers['date'] = [params.monitoring_year if r.issue >= 5 else params.monitoring_year+1 for _, r in triggers.iterrows()]
+    # triggers['date'] = [pd.to_datetime(f"{r.issue}-1-{r.date}") for _, r in triggers.iterrows()]
 
-    triggers_pivot = triggers.pivot_table(index=['district', 'index', 'category', 'Window', 'season', 'vulnerability', 'mready'], columns='trigger', values=['trigger_value', 'prob', 'issue', 'date']).reset_index()
-    triggers_pivot.columns = ['district', 'index', 'category', 'window', 'season', 'vulnerability', 'mready', 'date_ready', 'date_set', 'issue_ready', 'issue_set', 'trigger_ready', 'trigger_set']
-    triggers_pivot = triggers_pivot.drop('mready', axis=1)
+    def substract(issue):
+        return 2 if issue == 1 else 1
+
+    triggers["mready"] = [
+        r.issue if r.trigger == "trigger1" else (r.issue - substract(int(r.issue))) % 13
+        for _, r in triggers.iterrows()
+    ]
+
+    triggers_pivot = triggers.pivot_table(
+        index=["district", "index", "category", "Window", "mready"],
+        columns="trigger",
+        values=["trigger_value", "prob", "issue"],
+    ).reset_index()
+    triggers_pivot.columns = [
+        "district",
+        "index",
+        "category",
+        "window",
+        "mready",
+        "issue_ready",
+        "issue_set",
+        "trigger_ready",
+        "trigger_set",
+    ]
+    triggers_pivot = triggers_pivot.drop("mready", axis=1)
 
     return triggers_pivot
 
 
-def merge_probabilities_triggers_dashboard(probs_df, triggers, params, period):
+def get_coverage(triggers_df, districts: list, columns: list):
+    cov = pd.DataFrame(
+        columns=columns,
+        index=districts,
+    )
+    for d, r in cov.iterrows():
+        val = []
+        for w in triggers_df["window"].unique():
+            for c in triggers_df["category"].unique():
+                val.append(
+                    len(
+                        triggers_df[
+                            (triggers_df["window"] == w)
+                            & (triggers_df["category"] == c)
+                            & (triggers_df["district"] == d)
+                        ]
+                    )
+                )
+        cov.loc[d] = val
+
+    print(
+        f"The coverage is {round(100 * np.sum(cov.values > 0) / np.size(cov.values), 1)} %"
+    )
+    return cov
+
+
+def merge_probabilities_triggers_dashboard(probs, triggers, params, period):
     # Format probabilities
     probs_df = probs.to_dataframe().reset_index().drop("spatial_ref", axis=1)
     probs_df["prob"] = [np.round(p, 2) for p in probs_df.prob.values]
@@ -109,28 +155,39 @@ def merge_probabilities_triggers_dashboard(probs_df, triggers, params, period):
     probs_df["aggregation"] = np.repeat(
         f"{params.index.upper()} {len(period)}", len(probs_df)
     )
-    
+
     triggers_merged = triggers.copy()
-    
+
     # Create prob columns if reading empty triggers df
-    if 'prob_ready' not in triggers_merged.columns:
-        triggers_merged['prob_ready'] = np.nan
-        triggers_merged['prob_set'] = np.nan
-    
+    if "prob_ready" not in triggers_merged.columns:
+        triggers_merged["prob_ready"] = np.nan
+        triggers_merged["prob_set"] = np.nan
+
     # Fill in probabilities columns matching with triggers
-    for l, row in triggers_merged.iterrows(): 
-        if row.issue_ready == params.issue:
-            triggers_merged.loc[l, 'prob_ready'] = probs_df.loc[(probs_df["index"] == row["index"]) & (probs_df["category"] == row.category) & (probs_df["district"] == row.district)].prob.values[0]
-        elif row.issue_set == params.issue:
-            triggers_merged.loc[l, 'prob_set'] = probs_df.loc[(probs_df["index"] == row["index"]) & (probs_df["category"] == row.category) & (probs_df["district"] == row.district)].prob.values[0]
+    for l, row in triggers_merged.iterrows():
+        if (row.issue_ready == params.issue) and (
+            row["index"] == f"{params.index.upper()} {period}"
+        ):
+            triggers_merged.loc[l, "prob_ready"] = probs_df.loc[
+                (probs_df["index"] == row["index"])
+                & (probs_df["category"] == row.category)
+                & (probs_df["district"] == row.district)
+            ].prob.values[0]
+        elif (row.issue_set == params.issue) and (
+            row["index"] == f"{params.index.upper()} {period}"
+        ):
+            triggers_merged.loc[l, "prob_set"] = probs_df.loc[
+                (probs_df["index"] == row["index"])
+                & (probs_df["category"] == row.category)
+                & (probs_df["district"] == row.district)
+            ].prob.values[0]
 
     return probs_df, triggers_merged
-   
 
 
 def read_fbf_districts(path_fbf, params):
     fbf_districts = pd.read_csv(path_fbf, sep=",")
-    if type(params.issue) != list:
+    if params.issue:
         fbf_districts = fbf_districts.loc[fbf_districts.issue == params.issue]
     return fbf_districts
 
@@ -138,6 +195,14 @@ def read_fbf_districts(path_fbf, params):
 def read_forecasts(area, issue, local_path, update=False):
     if os.path.exists(local_path) and not update:
         forecasts = xr.open_zarr(local_path).tp.persist()
+        forecasts = forecasts.sel(
+            time=slice(
+                None,
+                datetime.datetime.strptime(
+                    area.datetime_range.split("/")[1], "%Y-%m-%d"
+                ),
+            )
+        )
     else:
         forecasts = area.get_dataset(
             ["ECMWF", f"RFH_FORECASTS_SEAS5_ISSUE{int(issue)}_DAILY"],

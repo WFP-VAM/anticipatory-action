@@ -17,17 +17,18 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 from config.params import Params
-from hip.analysis.analyses.drought import (compute_probabilities,
-                                           concat_obs_levels,
-                                           get_accumulation_periods,
-                                           run_accumulation_index,
-                                           run_bias_correction,
-                                           run_gamma_standardization)
+from hip.analysis.analyses.drought import (
+    compute_probabilities,
+    concat_obs_levels,
+    get_accumulation_periods,
+    run_accumulation_index,
+    run_bias_correction,
+    run_gamma_standardization,
+)
 from hip.analysis.aoi.analysis_area import AnalysisArea
 from hip.analysis.ops._statistics import evaluate_roc_forecasts
 
-from AA.helper_fns import (aggregate_by_district, read_forecasts,
-                           read_observations)
+from AA.helper_fns import aggregate_by_district, read_forecasts, read_observations
 
 
 @click.command()
@@ -41,43 +42,60 @@ def run(country, index):
         iso3=country.upper(),
         admin_level=2,
         resolution=0.25,
-        datetime_range=f"1981-01-01/{params.year}-06-30",
+        datetime_range=f"1981-01-01/{params.calibration_year}-06-30",
     )
 
     gdf = area.get_dataset([area.BASE_AREA_DATASET])
 
     observations = read_observations(
         area,
-        f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/zarr/{params.year}/obs/observations.zarr",
+        f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}/obs/observations.zarr",
     )
     logging.info(
         f"Completed reading of observations for the whole {params.iso} country"
     )
 
-    fbf_roc_issues = [
-        run_issue_verification(
-            area,
-            observations,
-            issue,
-            params,
-            gdf,
-        )
-        for issue in params.issue
-    ]
-    logging.info(
-        f"Completed analytical process for {params.index.upper()} over {country} country"
+    # Create directory for ROC scores df per issue month in case it doesn't exist
+    os.makedirs(
+        f"{params.data_path}/data/{params.iso}/auc/split_by_issue",
+        exist_ok=True,
     )
+
+    # Define empty list for each issue month's ROC score dataframe
+    fbf_roc_issues = []
+
+    for issue in params.issue_months:
+
+        forecasts = read_forecasts(
+            area,
+            issue,
+            f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}/{issue}/forecasts.zarr",
+        )
+        logging.info(f"Completed reading of forecasts for the issue month {issue}")
+
+        fbf_roc_issues.append(
+            run_issue_verification(
+                forecasts,
+                observations,
+                issue,
+                params,
+                gdf,
+            )
+        )
+        logging.info(
+            f"Completed analytical process for {params.index.upper()} over {country} country"
+        )
 
     fbf_roc = pd.concat(fbf_roc_issues)
     fbf_roc.to_csv(
-        f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/auc/fbf.districts.roc.{params.index}.{params.year}.csv",
+        f"{params.data_path}/data/{params.iso}/auc/fbf.districts.roc.{params.index}.{params.calibration_year}.csv",
         index=False,
     )
 
     logging.info(f"FbF dataframe saved for {country}")
 
 
-def run_issue_verification(area, observations, issue, params, gdf):
+def run_issue_verification(forecasts, observations, issue, params, gdf):
     """
     Run analytical / verification pipeline for one issue month
 
@@ -91,7 +109,7 @@ def run_issue_verification(area, observations, issue, params, gdf):
     """
 
     if os.path.exists(
-        f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/auc/split_by_issue/fbf.districts.roc.{params.index}.{params.year}.{issue}.csv"
+        f"{params.data_path}/data/{params.iso}/auc/split_by_issue/fbf.districts.roc.{params.index}.{params.calibration_year}.{issue}.csv"
     ):
 
         logging.info(
@@ -99,17 +117,10 @@ def run_issue_verification(area, observations, issue, params, gdf):
         )
 
         return pd.read_csv(
-            f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/auc/split_by_issue/fbf.districts.roc.{params.index}.{params.year}.{issue}.csv"
+            f"{params.data_path}/data/{params.iso}/auc/split_by_issue/fbf.districts.roc.{params.index}.{params.calibration_year}.{issue}.csv"
         )
 
     else:
-
-        forecasts = read_forecasts(
-            area,
-            issue,
-            f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/zarr/{params.year}/{issue}/forecasts.zarr",
-        )
-        logging.info(f"Completed reading of forecasts for the issue month {issue}")
 
         # Get accumulation periods (DJ, JF, FM, DJF, JFM...)
         accumulation_periods = get_accumulation_periods(
@@ -137,7 +148,7 @@ def run_issue_verification(area, observations, issue, params, gdf):
         fbf_issue["issue"] = int(issue)
 
         fbf_issue.to_csv(
-            f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/auc/split_by_issue/fbf.districts.roc.{params.index}.{params.year}.{issue}.csv",
+            f"{params.data_path}/data/{params.iso}/auc/split_by_issue/fbf.districts.roc.{params.index}.{params.calibration_year}.{issue}.csv",
             index=False,
         )
 
@@ -254,20 +265,23 @@ def calculate_forecast_probabilities(
 
     # Remove potential inconsistent observations
     accumulation_obs = accumulation_obs.sel(
-        time=slice(datetime.date(1979, 1, 1), datetime.date(params.year - 1, 12, 31))
+        time=slice(
+            datetime.date(1979, 1, 1),
+            datetime.date(params.calibration_year - 1, 12, 31),
+        )
     )
 
     # Anomaly
     anomaly_fc = run_gamma_standardization(
         accumulation_fc.load(),
-        params.calibration_start,
-        params.calibration_stop,
+        params.hist_anomaly_start,
+        params.hist_anomaly_stop,
         members=True,
     )
     anomaly_obs = run_gamma_standardization(
         accumulation_obs.load(),
-        params.calibration_start,
-        params.calibration_stop,
+        params.hist_anomaly_start,
+        params.hist_anomaly_stop,
     )
     logging.info(f"Completed anomaly")
 
@@ -303,7 +317,9 @@ def calculate_forecast_probabilities(
         )
         .round(2)
     )
-    probabilities = probabilities.where(probabilities.year < params.year, drop=True)
+    probabilities = probabilities.where(
+        probabilities.year < params.calibration_year, drop=True
+    )
     logging.info(f"Completed probabilities")
 
     # Convert obs-based SPIs to booleans
@@ -331,7 +347,7 @@ def calculate_forecast_probabilities(
         .round(2)
     )
     probabilities_bc = probabilities_bc.where(
-        probabilities_bc.year < params.year, drop=True
+        probabilities_bc.year < params.calibration_year, drop=True
     )
     logging.info(f"Completed probabilities with bias correction")
 
@@ -374,17 +390,17 @@ def save_districts_results(
     probs_bc_district = aggregate_by_district(probabilities_bc, gdf, params)
 
     obs_district.to_zarr(
-        f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/zarr/{params.year}/obs/{params.index} {period_name}/observations.zarr",
+        f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}/obs/{params.index} {period_name}/observations.zarr",
         mode="w",
     )
 
     probs_district.to_zarr(
-        f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/zarr/{params.year}/{issue}/{params.index} {period_name}/probabilities.zarr",
+        f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}/{issue}/{params.index} {period_name}/probabilities.zarr",
         mode="w",
     )
 
     probs_bc_district.to_zarr(
-        f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/zarr/{params.year}/{issue}/{params.index} {period_name}/probabilities_bc.zarr",
+        f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}/{issue}/{params.index} {period_name}/probabilities_bc.zarr",
         mode="w",
     )
 
