@@ -1,11 +1,15 @@
-import datetime
 import os
+import yaml
 from dataclasses import dataclass, field
 
 import hdc.algo
+import datetime
 import numpy as np
 import pandas as pd
 import geopandas as gpd
+
+from numba import types
+from numba.typed import Dict
 
 from AA.helper_fns import read_fbf_districts
 
@@ -18,6 +22,15 @@ AGGREGATES = {
     .hdc.algo.lroo(),
 }
 
+
+def load_config(iso):
+    config_file = f"../config/{iso}_config.yaml"
+    if os.path.exists(config_file):
+        with open(config_file, 'r') as f:
+            return yaml.safe_load(f)
+    else:
+        raise FileNotFoundError(f"Configuration file for {iso} not found.")
+    
 
 @dataclass
 class Params:
@@ -34,12 +47,14 @@ class Params:
         name of index to process: can be "SPI" or "DRYSPELL"
     issue : int
         issue month: month of interest for operational script
-    year : int
-        first year of season of interest (e.g. 2022 for 2022/2023 season)
-    gdf : gpd.GeoDataFrame
-        country shapeile containing Admin2 level geometry
+    issue_months : list
+        issue months list: list of issue months to use for triggers selection and verification
+    monitoring_year : int
+        first year of season to monitor operationally (e.g. 2024 for 2024/2025 season)
+    calibration_year: int
+        last year of calibration period used for triggers selection (e.g. 2022 for 1981-2022)
     aggregate : callable
-        method of monthly of aggregation corresponding to index
+        method of aggregation corresponding to index
     min_index_period : int
         minimum length of indicator periods (ON, NDJ, JFMA...)
     max_index_period : int
@@ -48,12 +63,14 @@ class Params:
         first month of the wet season
     end_season : int
         last month of the wet season
-    calibration_start : datetime.datetime
+    hist_anomaly_start : datetime.datetime
         start date of historical time series used in anomaly computation
-    calibration_stop : datetime.datetime
+    hist_anomaly_stop : datetime.datetime
         end date of historical time series used in anomaly computation
     save_zarr : bool
         save (and overwrite if exists) ds (obs or probs) for future trigger choice
+    data_path : str
+        output path where to store intermediate and final outputs (should include data folder)
     districts: list
         list of districts for which we want to compute triggers
     fbf_districts_df : pd.DataFrame
@@ -62,55 +79,76 @@ class Params:
         thresholds defining different drought intensities used in probabilities computation
     districts_vulnerability : dict
         vulnerability class of triggers for each district: regret or non-regret
+    tolerance: dict
+        thresholds with tolerance for each category, used to compute false alarm with tolerance
+    general_t: dict
+        skill requirements for General Triggers in terms of Hit Rate, Success Rate, Failure Rate, Return Period
+    non_regret_t: dict
+        skill requirements for Non Regret Triggers in terms of Hit Rate, Success Rate, Failure Rate, Return Period
+    windows: dict
+        dictionary containing two dictionaries (window1, window2) containing indicators for each window (by province or not)
     """
 
     iso: str
     index: str
-    issue: int or list = None
-    year: int = 2022
-    gdf: gpd.GeoDataFrame = None
+    issue: int = None 
+    issue_months: list = None
+    monitoring_year: int = 2024
+    calibration_year: int = 2022
     aggregate: callable = field(init=None)
     min_index_period: int = 2
     max_index_period: int = 3
     start_season: int = 10
     end_season: int = 6
-    calibration_start: datetime.datetime = None
-    calibration_stop: datetime.datetime = datetime.datetime(2018, 12, 31)
+    hist_anomaly_start: datetime.datetime = None
+    hist_anomaly_stop: datetime.datetime = datetime.datetime(2018, 12, 31)
     save_zarr: bool = True
+    data_path: str = "."
     districts: list = field(init=None)
-    fbf_districts_df: pd.DataFrame = field(init=None)
+    fbf_districts_df: pd.DataFrame = field(init=False, default_factory=pd.DataFrame)
     intensity_thresholds: dict = field(init=None)
     districts_vulnerability: dict = field(init=None)
+    tolerance: dict = field(init=False)
+    general_t: dict = field(init=False)
+    non_regret_t: dict = field(init=False)
+    windows: dict = field(init=False)
 
     def __post_init__(self):
-        self.iso = self.iso.upper()
+        self.iso = self.iso.lower()
         self.index = self.index.lower()
+
+        config = load_config(self.iso)
+
+        # Set attributes based on the config file
+        for key, value in config.items():
+            setattr(self, key, value)
+
+        # Set the aggregate method      
         self.aggregate = AGGREGATES[self.index]
-        if self.iso == "MOZ":
-            self.intensity_thresholds = {"Severe": -1, "Moderate": -0.85, "Mild": -0.68}
-            self.districts_vulnerability = {
-                "Caia": "NRT",
-                "Changara": "GT",
-                "Chemba": "GT",
-                "Chibuto": "NRT",
-                "Chicualacuala": "NRT",
-                "Chiure": "GT",
-                "Guija": "NRT",
-                "Mabalane": "NRT",
-                "Mapai": "NRT",
-                "Mapai": "GT",
-                "Magude": "GT",
-                "Massingir": "NRT",
-            }
-            self.districts = self.districts_vulnerability.keys()
-        else:
-            self.intensity_thresholds = {"Moderate": -0.85, "Normal": -0.44}
-        if self.issue is None:  # analytical / triggers
-            self.issue = ["05", "06", "07", "08", "09", "10", "11", "12", "01", "02"]
-        if os.path.exists(
-            f"/s3/scratch/amine.barkaoui/aa/data/{self.iso.lower()}/auc/fbf.districts.roc.{self.index}.2022.csv"
-        ):
-            self.fbf_districts_df = read_fbf_districts(
-                f"/s3/scratch/amine.barkaoui/aa/data/{self.iso.lower()}/auc/fbf.districts.roc.{self.index}.2022.csv",
-                self,
-            )
+
+        # Get districts list using vulnerability dictionary to avoid duplication of definitions
+        self.districts = self.districts_vulnerability.keys()
+
+        # Read fbf roc dataframe if exists for triggers selection
+        fbf_districts_path = f"../data/{self.iso}/auc/fbf.districts.roc.{self.index}.2022.csv"
+        if os.path.exists(fbf_districts_path):
+            self.fbf_districts_df = read_fbf_districts(fbf_districts_path, self)
+
+        # Convert tolerance, general_t, and non_regret_t to typed dicts
+        self.tolerance = Dict.empty(key_type=types.unicode_type, value_type=types.f8)
+        for k, v in config["tolerance"].items():
+            self.tolerance[k] = v
+
+        self.general_t = Dict.empty(key_type=types.unicode_type, value_type=types.f8)
+        for k, v in config["general_t"].items():
+            self.general_t[k] = v
+
+        self.non_regret_t = Dict.empty(key_type=types.unicode_type, value_type=types.f8)
+        for k, v in config["non_regret_t"].items():
+            self.non_regret_t[k] = v
+
+        # Load the windows for the current index
+        self.windows = config["windows"][self.index]
+
+    def get_windows(self, window_type):
+        return self.windows.get(window_type, {})
