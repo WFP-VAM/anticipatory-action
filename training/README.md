@@ -43,7 +43,7 @@ Make sure it is active before running any workflow.
 
 ## 3. Download the data <a class="anchor" id="chapter3"></a>
 
-Please start downloading the data from [that link](https://data.earthobservation.vam.wfp.org/public-share/aa/zarr_zwe_2022.zip) and save it within the **data** folder of the *anticipatory-action* repo. 
+Please start downloading the data from [that link](https://data.earthobservation.vam.wfp.org/public-share/aa/zwe.zip) and save it within the **data** folder of the *anticipatory-action* repo. 
 
 Once that is done, make sure you have the following structure within your filesystem:
 
