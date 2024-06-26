@@ -12,15 +12,22 @@ PORTUGUESE_CATEGORIES = dict(
 )
 
 
-def aggregate_spi_dryspell_triggers(spi_window, dry_window):
-    all_window = pd.concat([spi_window, dry_window])
-    agg_window = pd.concat(
-        [
-            sub_df.sort_values("lead_time").sort_values("FR").sort_values("HR").head(4)
-            for _, sub_df in all_window.groupby(["district", "category", "Window"])
-        ]
+def create_flexible_dataarray(start_season, end_season):
+    # Create the start and end dates
+    start_date = datetime.datetime(1990, start_season, 1)
+    end_date = datetime.datetime(1991, end_season, 28)
+
+    # Generate the date range
+    date_range = pd.date_range(start=start_date, end=end_date, freq='M')
+
+    # Create the DataArray
+    data_array = xr.DataArray(
+        np.arange(1, len(date_range) + 1),  # Create a range of values for demonstration
+        coords=dict(time=(["time"], date_range)),
+        dims="time"
     )
-    return agg_window
+    
+    return data_array
 
 
 def triggers_da_to_df(triggers_da, hr_da):

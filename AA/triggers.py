@@ -20,6 +20,7 @@ from hip.analysis.aoi.analysis_area import AnalysisArea
 from numba import jit
 
 from AA.helper_fns import (
+    create_flexible_dataarray,
     merge_un_biased_probs,
     triggers_da_to_df,
     format_triggers_df_for_dashboard,
@@ -51,20 +52,7 @@ def run_triggers_selection(params, vulnerability):
     admin1.columns = ["Code_1", "adm1_name"]
     gdf = pd.merge(gdf, admin1, how="left", left_on=["adm1_Code"], right_on=["Code_1"])
 
-    # TODO make this generic
-    rfh = xr.DataArray(
-        np.arange(1, 10),
-        coords=dict(
-            time=(
-                ["time"],
-                pd.date_range(
-                    f"{params.start_season}/1/1990",
-                    f"{params.end_season + 1}/28/1991",
-                    freq="M",
-                ),
-            )
-        ),
-    )
+    rfh = create_flexible_dataarray(params.start_season, params.end_season)
     periods = get_accumulation_periods(
         rfh, 0, 0, params.min_index_period, params.max_index_period
     )
