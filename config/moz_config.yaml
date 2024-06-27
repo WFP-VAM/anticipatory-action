@@ -39,7 +39,7 @@ hist_anomaly_stop: "2018-12-31"
 save_zarr: true
 
 # Data path where to store intermediate and final outputs (should include data folder)
-data_path: "/s3/scratch/amine.barkaoui/aa"
+data_path: "." # /s3/scratch/amine.barkaoui/aa
 
 # Thresholds defining different drought intensities used in probabilities computation
 intensity_thresholds:
@@ -64,13 +64,14 @@ districts_vulnerability:
   Magude: "NRT"
   Massangena: "NRT"
   Massingir: "NRT"
+  Moamba: "NRT"
 
 # Tolerance for thresholds for each category, used to compute false alarm with tolerance
 tolerance:
   Normal: 0
-  Leve: 0
-  Moderado: -0.44
-  Severo: -0.68
+  Mild: 0
+  Moderate: -0.44
+  Severe: -0.68
 
 # Skill requirements for General Triggers
 general_t:
@@ -95,7 +96,7 @@ windows:
       Inhambane: ["ON", "OND", "ND", "NDJ", "DJ"]
       Manica: ["ND", "NDJ", "DJ", "DJF", "JF"]
       Maputo: ["ON", "OND", "ND", "NDJ", "DJ"]
-      Maputo_City: ["ON", "OND", "ND", "NDJ", "DJ"]
+      Maputo City: ["ON", "OND", "ND", "NDJ", "DJ"]
       Nampula: ["DJ", "DJF", "JF", "JFM", "FM"]
       Niassa: ["DJ", "DJF", "JF", "JFM", "FM"]
       Sofala: ["ND", "NDJ", "DJ", "DJF", "JF"]
@@ -107,7 +108,7 @@ windows:
       Inhambane: ["DJF", "JF", "JFM", "FM", "FMA", "MA"]
       Manica: ["JFM", "FM", "FMA", "MA", "MAM", "AM"]
       Maputo: ["DJF", "JF", "JFM", "FM", "FMA", "MA"]
-      Maputo_City: ["DJF", "JF", "JFM", "FM", "FMA", "MA"]
+      Maputo City: ["DJF", "JF", "JFM", "FM", "FMA", "MA"]
       Nampula: ["FMA", "MA", "MAM", "AM", "AMJ", "MJ"]
       Niassa: ["FMA", "MA", "MAM", "AM", "AMJ", "MJ"]
       Sofala: ["JFM", "FM", "FMA", "MA", "MAM", "AM"]
@@ -120,7 +121,7 @@ windows:
       Inhambane: []
       Manica: ["DJ", "JF"]
       Maputo: []
-      Maputo_City: []
+      Maputo City: []
       Nampula: ["DJ", "JF", "FM"]
       Niassa: ["DJ", "JF", "FM"]
       Sofala: ["DJ", "JF"]
@@ -132,7 +133,7 @@ windows:
       Inhambane: ["DJ", "JF", "FM", "MA"]
       Manica: ["JF", "FM", "MA", "AM"]
       Maputo: ["DJ", "JF", "FM", "MA"]
-      Maputo_City: ["DJ", "JF", "FM", "MA"]
+      Maputo City: ["DJ", "JF", "FM", "MA"]
       Nampula: ["MA", "AM", "MJ"]
       Niassa: ["MA", "AM", "MJ"]
       Sofala: ["JF", "FM", "MA", "AM"]

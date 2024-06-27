@@ -24,7 +24,7 @@ AGGREGATES = {
 
 
 def load_config(iso):
-    config_file = f"../config/{iso}_config.yaml"
+    config_file = f"./config/{iso}_config.yaml"
     if os.path.exists(config_file):
         with open(config_file, 'r') as f:
             return yaml.safe_load(f)
@@ -130,7 +130,7 @@ class Params:
         self.districts = self.districts_vulnerability.keys()
 
         # Read fbf roc dataframe if exists for triggers selection
-        fbf_districts_path = f"../data/{self.iso}/auc/fbf.districts.roc.{self.index}.2022.csv"
+        fbf_districts_path = f"{self.data_path}/data/{self.iso}/auc/fbf.districts.roc.{self.index}.2022.csv"
         if os.path.exists(fbf_districts_path):
             self.fbf_districts_df = read_fbf_districts(fbf_districts_path, self)
 

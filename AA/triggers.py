@@ -38,6 +38,7 @@ def run(country, index, vulnerability):
 
 
 def run_triggers_selection(params, vulnerability):
+    # have function that takes obs / probs and returns triggers
     area = AnalysisArea.from_admin_boundaries(
         iso3=params.iso.upper(),
         admin_level=2,
@@ -488,7 +489,7 @@ def get_window_district(shp, indicator, district, params):
     window1 = params.get_windows("window1")
     window2 = params.get_windows("window2")
 
-    if window1 is dict:
+    if isinstance(window1, dict):
         if indicator in window1[province]:
             return "Window 1"
         elif indicator in window2[province]:

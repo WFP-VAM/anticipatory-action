@@ -15,7 +15,7 @@ PORTUGUESE_CATEGORIES = dict(
 def create_flexible_dataarray(start_season, end_season):
     # Create the start and end dates
     start_date = datetime.datetime(1990, start_season, 1)
-    end_date = datetime.datetime(1991, end_season, 28)
+    end_date = datetime.datetime(1991, end_season+1, 28)
 
     # Generate the date range
     date_range = pd.date_range(start=start_date, end=end_date, freq='M')
