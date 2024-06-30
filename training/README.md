@@ -32,7 +32,7 @@ Once you have it installed, open the **Anaconda PowerShell** prompt and use `cd`
 
 For example, run the following command if the anticipatory-action repo has been cloned in the Documents folder: 
 
-`cd Documents/anticipatory-action` 
+`cd Documents/anticipatory-action` (to be adapted)
 
 Once you are in the anticipatory-action folder and are able to see the `aa-env.yml` file when doing `ls`, please create a new environment named `aa-env` that will contain all the required packages:
 
@@ -99,3 +99,12 @@ If you want to work on these notebooks, please open the **Anaconda PowerShell** 
 
 Once the jupyter lab window is open, please click-right on the notebook you want to open, select *Open with* > *Jupyter Notebook*. 
 
+Before getting your hands dirty, a few tips about jupyter lab:
+
+* press `+` to add a cell of code or press "a" (above) or "b" (below) once a cell is selected
+* if you want to add text, first add a cell and then click on the "Code" drop-down menu to select "Markdown"
+* delete a cell by clicking on the scissors icon or the bin when you select it
+* run a cell by clicking on the player icon or by pressing "Shift-Enter" / "Ctrl-Enter"
+* open a terminal / a new file by clicking on the blue '+' at the top-left of the window
+* each time you update code in an external file, you need to restart the kernel using the loop icon
+* each time you restart the kernel, you need to rerun each cell of your notebook
