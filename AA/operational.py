@@ -19,17 +19,22 @@ import traceback
 import dask
 import pandas as pd
 from config.params import Params
-from hip.analysis.analyses.drought import (compute_probabilities,
-                                           get_accumulation_periods,
-                                           run_accumulation_index,
-                                           run_bias_correction,
-                                           run_gamma_standardization)
+from hip.analysis.analyses.drought import (
+    compute_probabilities,
+    get_accumulation_periods,
+    run_accumulation_index,
+    run_bias_correction,
+    run_gamma_standardization,
+)
 from hip.analysis.aoi.analysis_area import AnalysisArea
 
-from AA.helper_fns import (aggregate_by_district,
-                           merge_probabilities_triggers_dashboard,
-                           merge_un_biased_probs, read_forecasts,
-                           read_observations)
+from AA.helper_fns import (
+    aggregate_by_district,
+    merge_probabilities_triggers_dashboard,
+    merge_un_biased_probs,
+    read_forecasts,
+    read_observations,
+)
 
 
 @click.command()
@@ -52,28 +57,28 @@ def run(country, issue, index):
     forecasts = read_forecasts(
         area,
         issue,
-        f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/zarr/2022/{str(issue).zfill(2)}/forecasts.zarr",
-        update=False, #True,
+        f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}/{str(issue).zfill(2)}/forecasts.zarr",
+        update=False,  # True,
     )
     logging.info(f"Completed reading of forecasts for the whole {params.iso} country")
 
     observations = read_observations(
         area,
-        f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/zarr/2022/obs/observations.zarr",
+        f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}/obs/observations.zarr",
     )
     logging.info(
         f"Completed reading of observations for the whole {params.iso} country"
     )
 
     if os.path.exists(
-        f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/probs/aa_probabilities_triggers_pilots.csv"
+        f"{params.data_path}/data/{params.iso}/probs/aa_probabilities_triggers_pilots.csv"
     ):
         triggers_df = pd.read_csv(
-            f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/probs/aa_probabilities_triggers_pilots.csv",
+            f"{params.data_path}/data/{params.iso}/probs/aa_probabilities_triggers_pilots.csv",
         )
     else:
         triggers_df = pd.read_csv(
-            f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/triggers/triggers.spi.dryspell.2022.pilots.csv",
+            f"{params.data_path}/data/{params.iso}/triggers/triggers.spi.dryspell.{params.calibration_year}.pilots.csv",
         )
 
     # Get accumulation periods (DJ, JF, FM, DJF, JFM...)
@@ -104,15 +109,16 @@ def run(country, issue, index):
 
     probs_dashboard = pd.concat(probs_df).drop_duplicates()
     probs_dashboard.to_csv(
-        f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/probs/aa_probabilities_{params.index}_{params.issue}.csv",
+        f"{params.data_path}/data/{params.iso}/probs/aa_probabilities_{params.index}_{params.issue}.csv",
         index=False,
     )
 
-    
-    merged_db = pd.concat(merged_df).sort_values(['prob_ready', 'prob_set'])
-    merged_db = merged_db.drop_duplicates(merged_db.columns.difference(['prob_ready', 'prob_set']), keep='first')
-    merged_db.sort_values(['district', 'index', 'category']).to_csv(
-        f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/probs/aa_probabilities_triggers_pilots_6.csv",
+    merged_db = pd.concat(merged_df).sort_values(["prob_ready", "prob_set"])
+    merged_db = merged_db.drop_duplicates(
+        merged_db.columns.difference(["prob_ready", "prob_set"]), keep="first"
+    )
+    merged_db.sort_values(["district", "index", "category"]).to_csv(
+        f"{params.data_path}/data/{params.iso}/probs/aa_probabilities_triggers_pilots.csv",
         index=False,
     )
 
@@ -192,20 +198,22 @@ def run_aa_probabilities(forecasts, observations, params, period_months):
 
     # Remove inconsistent observations
     accumulation_obs = accumulation_obs.sel(
-        time=slice(datetime.date(1979, 1, 1), datetime.date(params.year - 1, 12, 31))
+        time=slice(
+            datetime.date(1979, 1, 1), datetime.date(params.monitoring_year - 1, 12, 31)
+        )
     )
 
     # Anomaly
     anomaly_fc = run_gamma_standardization(
         accumulation_fc.load(),
-        params.calibration_start,
-        params.calibration_stop,
+        params.hist_anomaly_start,
+        params.hist_anomaly_stop,
         members=True,
     )
     anomaly_obs = run_gamma_standardization(
         accumulation_obs.load(),
-        params.calibration_start,
-        params.calibration_stop,
+        params.hist_anomaly_start,
+        params.hist_anomaly_stop,
     )
     logging.info(f"Completed anomaly")
 
@@ -214,7 +222,7 @@ def run_aa_probabilities(forecasts, observations, params, period_months):
         anomaly_fc,
         anomaly_obs,
         params.end_season,
-        params.year,
+        params.monitoring_year,
         int(params.issue),
         nearest_neighbours=8,
         enso=True,
@@ -228,7 +236,7 @@ def run_aa_probabilities(forecasts, observations, params, period_months):
 
     # Probabilities without Bias Correction
     probabilities = compute_probabilities(
-        anomaly_fc.where(anomaly_fc.time.dt.year == params.year, drop=True),
+        anomaly_fc.where(anomaly_fc.time.dt.year == params.monitoring_year, drop=True),
         levels=params.intensity_thresholds,
     ).round(2)
 

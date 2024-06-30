@@ -22,6 +22,7 @@ import pandas as pd
 from config.params import Params
 
 from helper_fns import merge_un_biased_probs, triggers_da_to_df
+
 # -
 
 # Read GT and NRT
@@ -111,14 +112,16 @@ nrt_merged = pd.read_csv(
 triggers_full = pd.DataFrame()
 for d, v in params.districts_vulnerability.items():
     triggers_full = pd.concat([triggers_full, nrt_merged.loc[nrt_merged.district == d]])
-    
-if params.iso == 'ZWE':
-    triggers_full = triggers_full.loc[triggers_full.category == 'Normal']
+
+if params.iso == "ZWE":
+    triggers_full = triggers_full.loc[triggers_full.category == "Normal"]
 # -
 
 # Visualize coverage
 
 import numpy as np
+
+
 def get_coverage(triggers_df, districts: list, columns: list):
     cov = pd.DataFrame(
         columns=columns,
@@ -158,18 +161,16 @@ def get_coverage(triggers_df, districts: list, columns: list):
 
 
 columns = ["W1-Mild", "W1-Moderate", "W1-Severe", "W2-Mild", "W2-Moderate", "W2-Severe"]
-#columns = ["W1-Normal", "W2-Normal"]
+# columns = ["W1-Normal", "W2-Normal"]
 get_coverage(triggers_full, triggers_full["district"].sort_values().unique(), columns)
 
 # Ratio of dryspell triggers
 len(triggers_full.loc[triggers_full["index"].str[0] == "d"]) / len(triggers_full)
 
-triggers_full.loc[triggers_full.Window == 'Window 2'].head(10)
+triggers_full.loc[triggers_full.Window == "Window 2"].head(10)
 
 # Save final triggers file
 triggers_full.to_csv(
     f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/triggers/triggers.spi.dryspell.{params.year}.pilots.csv",
     index=False,
 )
-
-
