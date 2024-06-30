@@ -30,6 +30,7 @@
 # +
 import os
 import logging
+import xarray as xr
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -53,6 +54,8 @@ index = "SPI"  # 'SPI' or 'DRYSPELL'
 
 
 # Now, we will configure some parameters. Please feel free to edit the year of the last season considered. By default, it is equal to 2022. This means that for the purposes of evaluating and selecting triggers, the time series studied will end with the 2021-2022 season. This is the configuration chosen for monitoring the 2023-2024 season.
+#
+# Please also have a look at the `config/{iso}_config.yaml` file that contains all the defined parameters that are used in this workflow.
 #
 # *Note: if you change a parameter or a dataset, please make sure to manage correctly the different output paths so you don't overwrite previous results.*
 
@@ -94,11 +97,6 @@ observations = read_observations(
 )
 observations
 
-observations.isel(time=slice(-273, None)).mean("time").hip.viz.map(
-    title="Oct 2021 - Jun 2022 average rainfall"
-)
-
-
 # As with observations, forecasts are easy to read using hip-analysis. When other datasets will be available there, it will also be possible to change these ECMWF forecasts to use another dataset from another source.
 #
 # If your dataset is not available via hip-analysis or if you already have stored locally the forecasts you would like to use, you can edit the path below and forecasts will be read in the analytical loop. Once again, make sure that your coordinates match those of the observations, that your forecasts are daily, and that you have 51 members. The name of the data variable must be 'tp'.
@@ -115,7 +113,9 @@ forecasts_folder_path = f"{params.data_path}/data/{params.iso}/zarr/{params.cali
 #
 # This calculates the probabilities from the forecasts and the anomalies from the observations for all the issue months and the entire time series in order to measure the ROC score with and without bias correction. Probabilities and anomalies are saved locally, so that they can be reused during the trigger selection phase.
 #
-# *Note: the next cell can take several hours to run if looping through all issue months, so please make sure before launching it that you have started a new instance of JupyterHub if working on it so it doesn't get interrupted.*
+# *Note1: the next cell can take several hours to run if looping through all issue months, so please make sure before launching it that you have started a new instance of JupyterHub if working on it so it doesn't get interrupted.*
+#
+# *Note2: if you want to re-run the workflow for issue months that you have already processed before, please delete the roc scores files in the `auc/split_by_issue` folder for the issue months of interest. Otherwise, the script will directly load the roc scores from the local files.*
 
 # +
 # Define empty list for each issue month's ROC score dataframe
@@ -147,7 +147,15 @@ fbf_roc = pd.concat(fbf_roc_issues)
 display(fbf_roc)
 # -
 
-# By running the next cell, you can save the dataframe containing the ROC scores.
+# Let's have a look at how the computed probabilities data looks like.
+
+xr.open_zarr(f"{forecasts_folder_path}/05/spi ON/probabilities.zarr")
+
+# We can also check how the CHIRPS-based anomalies that have been saved look like. They have been used to calculate the roc scores and will be used to select the triggers. 
+
+xr.open_zarr(f"{forecasts_folder_path}/obs/spi ON/observations.zarr")
+
+# By running the next cell, you can save the dataframe containing the ROC scores. We commented it here so we don't overwrite the file with all the issue months with a file that only contains a few issue months. 
 
 
 # +
@@ -163,6 +171,8 @@ roc = pd.read_csv(
     f"{params.data_path}/data/{params.iso}/auc/fbf.districts.roc.{params.index}.{params.calibration_year}.csv",
 )
 
+roc
+
 # +
 display(
     md(
@@ -172,14 +182,14 @@ display(
 display(roc)
 
 # Filter to include only 'AUC_best' scores and pivot the table
-roc_pivot = roc.loc[roc.district.isin(params.districts)].pivot_table(
+roc_pivot = roc.loc[(roc.district.isin(params.districts)) & (roc.category.isin(['Normal']))].pivot_table(
     values="AUC_best", index="Index", columns="district"
 )
 
 # Plot the heatmap
 plt.figure(figsize=(10, 8))
 sns.heatmap(roc_pivot, annot=True, cmap="YlGnBu", cbar_kws={"label": "AUC_best"})
-plt.title("AUC_best Scores Heatmap")
+plt.title("AUC_best Scores Heatmap - Below Normal")
 plt.xlabel("District")
 plt.ylabel("Index")
 plt.show()
@@ -200,6 +210,12 @@ run_triggers_selection(
 )
 
 
+# Please have a look at the triggers dataset before any filtering by lead time / window.
+
+xr.open_zarr(f"{params.data_path}/data/{params.iso}/triggers/triggers_{params.index}_{params.calibration_year}_{vulnerability}.zarr")
+
+# Then, we keep the best pair for each lead time and the 4 best pairs of triggers per window of activation (in terms of Hit Rate first, and Failure Rate then).
+
 # The triggers dataframe has been saved here: `"data/{iso}/triggers/triggers.aa.python.{index}.{calibration_year}.{vulnerability}.csv"`
 
 triggers = pd.read_csv(
@@ -211,6 +227,8 @@ triggers
 # ### Get and save final dataframe
 
 # Now, you are done with the processing of one index (SPI or DRYSPELL). So you can rerun everything from the beginning with the other index. If you've already done it, you can run the next cell so it will merge all the different outputs to provide you with the very final dataframe that will be used operationally.
+
+# The next cells merge SPI and DRYSPELL for each vulnerability level. So SPI is taken first, and if no SPI is available DRYSPELL is included. 
 
 # Read all GT csvs
 if os.path.exists(
@@ -265,6 +283,8 @@ if os.path.exists(
         f"{params.data_path}/data/{params.iso}/triggers/triggers.spi.dryspell.{params.calibration_year}.NRT.csv",
         index=False,
     )
+
+# Now we read dataframes for both vulnerability levels if they exist and merge them according to the vulnerability defined for each district in the config file. 
 
 # Read GT and NRT dataframes
 if os.path.exists(
