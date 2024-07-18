@@ -1,0 +1,31 @@
+#!/bin/bash
+
+# Step 1: Convert all .grib files to .nc
+for file in *.grib; do
+    # Ensure to use quotes around "$file" to handle spaces in file names properly
+    echo "Converting $file to .nc"
+    cdo -f nc copy "$file" "${file%.grib}.nc"
+done
+
+# Step 2: Rename control files (dis24 to dis24_0)
+for file in *_control_reforecast.nc; do
+    echo "Renaming $file: dis24 -> dis24_0"
+    ncrename -v dis24,dis24_0 "$file"
+done
+
+# Step 3: Rename ensemble perturbed files (dis24 to dis24_1)
+for file in *_ensemble_perturbed_reforecasts.nc; do
+    echo "Renaming $file: dis24 -> dis24_1"
+    ncrename -v dis24,dis24_1 "$file"
+done
+
+# Step 4: Merge control and perturbed files by date
+for control_file in *_control_reforecast.nc; do
+    date=$(basename "$control_file" | cut -d'_' -f2)
+    perturbed_file="GloFAS_${date}_ensemble_perturbed_reforecasts.nc"
+    output_file="GloFAS_${date}.nc"
+
+    echo "Merging $control_file and $perturbed_file into $output_file"
+    cdo merge "$control_file" "$perturbed_file" "$output_file"
+done
+
