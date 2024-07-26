@@ -53,6 +53,8 @@ class Params:
         first year of season to monitor operationally (e.g. 2024 for 2024/2025 season)
     calibration_year: int
         last year of calibration period used for triggers selection (e.g. 2022 for 1981-2022)
+    start_monitoring: int
+        month from which the monitoring starts (e.g. 5 if the first predictions are produced in May)
     aggregate : callable
         method of aggregation corresponding to index
     min_index_period : int
@@ -95,6 +97,7 @@ class Params:
     issue_months: list = None
     monitoring_year: int = 2024
     calibration_year: int = 2022
+    start_monitoring: int = 5
     aggregate: callable = field(init=None)
     min_index_period: int = 2
     max_index_period: int = 3
@@ -122,6 +125,10 @@ class Params:
         # Set attributes based on the config file
         for key, value in config.items():
             setattr(self, key, value)
+
+        # +1 to monitoring year if operational issue month falls in 2nd part of cross-year season
+        if isinstance(self.issue, int) and self.issue < self.start_monitoring:
+            self.monitoring_year += 1
 
         # Set the aggregate method      
         self.aggregate = AGGREGATES[self.index]
