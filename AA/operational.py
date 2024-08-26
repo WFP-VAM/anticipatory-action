@@ -50,6 +50,7 @@ def run(country, issue, index):
         iso3=country.upper(),
         admin_level=2,
         resolution=0.25,
+        datetime_range=f"1981-01-01/{params.monitoring_year + 1}-06-30",
     )
 
     gdf = area.get_dataset([area.BASE_AREA_DATASET])

@@ -520,7 +520,7 @@ def read_aggregated_obs(path_to_zarr, params):
 
     obs = xr.Dataset({"bool": obs_bool, "val": obs_val})
     obs["time"] = [pd.to_datetime(t).year for t in obs.time.values]
-    obs["index"] = [i.split("\\")[-2] for i in list_val_paths]
+    obs["index"] = [i.split("/")[-2] for i in list_val_paths]
     return obs
 
 
@@ -536,7 +536,7 @@ def read_aggregated_probs(path_to_zarr, params):
             os.path.join(i, "probabilities_bc.zarr")
             for i in glob.glob(f"{l}/{params.index} *")
         ]
-        index_names = [i.split("\\")[-2] for i in list_index_raw]
+        index_names = [i.split("/")[-2] for i in list_index_raw]
 
         try:
             index_raw = xr.open_mfdataset(
@@ -556,7 +556,7 @@ def read_aggregated_probs(path_to_zarr, params):
 
             ds_index = xr.Dataset({"raw": index_raw, "bc": index_bc})
             ds_index["index"] = index_names
-            list_index[int(l.split("\\")[-1])] = ds_index
+            list_index[int(l.split("/")[-1])] = ds_index
         except:
             continue
 
