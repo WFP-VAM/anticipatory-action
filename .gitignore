@@ -87,7 +87,6 @@ target/
 # Jupyter Notebook
 .ipynb_checkpoints
 *.ipynb
-!templates-evaluation/inspect-operational-steps.ipynb
 
 # IPython
 profile_default/
