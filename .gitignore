@@ -31,6 +31,8 @@ data/
 *.zarr/
 *.png
 *.tif
+*.kml
+*.json
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -84,7 +86,6 @@ target/
 # Jupyter Notebook
 .ipynb_checkpoints
 *.ipynb
-!templates-evaluation/inspect-operational-steps.ipynb
 
 # IPython
 profile_default/
