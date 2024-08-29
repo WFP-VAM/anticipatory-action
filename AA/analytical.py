@@ -291,7 +291,7 @@ def calculate_forecast_probabilities(
             run_bias_correction(
                 anomaly_fc,
                 anomaly_obs,
-                params.end_season,
+                params.start_monitoring,
                 year,
                 int(issue),
                 nearest_neighbours=8,
