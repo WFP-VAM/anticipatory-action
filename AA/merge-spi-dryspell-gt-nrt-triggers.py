@@ -17,16 +17,17 @@
 # 2. GT/NRT triggers dataframes based on district vulnerability
 
 
+# %cd ..
+
 # +
 import pandas as pd
 from config.params import Params
 
-from helper_fns import merge_un_biased_probs, triggers_da_to_df
-
+from AA.helper_fns import format_triggers_df_for_dashboard, get_coverage, merge_un_biased_probs, triggers_da_to_df
 # -
 
 # Read GT and NRT
-params = Params(iso="MOZ", index="SPI")
+params = Params(iso="ZWE", index="SPI")
 
 # +
 # Read all csvs
@@ -80,97 +81,63 @@ nrt_merged.to_csv(
 # Filter vulnerability based on district
 
 gt_merged = pd.read_csv(
-    f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/triggers/triggers.spi.dryspell.{params.year}.GT.csv",
+    f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/triggers/triggers.spi.dryspell.{params.calibration_year}.GT.csv",
 )
 nrt_merged = pd.read_csv(
-    f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/triggers/triggers.spi.dryspell.{params.year}.NRT.csv",
+    f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/triggers/triggers.spi.dryspell.{params.calibration_year}.NRT.csv",
 )
 
-# Merge GT and NRT
-triggers_full = pd.DataFrame()
+if 'Window' in gt_merged.columns:
+    gt_merged = format_triggers_df_for_dashboard(gt_merged, params)
+    nrt_merged = format_triggers_df_for_dashboard(nrt_merged, params)
+
+# Filter vulnerability based on district: merge GT and NRT
+triggers_pilots = pd.DataFrame()
 for d, v in params.districts_vulnerability.items():
     if v == "GT":
-        triggers_full = pd.concat(
-            [triggers_full, gt_merged.loc[gt_merged.district == d]]
-        )
+        if params.iso == "zwe":
+            tmp = gt_merged.loc[
+                (gt_merged.district == d) & (gt_merged.category == "Moderate")
+            ]
+        else:
+            tmp = gt_merged.loc[gt_merged.district == d]
+        triggers_pilots = pd.concat([triggers_pilots, tmp])
     else:
-        triggers_full = pd.concat(
-            [triggers_full, nrt_merged.loc[nrt_merged.district == d]]
-        )
+        if params.iso == "zwe":
+            tmp = nrt_merged.loc[
+                (nrt_merged.district == d) & (nrt_merged.category == "Normal")
+            ]
+        else:
+            tmp = nrt_merged.loc[nrt_merged.district == d]
+        triggers_pilots = pd.concat([triggers_pilots, tmp])
 
-# Filter vulnerability by taking ET first
-
-gt_merged = pd.read_csv(
-    f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/triggers/triggers.spi.dryspell.{params.year}.GT.csv",
-)
-nrt_merged = pd.read_csv(
-    f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/triggers/triggers.spi.dryspell.{params.year}.NRT.csv",
-)
-
-# +
-# Take NRT
-triggers_full = pd.DataFrame()
-for d, v in params.districts_vulnerability.items():
-    triggers_full = pd.concat([triggers_full, nrt_merged.loc[nrt_merged.district == d]])
-
-if params.iso == "ZWE":
-    triggers_full = triggers_full.loc[triggers_full.category == "Normal"]
-# -
+# Take all NRT districts for MOZ
+if params.iso == "moz":
+    triggers_full = nrt_merged
 
 # Visualize coverage
 
-import numpy as np
+# + jupyter={"outputs_hidden": true}
+# Pilot triggers
+#columns = ["W1-Mild", "W1-Moderate", "W1-Severe", "W2-Mild", "W2-Moderate", "W2-Severe"]
+columns = ["W1-Moderate", "W2-Moderate"]
+get_coverage(triggers_pilots, triggers_pilots["district"].sort_values().unique(), columns)
+# -
 
-
-def get_coverage(triggers_df, districts: list, columns: list):
-    cov = pd.DataFrame(
-        columns=columns,
-        index=districts,
-    )
-    for d, r in cov.iterrows():
-        val = []
-        for w in triggers_df["Window"].unique():
-            for c in triggers_df["category"].unique():
-                if script == "python":
-                    val.append(
-                        len(
-                            triggers_df[
-                                (triggers_df["Window"] == w)
-                                & (triggers_df["category"] == c)
-                                & (triggers_df["district"] == d)
-                            ]
-                        )
-                        // 2
-                    )
-                else:
-                    val.append(
-                        len(
-                            triggers_df[
-                                (triggers_df["Window"] == w)
-                                & (triggers_df["category"] == c)
-                                & (triggers_df["district"] == d)
-                            ]
-                        )
-                    )
-        cov.loc[d] = val
-
-    print(
-        f"The coverage using the {script} script is {round(100 * np.sum(cov.values > 0) / np.size(cov.values), 1)} %"
-    )
-    return cov
-
-
-columns = ["W1-Mild", "W1-Moderate", "W1-Severe", "W2-Mild", "W2-Moderate", "W2-Severe"]
-# columns = ["W1-Normal", "W2-Normal"]
+# Full list if MOZ
 get_coverage(triggers_full, triggers_full["district"].sort_values().unique(), columns)
 
 # Ratio of dryspell triggers
-len(triggers_full.loc[triggers_full["index"].str[0] == "d"]) / len(triggers_full)
+len(triggers_pilots.loc[triggers_pilots["index"].str[0] == "D"]) / len(triggers_pilots)
 
-triggers_full.loc[triggers_full.Window == "Window 2"].head(10)
+# Save final triggers files
+triggers_pilots.to_csv(
+    f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/triggers/triggers.spi.dryspell.{params.calibration_year}.GT.pilots.csv",
+    index=False,
+)
 
-# Save final triggers file
+# If triggers for all districts exist
 triggers_full.to_csv(
-    f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/triggers/triggers.spi.dryspell.{params.year}.pilots.csv",
+    f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/triggers/triggers.spi.dryspell.{params.year}.all.districts.csv",
     index=False,
 )

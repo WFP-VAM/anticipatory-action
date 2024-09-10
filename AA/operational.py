@@ -50,6 +50,7 @@ def run(country, issue, index):
         iso3=country.upper(),
         admin_level=2,
         resolution=0.25,
+        datetime_range=f"1981-01-01/{params.monitoring_year + 1}-06-30",
     )
 
     gdf = area.get_dataset([area.BASE_AREA_DATASET])
@@ -221,7 +222,7 @@ def run_aa_probabilities(forecasts, observations, params, period_months):
     index_bc = run_bias_correction(
         anomaly_fc,
         anomaly_obs,
-        params.end_season,
+        params.start_monitoring,
         params.monitoring_year,
         int(params.issue),
         nearest_neighbours=8,
