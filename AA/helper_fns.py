@@ -75,6 +75,14 @@ def merge_un_biased_probs(probs_district, probs_bc_district, params, period_name
     fbf_bc = params.fbf_districts_df
     fbf_bc = fbf_bc.loc[fbf_bc["Index"] == f"{params.index.upper()} {period_name}"]
     fbf_bc = fbf_bc[["district", "category", "issue", "BC"]]
+    
+    # If params.fbf_districts_df has Portuguese category names, ensure these are English
+    CATEGORY_TRANSLATIONS = {
+        "Leve": "Mild",
+        "Moderado": "Moderate",
+        "Severo": "Severe"}
+    fbf_bc['category'] = fbf_bc['category'].apply(lambda x: CATEGORY_TRANSLATIONS.get(x, x))
+    
     fbf_bc_da = fbf_bc.set_index(["district", "category", "issue"]).to_xarray().BC
     fbf_bc_da = fbf_bc_da.expand_dims(dim={"index": [f"{params.index} {period_name}"]})
 
