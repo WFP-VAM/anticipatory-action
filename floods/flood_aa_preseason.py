@@ -21,7 +21,7 @@ country = 'mozambique'  # define country of interest
 directory = '/Volumes/TOSHIBA EXT/'  # define directory
 
 # define paths to data
-forecast_data_directory = os.path.join(directory, "flood aa/forecast data")                                      
+forecast_data_directory = os.path.join(directory, "flood aa/forecast data/example")                                      
 observed_data_directory = os.path.join(directory, "flood aa", country, "observed data/gauging stations")
 metadata_directory = os.path.join(directory, "flood aa", country, "observed data/metadata")
 output_directory = os.path.join(directory, country, "outputs")
@@ -57,9 +57,9 @@ output directory: {output_directory}
 """)
 
 ##############################################################################
-# section 2: process observations and forecasts and define events/non events # 
+# section 2: process observations and forecasts and define events/non events #
 ##############################################################################
-    
+
 # create an empty list to store events/non-events 
 events = []
 
@@ -78,9 +78,6 @@ for forecast_file in tqdm(forecast_files, desc="processing forecast files"):
             first_time_step = ds['time'].values[0]
             forecast_start_date = pd.to_datetime(first_time_step)
             forecast_end_date = forecast_start_date + pd.DateOffset(days=lead_time)
-
-            # filter observed data for the matching period
-            observed_period = observed_data[observed_data["date"] == forecast_end_date].iloc[-1]
             
             # loop over station metadata to extract information for each station
             for index, station_row in station_info.iterrows():
@@ -95,23 +92,37 @@ for forecast_file in tqdm(forecast_files, desc="processing forecast files"):
                 "severe": (station_row["obs_severe"], station_row["glofas_severe"]),
                 }
                 
-                # extract observed values 
+                # filter observed data for the matching period
+                observed_period = observed_data[observed_data["date"] == forecast_end_date].iloc[-1]
+                # filter observed data for the matching period and ±2 days window
+                observed_window = observed_data[(observed_data["date"] >= forecast_end_date - pd.DateOffset(days=2)) & 
+                                                (observed_data["date"] <= forecast_end_date + pd.DateOffset(days=2))]
+                
+                # extract observed values
+                observed_values_window = observed_window[station_name]
                 observed_values = observed_period[station_name]
                 
                 # check if there's no observation data (NaN value) for the specific station
                 if pd.isnull(observed_values):
                     continue  # skip if there are NaN values in the observed data
-
+                   
+                # check if there's no observation data (NaN value) for the specific station
+                if pd.isnull(observed_values_window).all():
+                    continue  # skip if there are NaN values in the observed data
+                        
                 # extract forecast values for each ensemble member
                 for variable_name in ensemble_members:
-                    forecast_data = ds[variable_name].sel(lat=station_lat, lon=station_lon, time=forecast_end_date)
+                    forecast_data = ds[variable_name].sel(lat=station_lat, lon=station_lon, time=forecast_end_date, method='nearest')
 
                     # loop over the thresholds
                     for severity, (obs_threshold, sim_threshold) in thresholds.items():
                         # define events and non-events
                         observed_event = observed_values > obs_threshold
-                        forecast_event = forecast_data.values > sim_threshold              
-
+                        forecast_event = forecast_data.values > sim_threshold
+                        
+                        # define tolerant events and non-events (within ±2 days window)
+                        tolerant_observed_event = (observed_values_window > obs_threshold).any()
+                        
                         # create a dictionary to store results
                         events_dict = {
                             "forecast file": os.path.basename(forecast_file),
@@ -122,6 +133,7 @@ for forecast_file in tqdm(forecast_files, desc="processing forecast files"):
                             "threshold": severity,
                             "observed event": observed_event,
                             "forecast event": forecast_event,
+                            "tolerant observed event": tolerant_observed_event
                         }
     
                         # append the events dictionary to the list
@@ -131,21 +143,21 @@ for forecast_file in tqdm(forecast_files, desc="processing forecast files"):
 events_df = pd.DataFrame(events)
 
 #################################################################
-# section 3: construct contigency table and skill score metrics # 
+# section 3: construct contigency table and skill score metrics #
 #################################################################
 
 # pivot the events_df to list ensemble members as columns
-pivot_events_df = events_df.pivot_table(index=["forecast file", "lead time", "station name", "forecasted date","threshold", "observed event"],
+pivot_events_df = events_df.pivot_table(index=["forecast file", "lead time", "station name", "forecasted date","threshold", "observed event", "tolerant observed event"],
                                         columns="ensemble member",)
 
 # reset index to convert the pivoted DataFrame to a flat table structure
 pivot_events_df.reset_index(inplace=True)
 
 # define the columns corresponding to the forecast ensemble members (5 to 16)
-ensemble_member_columns = pivot_events_df.columns[5:16]
+ensemble_member_columns = pivot_events_df.columns[7:18]
 
 # calculate the percentage of ensemble members with events (i.e., 1's) for each row
-pivot_events_df["probability of detection"] = pivot_events_df[ensemble_member_columns].sum(axis=1) / 11
+pivot_events_df["probability of detection"] = pivot_events_df[ensemble_member_columns].sum(axis=1) / len(ensemble_members)
 
 # Generate trigger thresholds from 0.01 to 0.99 with a step size of 0.01
 thresholds = np.arange(0.01, 1, 0.01)
@@ -162,7 +174,7 @@ for threshold in thresholds:
     metrics_df[f'threshold_{threshold:.2f}'] = event_occurrence
 
 # concatenate the forecast file and observed event columns from result_df to event_df
-metrics_df = pd.concat([pivot_events_df[['forecast file','station name', 'lead time','forecasted date','threshold','observed event','probability of detection']], metrics_df], axis=1)
+metrics_df = pd.concat([pivot_events_df[['forecast file','station name', 'lead time','forecasted date','threshold','observed event','tolerant observed event','probability of detection']], metrics_df], axis=1)
 
 # flatten the multi-index columns
 metrics_df.columns = [''.join(col).strip() for col in metrics_df.columns.values]
@@ -186,29 +198,43 @@ def calculate_metrics(df):
     false_alarms = {}
     misses = {}
     correct_rejections = {}
-    hit_rates = {}
-    false_alarm_rates = {}
+    tolerant_hits = {}
+    tolerant_false_alarms = {}
+    tolerant_misses = {}
+    tolerant_correct_rejections = {}
+    hit_rate = {}
+    false_alarm_rate = {}
+    tolerant_hit_rate = {}
+    tolerant_false_alarm_rate = {}
     csi = {}
     pss = {}
     f1_scores = {}
 
     # calculate contigency table metrics for each trigger threshold column
-    for column in df.columns[7:]:  # check columns from index 7 onwards are thresholds
+    for column in df.columns[8:107]:  # check columns from index 8 onwards are thresholds
         hits[column] = ((df['observed event'] == 1) & (df[column] == 1)).sum()
         false_alarms[column] = ((df['observed event'] == 0) & (df[column] == 1)).sum()
         misses[column] = ((df['observed event'] == 1) & (df[column] == 0)).sum()
         correct_rejections[column] = ((df['observed event'] == 0) & (df[column] == 0)).sum()
+       
+        tolerant_hits[column] = ((df['tolerant observed event'] == 1) & (df[column] == 1)).sum()
+        tolerant_false_alarms[column] = ((df['tolerant observed event'] == 0) & (df[column] == 1)).sum()
+        tolerant_misses[column] = ((df['tolerant observed event'] == 1) & (df[column] == 1)).sum()
+        tolerant_correct_rejections[column] = ((df['tolerant observed event'] == 0) & (df[column] == 0)).sum()
 
         # calculate verification metrics
         total_observed_events = hits[column] + misses[column]
-        hit_rates[column] = hits[column] / total_observed_events if total_observed_events > 0 else 0
         total_forecasted_events = hits[column] + false_alarms[column]
-        false_alarm_rates[column] = false_alarms[column] / total_forecasted_events if total_forecasted_events > 0 else 0
+        tolerant_total_forecasted_events = tolerant_hits[column] + tolerant_false_alarms[column]
+        hit_rate[column] = hits[column] / total_observed_events if total_observed_events > 0 else 0
+        false_alarm_rate[column] = false_alarms[column] / total_forecasted_events if total_forecasted_events > 0 else 0
+        tolerant_hit_rate[column] = tolerant_hits[column] / total_observed_events if total_observed_events > 0 else 0
+        tolerant_false_alarm_rate[column] = tolerant_false_alarms[column] / tolerant_total_forecasted_events if total_forecasted_events > 0 else 0
         csi[column] = hits[column] / (hits[column] + false_alarms[column] + misses[column]) if (hits[column] + false_alarms[column] + misses[column]) > 0 else 0
         pss[column] = (hits[column] * correct_rejections[column] - false_alarms[column] * misses[column]) / \
                       ((hits[column] + misses[column]) * (false_alarms[column] + correct_rejections[column])) if (hits[column] + misses[column]) * (false_alarms[column] + correct_rejections[column]) > 0 else 0
         precision = hits[column] / total_forecasted_events if total_forecasted_events > 0 else 0
-        recall = hit_rates[column]
+        recall = hit_rate[column]
         f1_scores[column] = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
 
     # convert the metrics dictionaries to dataframes
@@ -216,8 +242,16 @@ def calculate_metrics(df):
     false_alarms_df = pd.DataFrame(false_alarms, index=['false alarms'])
     misses_df = pd.DataFrame(misses, index=['misses'])
     correct_rejections_df = pd.DataFrame(correct_rejections, index=['correct rejections'])
-    hit_rates_df = pd.DataFrame(hit_rates, index=['hit rates'])
-    false_alarm_rates_df = pd.DataFrame(false_alarm_rates, index=['false alarm rates'])
+    hit_rate_df = pd.DataFrame(hit_rate, index=['hit rate'])
+    false_alarm_rate_df = pd.DataFrame(false_alarm_rate, index=['false alarm rate'])
+    
+    tolerant_hits_df = pd.DataFrame(tolerant_hits, index=['tolerant hits'])
+    tolerant_false_alarms_df = pd.DataFrame(tolerant_false_alarms, index=['tolerant false alarms'])
+    tolerant_misses_df = pd.DataFrame(tolerant_misses, index=['tolerant misses'])
+    tolerant_correct_rejections_df = pd.DataFrame(tolerant_correct_rejections, index=['tolerant correct rejections'])
+    tolerant_hit_rate_df = pd.DataFrame(tolerant_hit_rate, index=['tolerant hit rate'])
+    tolerant_false_alarm_rate_df = pd.DataFrame(tolerant_false_alarm_rate, index=['tolerant false alarm rate'])
+    
     csi_df = pd.DataFrame(csi, index=['csi'])
     pss_df = pd.DataFrame(pss, index=['pss'])
     f1_scores_df = pd.DataFrame(f1_scores, index=['f1 score'])
@@ -225,8 +259,8 @@ def calculate_metrics(df):
     # concatenate the metrics dataframes
     metrics_df = pd.concat([
         hits_df, false_alarms_df,
-        misses_df, correct_rejections_df, hit_rates_df, false_alarm_rates_df,
-        csi_df, pss_df, f1_scores_df,
+        misses_df, correct_rejections_df, hit_rate_df, false_alarm_rate_df, tolerant_hits_df, tolerant_false_alarms_df,
+        tolerant_misses_df, tolerant_correct_rejections_df, tolerant_hit_rate_df, tolerant_false_alarm_rate_df, csi_df, pss_df, f1_scores_df,
     ])
 
     return metrics_df
@@ -239,46 +273,3 @@ for key, df in grouped_dfs.items():
     end_time = time.time()
     elapsed_time = end_time - start_time
     print(f"elapsed time for calculating metrics: {elapsed_time:.2f} seconds")
-
-################################
-# section 4: choosing triggers # 
-################################
-
-best_trigger = {}
-
-for key, df in grouped_dfs.items():
-    # filter columns where hit rates > 0.3 and false alarm rates < 0.8
-    filtered_columns = df.columns[(df.loc['hit rates'] >= 0.5) & (df.loc['false alarm rates'] <= 0.5)]
-
-    # find the column with the highest csi number among the filtered columns
-    if not filtered_columns.empty:
-        best_csi_column = df.loc['csi', filtered_columns].idxmax()
-        best_trigger[key] = best_csi_column
-    else:
-        # handle case where no columns meet the filtering criteria
-        best_trigger[key] = None
-
-# store results in a list of dictionaries
-results_list = []
-
-for key, trigger in best_trigger.items():
-    result_dict = {
-        'station_name': key[0],
-        'lead_time_category': key[1],
-        'threshold': key[2],
-        'best_trigger': trigger
-    }
-    results_list.append(result_dict)
-
-# create a dataframe from the list of dictionaries
-results_df = pd.DataFrame(results_list)
-
-# define the filename for the CSV
-output_filename = 'flood_aa_mozambique_triggers.csv'
-output_csv_file = os.path.join(output_directory, output_filename)
-
-# save dataframe as a CSV
-results_df.to_csv(output_csv_file, index=False)
-
-
-
