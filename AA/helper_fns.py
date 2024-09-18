@@ -7,6 +7,8 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
+from hip.analysis.compute.utils import persist_with_progress_bar
+
 PORTUGUESE_CATEGORIES = dict(
     Normal="Normal", Mild="Leve", Moderate="Moderado", Severe="Severo"
 )
@@ -15,18 +17,18 @@ PORTUGUESE_CATEGORIES = dict(
 def create_flexible_dataarray(start_season, end_season):
     # Create the start and end dates
     start_date = datetime.datetime(1990, start_season, 1)
-    end_date = datetime.datetime(1991, end_season+1, 28)
+    end_date = datetime.datetime(1991, end_season + 1, 28)
 
     # Generate the date range
-    date_range = pd.date_range(start=start_date, end=end_date, freq='M')
+    date_range = pd.date_range(start=start_date, end=end_date, freq="M")
 
     # Create the DataArray
     data_array = xr.DataArray(
         np.arange(1, len(date_range) + 1),  # Create a range of values for demonstration
         coords=dict(time=(["time"], date_range)),
-        dims="time"
+        dims="time",
     )
-    
+
     return data_array
 
 
@@ -75,14 +77,13 @@ def merge_un_biased_probs(probs_district, probs_bc_district, params, period_name
     fbf_bc = params.fbf_districts_df
     fbf_bc = fbf_bc.loc[fbf_bc["Index"] == f"{params.index.upper()} {period_name}"]
     fbf_bc = fbf_bc[["district", "category", "issue", "BC"]]
-    
+
     # If params.fbf_districts_df has Portuguese category names, ensure these are English
-    CATEGORY_TRANSLATIONS = {
-        "Leve": "Mild",
-        "Moderado": "Moderate",
-        "Severo": "Severe"}
-    fbf_bc['category'] = fbf_bc['category'].apply(lambda x: CATEGORY_TRANSLATIONS.get(x, x))
-    
+    CATEGORY_TRANSLATIONS = {"Leve": "Mild", "Moderado": "Moderate", "Severo": "Severe"}
+    fbf_bc["category"] = fbf_bc["category"].apply(
+        lambda x: CATEGORY_TRANSLATIONS.get(x, x)
+    )
+
     fbf_bc_da = fbf_bc.set_index(["district", "category", "issue"]).to_xarray().BC
     fbf_bc_da = fbf_bc_da.expand_dims(dim={"index": [f"{params.index} {period_name}"]})
 
@@ -234,17 +235,30 @@ def read_forecasts(area, issue, local_path, update=False):
 
 def read_observations(area, local_path):
     if os.path.exists(local_path):
-        observations = xr.open_zarr(local_path).band.persist()
+        observations = xr.open_zarr(local_path).band
     else:
         observations = area.get_dataset(
             ["CHIRPS", "RFH_DAILY"],
             load_config={
                 "gridded_load_kwargs": {
                     "resampling": "bilinear",
+                    "chunks": {
+                        "time": 60,
+                    }
                 }
             },
-        ).persist()
+        )
+
+        # Persist and write to zarr with same size chunks over time
+        observations = persist_with_progress_bar(observations)
         observations.to_zarr(local_path)
+
+    # Chunk by year-month
+    year_month = observations["time"].dt.strftime("%Y-%m")
+    time_steps_per_month = observations.time.groupby(year_month).count()
+    observations = observations.chunk({"time": tuple(time_steps_per_month.values)})
+    observations = persist_with_progress_bar(observations)
+
     return observations
 
 
