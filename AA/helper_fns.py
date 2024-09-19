@@ -1,3 +1,4 @@
+import logging
 import glob
 import os
 
@@ -6,6 +7,8 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import xarray as xr
+
+from hip.analysis.compute.utils import persist_with_progress_bar
 
 PORTUGUESE_CATEGORIES = dict(
     Normal="Normal", Mild="Leve", Moderate="Moderado", Severe="Severo"
@@ -209,7 +212,7 @@ def read_fbf_districts(path_fbf, params):
 
 def read_forecasts(area, issue, local_path, update=False):
     if os.path.exists(local_path) and not update:
-        forecasts = xr.open_zarr(local_path).tp.persist()
+        forecasts = xr.open_zarr(local_path).tp
         forecasts = forecasts.sel(
             time=slice(
                 None,
@@ -218,6 +221,8 @@ def read_forecasts(area, issue, local_path, update=False):
                 ),
             )
         )
+        logging.info("Reading of forecasts from precomputed zarr...")
+        forecasts = persist_with_progress_bar(forecasts)
     else:
         forecasts = area.get_dataset(
             ["ECMWF", f"RFH_FORECASTS_SEAS5_ISSUE{int(issue)}_DAILY"],
@@ -226,7 +231,9 @@ def read_forecasts(area, issue, local_path, update=False):
                     "resampling": "bilinear",
                 }
             },
-        ).persist()
+        )
+        logging.info("Reading of forecasts from source...")
+        forecasts = persist_with_progress_bar(forecasts)
         forecasts.attrs["nodata"] = np.nan
         forecasts.chunk(dict(time=-1)).to_zarr(local_path, mode="w", consolidated=True)
     return forecasts
@@ -234,7 +241,9 @@ def read_forecasts(area, issue, local_path, update=False):
 
 def read_observations(area, local_path):
     if os.path.exists(local_path):
-        observations = xr.open_zarr(local_path).band.persist()
+        observations = xr.open_zarr(local_path).band
+        logging.info("Reading of observations from precomputed zarr...")
+        observations = persist_with_progress_bar(observations)
     else:
         observations = area.get_dataset(
             ["CHIRPS", "RFH_DAILY"],
@@ -243,7 +252,9 @@ def read_observations(area, local_path):
                     "resampling": "bilinear",
                 }
             },
-        ).persist()
+        )
+        logging.info("Reading of observations from HDC STAC...")
+        observations = persist_with_progress_bar(observations)
         observations.to_zarr(local_path)
     return observations
 
