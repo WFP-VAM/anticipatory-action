@@ -68,6 +68,9 @@ districts_vulnerability:
   Massangena: "NRT"
   Massingir: "NRT"
   Moamba: "NRT"
+  Marara: "NRT"
+  Cahora Bassa: "NRT"
+  Magoe e Machanga: "NRT"
 
 # Tolerance for thresholds for each category, used to compute false alarm with tolerance
 tolerance:
