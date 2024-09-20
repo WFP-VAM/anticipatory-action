@@ -5,11 +5,11 @@
 #       extension: .py
 #       format_name: light
 #       format_version: '1.5'
-#       jupytext_version: 1.16.1
+#       jupytext_version: 1.16.4
 #   kernelspec:
-#     display_name: hdc
+#     display_name: hip-workshop
 #     language: python
-#     name: conda-env-hdc-py
+#     name: hip-workshop
 # ---
 
 # ### Get final triggers file by merging:
@@ -27,24 +27,26 @@ from AA.helper_fns import format_triggers_df_for_dashboard, get_coverage, merge_
 # -
 
 # Read GT and NRT
-params = Params(iso="ZWE", index="SPI")
+params = Params(iso="MOZ", index="SPI")
+
+params.data_path
 
 # +
 # Read all csvs
 spigt = pd.read_csv(
-    f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/triggers/triggers.spi.{params.year}.GT.csv"
+    f"{params.data_path}/data/{params.iso.lower()}/triggers/triggers.spi.{params.year}.GT.csv"
 )
 drygt = pd.read_csv(
-    f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/triggers/triggers.dryspell.{params.year}.GT.csv"
+    f"{params.data_path}/data/{params.iso.lower()}/triggers/triggers.dryspell.{params.year}.GT.csv"
 )
 trigs_gt = pd.concat([spigt, drygt])
 trigs_gt["vulnerability"] = "GT"
 
 spinrt = pd.read_csv(
-    f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/triggers/triggers.spi.{params.year}.NRT.csv"
+    f"{params.data_path}/data/{params.iso.lower()}/triggers/triggers.spi.{params.year}.NRT.csv"
 )
 drynrt = pd.read_csv(
-    f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/triggers/triggers.dryspell.{params.year}.NRT.csv"
+    f"{params.data_path}/data/{params.iso.lower()}/triggers/triggers.dryspell.{params.year}.NRT.csv"
 )
 trigs_nrt = pd.concat([spinrt, drynrt])
 trigs_nrt["vulnerability"] = "NRT"
@@ -68,23 +70,23 @@ nrt_merged = pd.concat(
 
 # Save GT
 gt_merged.to_csv(
-    f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/triggers/triggers.spi.dryspell.{params.year}.GT.csv",
+    f"{params.data_path}/data/{params.iso.lower()}/triggers/triggers.spi.dryspell.{params.year}.GT.csv",
     index=False,
 )
 
 # Save NRT
 nrt_merged.to_csv(
-    f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/triggers/triggers.spi.dryspell.{params.year}.NRT.csv",
+    f"{params.data_path}/data/{params.iso.lower()}/triggers/triggers.spi.dryspell.{params.year}.NRT.csv",
     index=False,
 )
 
 # Filter vulnerability based on district
 
 gt_merged = pd.read_csv(
-    f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/triggers/triggers.spi.dryspell.{params.calibration_year}.GT.csv",
+    f"{params.data_path}/data/{params.iso.lower()}/triggers/triggers.spi.dryspell.{params.calibration_year}.GT.csv",
 )
 nrt_merged = pd.read_csv(
-    f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/triggers/triggers.spi.dryspell.{params.calibration_year}.NRT.csv",
+    f"{params.data_path}/data/{params.iso.lower()}/triggers/triggers.spi.dryspell.{params.calibration_year}.NRT.csv",
 )
 
 if 'Window' in gt_merged.columns:
@@ -132,12 +134,12 @@ len(triggers_pilots.loc[triggers_pilots["index"].str[0] == "D"]) / len(triggers_
 
 # Save final triggers files
 triggers_pilots.to_csv(
-    f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/triggers/triggers.spi.dryspell.{params.calibration_year}.GT.pilots.csv",
+    f"{params.data_path}/data/{params.iso.lower()}/triggers/triggers.spi.dryspell.{params.calibration_year}.GT.pilots.csv",
     index=False,
 )
 
 # If triggers for all districts exist
 triggers_full.to_csv(
-    f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/triggers/triggers.spi.dryspell.{params.year}.all.districts.csv",
+    f"{params.data_path}/data/{params.iso.lower()}/triggers/triggers.spi.dryspell.{params.year}.all.districts.csv",
     index=False,
 )
