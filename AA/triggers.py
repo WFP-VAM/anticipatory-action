@@ -96,6 +96,9 @@ def run_triggers_selection(params, vulnerability):
     probs_set["issue"] = [i - 1 if i != 1 else 12 for i in probs_set.issue.values]
 
     # Distribute computation of triggers
+    logging.info(
+        f"Starting computation of triggers the whole {params.iso.upper()} country..."
+    )
     trigs, score = xr.apply_ufunc(
         find_optimal_triggers,
         obs.bool,
