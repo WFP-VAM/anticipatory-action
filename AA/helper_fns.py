@@ -241,7 +241,7 @@ def read_forecasts(area, issue, local_path, update=False):
 
 def read_observations(area, local_path):
     if os.path.exists(local_path):
-        observations = xr.open_zarr(local_path).band
+        observations = xr.open_zarr(local_path, consolidated=True).band
         logging.info("Reading of observations from precomputed zarr...")
         observations = persist_with_progress_bar(observations)
     else:
@@ -255,7 +255,7 @@ def read_observations(area, local_path):
         )
         logging.info("Reading of observations from HDC STAC...")
         observations = persist_with_progress_bar(observations)
-        observations.to_zarr(local_path)
+        observations.to_zarr(local_path, mode='w', consolidated=True)
     return observations
 
 
