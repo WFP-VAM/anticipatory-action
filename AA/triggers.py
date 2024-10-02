@@ -41,12 +41,13 @@ def run_triggers_selection(params, vulnerability):
     # have function that takes obs / probs and returns triggers
     area = AnalysisArea.from_admin_boundaries(
         iso3=params.iso.upper(),
-        admin_level=2,
+        admin_level=2,# Paramterize
         resolution=0.25,
         datetime_range=f"1981-01-01/{params.calibration_year}-06-30",
     )
 
     gdf = area.get_dataset([area.BASE_AREA_DATASET])
+    # Potentially adapt based on target admin_level parameter
     admin1 = area.get_admin_boundaries(iso3=params.iso, admin_level=1).drop(
         ["geometry", "adm0_Code"], axis=1
     )
@@ -208,6 +209,15 @@ def _compute_confusion_matrix(true, pred):
     return result
 
 
+
+def metereological_trigger_objective():
+    """
+    Ranks triggers by the highest difference between hit rate and false alarm rate.
+    """
+    pass
+
+
+
 @jit(
     nopython=True,
     cache=True,
@@ -231,6 +241,9 @@ def objective(
     sorting=False,
     eps=1e-6,
 ):
+    # TODO Refactor this function into steps that are general to all objective functions (e.g. calculate metrics)
+    # vs the calculation of the actual objective value, which can differ depending on applications.
+
     # Align obs and probs when leadtime between Jan and end_season
     # TODO align these time steps at the analytical level
     if leadtime <= end_season:
@@ -399,14 +412,18 @@ def find_optimal_triggers(
         best_score: int, score (mainly hit rate) corresponding to the best triggers
     """
 
+    # TODO Read trigger search ranges from params. Returns like:
+    threshold_range = [{"start": 0.0,"stop":1.0,"step": 0.01},
+                       {"start": 0.0,"stop":1.0,"step": 0.01}]
+
     # Define grid
-    threshold_range = (0.0, 1.0)
     grid = (
-        np.arange(threshold_range[0], threshold_range[1], step=0.01),
-        np.arange(threshold_range[0], threshold_range[1], step=0.01),
+        np.arange(**threshold_range[0]),
+        np.arange(**threshold_range[1]),
     )
 
     # Launch research
+    # Objective will now differ between applications. TODO the objective function should become a parameter.
     best_triggers, best_score = brute_numba(
         objective,
         grid,

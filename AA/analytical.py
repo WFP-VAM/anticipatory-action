@@ -40,7 +40,7 @@ def run(country, index):
 
     area = AnalysisArea.from_admin_boundaries(
         iso3=country.upper(),
-        admin_level=2,
+        admin_level=2, # Parameterize
         resolution=0.25,
         datetime_range=f"1981-01-01/{params.calibration_year}-06-30",
     )
