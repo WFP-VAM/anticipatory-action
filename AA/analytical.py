@@ -30,11 +30,17 @@ from hip.analysis.ops._statistics import evaluate_roc_forecasts
 
 from AA.helper_fns import aggregate_by_district, read_forecasts, read_observations
 
+from hip.analysis.compute.utils import start_dask
+
 
 @click.command()
 @click.argument("country", required=True, type=str)
 @click.argument("index", default="SPI")
 def run(country, index):
+
+    client = start_dask(n_workers=1)
+    logging.info(f"Dask dashboard: {client.dashboard_link}")
+
     # End to end workflow for a country using ECMWF forecasts and CHIRPS from HDC
     params = Params(iso=country, index=index)
 

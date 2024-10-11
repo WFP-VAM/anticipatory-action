@@ -96,6 +96,9 @@ def run_triggers_selection(params, vulnerability):
     probs_set["issue"] = [i - 1 if i != 1 else 12 for i in probs_set.issue.values]
 
     # Distribute computation of triggers
+    logging.info(
+        f"Starting computation of triggers the whole {params.iso.upper()} country..."
+    )
     trigs, score = xr.apply_ufunc(
         find_optimal_triggers,
         obs.bool,
@@ -525,7 +528,7 @@ def read_aggregated_obs(path_to_zarr, params):
 
 
 def read_aggregated_probs(path_to_zarr, params):
-    list_issue_paths = glob.glob(f"{path_to_zarr}/*")[:-1]  # remove obs folder
+    list_issue_paths = sorted(glob.glob(f"{path_to_zarr}/*"))[:-1]  # Last one is the `obs` folder.
     list_index = {}
     for l in list_issue_paths:
         list_index_raw = [
