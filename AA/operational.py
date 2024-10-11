@@ -71,6 +71,11 @@ def run(country, issue, index):
         f"Completed reading of observations for the whole {params.iso} country"
     )
 
+    os.makedirs(
+        f"{params.data_path}/data/{params.iso}/probs",
+        exist_ok=True,
+    )
+
     if os.path.exists(
         f"{params.data_path}/data/{params.iso}/probs/aa_probabilities_triggers_pilots.csv"
     ):
