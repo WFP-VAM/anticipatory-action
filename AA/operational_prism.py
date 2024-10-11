@@ -59,7 +59,7 @@ params = Params(iso=country, issue=issue, index=index)
 # +
 area = AnalysisArea.from_admin_boundaries(
     iso3=params.iso.upper(),
-    admin_level=2,
+    admin_level=2, # Parameterize
     resolution=0.25,
     datetime_range=f"1981-01-01/{params.monitoring_year + 1}-06-30",
 )
