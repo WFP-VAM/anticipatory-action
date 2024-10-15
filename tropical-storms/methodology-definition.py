@@ -12,6 +12,10 @@
 #     name: python3
 # ---
 
+# ## Presentation of the core Tropical Storms monitoring methodology
+
+# ### Import libraries
+
 # +
 import json
 import numpy as np
@@ -26,12 +30,23 @@ import warnings
 warnings.filterwarnings("ignore")
 # -
 
-# ### Define parameters
+# ### Define constants
+
+# Before we define some constants, here is some information about the Ready / Set system for Tropical storms. 
+#
+#
+# - **Readiness** trigger: Readiness activities will be implemented when there is a 20% likelihood of tropical storm-force winds impacting Mozambique within the next 120 hours (5 days) with lead time higher than 72 hours. 
+#
+# - **Activation** trigger: Activities will be implemented on the pilot districts when there is a 50% likelihood of tropical storm-force winds or cyclone-force winds impacting the pilot districts within the next 72 hours (3 days) with lead time less or equal to 72 hours
+#
+#
+# Also, we define two different intensity speeds:
+#
+# - a **Severe Tropical Storm** will be defined by a wind speed exceeding 89 km/h and lower than 119 km/h
+#
+# - a **Tropical Cyclone** will be defined by a wind speed exceeding 119 km/h
 
 # +
-READINESS_LEAD_TIME = pd.Timedelta(hours=120)
-ACTIVATION_LEAD_TIME = pd.Timedelta(hours=72)
-
 SEVERE_TS_SPEED = 89 # km/h
 CYCLONE_SPEED = 119
 
@@ -46,6 +61,8 @@ def nautical_mile_to_km(data):
 
 # ### Read data
 
+# The first step here is to load the shapefile in order to check when and where the system will cross the coastline and hist Mozambican districts. 
+
 # +
 # Define aoi to read datasets using hip-analysis
 area = AnalysisArea.from_admin_boundaries(
@@ -57,24 +74,52 @@ area = AnalysisArea.from_admin_boundaries(
 
 # Read the shapefile || ADMIN 4 NOT AVAILABLE
 shp = area.get_dataset([area.BASE_AREA_DATASET])
+# -
+
+# For the monitoring we will need the following files:
+#
+# **Shapefile**
+#
+# **ISO-PROBA 20 and 50% windspeed probabilities**
+#
+# These files each contain one polygon corresponding to the area impacted by a XXkt windspeed with a 50 or 20% probability over a 5-day or 3-day period. 
+#
+# 5-day polygons are used for Readiness so we are ok with the 20% confidence.
+# 3-day polygons are used for Activation so we prefer the 50% confidence. 
+#
+# - 48ktPROBA20_20222023_7_system_2023-03-10_00Z.json (5 days)
+# - 48ktPROBA50_20222023_7_system_2023-03-10_00Z.json (3 days)
+#
+# - 64ktPROBA20_20222023_7_system_2023-03-10_00Z.json (5 days)
+# - 64ktPROBA50_20222023_7_system_2023-03-10_00Z.json (3 days)
+#
+# **Track file**
+#
+# This file contains the time series with the observed coordinates of the system, the forecasted locations of the system with a 6-hr time step, and the associated wind buffers. We also find the uncertainty cone of the track in this file but we don't need it.
+#
+# - CMRSTRACK_20222023_7_system_2023-03-10_00Z.json
+#
+# For the example below, we'll use a file named differently because this one has a format that is different to the one we expect. So we'll use probas from FREDDY and the track from FILIPO as the track file for FILIPO respects the format that METEO-FRANCE should adopt for the next forecasts. 
+#
+# You will be able to find all the necessary data on SharePoint for testing: https://wfp.sharepoint.com/:f:/s/HQGeospatial/Egb1kh7sdkRKmPA14mfnuEYBDRrpOAkx6rjV26VL_PpHhg?e=7HqCo4
 
 # +
-folder_name = "fwaccesstooperationalforecastforseason202425"
+folder_name = "FREDDY"
 
 # NO PROBS DATA FOUND YET IN FTP SERVER SO FREDDY DATA USED FOR METHODOLOGY DEFINITION
 
 # 48kt
 proba_48kt_20_5d_file = f"{folder_name}/48ktPROBA20_20222023_7_FREDDY_2023-03-10_00Z.json"
-proba_48kt_50_3d_file = f"{folder_name}/48ktPROBA20_20222023_7_FREDDY_2023-03-10_00Z.json" # actually 5d here as 3d missing for now
+proba_48kt_50_3d_file = f"{folder_name}/48ktPROBA50_20222023_7_FREDDY_2023-03-10_00Z.json" # actually 5d here as 3d missing for now
 
 # 64kt
 proba_64kt_20_5d_file = f"{folder_name}/64ktPROBA20_20222023_7_FREDDY_2023-03-10_00Z.json"
-proba_64kt_50_3d_file = f"{folder_name}/64ktPROBA20_20222023_7_FREDDY_2023-03-10_00Z.json" # actually 5d here as 3d missing for now
+proba_64kt_50_3d_file = f"{folder_name}/64ktPROBA50_20222023_7_FREDDY_2023-03-10_00Z.json" # actually 5d here as 3d missing for now
 
 # Track
 # We'll use a track file similar to the one from the server as the format is different compared to the example we received
 # It corresponds to a different system indeed but the objective here is to stick with the most expectable format to define an output csv
-folder_name = "."
+folder_name = "FILIPO"
 track_file = f"{folder_name}/2024-03-12T06_44_33_FR-METEOFRANCE-REUNION,PREVISIONS,JSON-CYCLONE.jsonFR-METEOFRANCE-REUNION,PREVISIONS,JSON-CYCLONE.json"  # CMRSTRACK_20222023_7_FREDDY_2023-03-10_00Z"
 
 # +
@@ -106,6 +151,35 @@ proba_polygons_ready = [
 # -
 
 # ### Derive time series
+
+# The objective of the following code is to parse a JSON file that contains detailed information about a cyclone's track and translate it into a GeoDataFrame.
+#
+# The JSON track file typically includes various properties related to the cyclone, such as its name, season, reference time, position accuracy, and geometrical data (coordinates). By converting this information into a GeoDataFrame, we can easily perform spatial analysis and visualization of the cyclone's path and its associated wind data.
+#
+# The process involves several key steps:
+#
+# 1. **Parsing the JSON**: Extract relevant details from the JSON structure, including cyclone metadata and feature properties.
+#
+# 2. **Creating Records**: For each feature in the JSON, create records that encapsulate essential cyclone information, such as wind speed, development stage, and geometrical representation (points or polygons).
+#
+# 3. **Converting Units**: Convert wind speeds from nautical miles to kilometers for consistency and easier analysis.
+#
+# 4. **Calculating Wind Buffers**: Generate wind buffer polygons based on the specified wind contours, providing a visual representation of the areas affected by varying wind speeds.
+#
+# 5. **Constructing the GeoDataFrame**: Compile all records into a GeoDataFrame, which facilitates efficient spatial operations and integrates seamlessly with geographic plotting libraries.
+#
+# ---
+#
+# **`get_wind_contour_column(wind_speed_kph, wind_contour_columns)`**
+#
+# This function determines the appropriate wind contour column based on the given wind speed in kilometers per hour (kph). It iterates through a sorted list of wind contour columns and finds the first column where the wind speed is greater than or equal to the specified wind speed. If none of the columns meet this condition, it returns the largest column in the list. This is useful for mapping wind speeds to their corresponding contour data.
+#
+# ---
+#
+# **`create_wind_buffer(point, radii)`**
+#
+# This function generates a wind buffer polygon around a specified point, based on given radii for different directional sectors (Northeast, Southeast, Southwest, Northwest). It defines sectors in terms of angular ranges and uses them to calculate points at the specified distances from the center point. The radii are converted from kilometers to degrees for accurate geographic representation. The function returns a polygon formed by these calculated points, which represents the area affected by the wind.
+#
 
 # +
 def get_wind_contour_column(wind_speed_kph, wind_contour_columns):
@@ -226,19 +300,11 @@ with open(track_file) as f:
 gdf, fc_details = parse_track_json(track_data)
 
 
-# +
-def determine_status(leadtime):
-    match leadtime:
-        case lt if ACTIVATION_LEAD_TIME < lt <= READINESS_LEAD_TIME:
-            return 'ready'
-        case lt if pd.Timedelta(0) <= lt <= ACTIVATION_LEAD_TIME:
-            return 'set'
-        case lt if lt < pd.Timedelta(0):
-            return 'observed'
-        case _:
-            return 'not activated'
+# -
 
-def classify_storm(row):
+# Next, we classify the system in terms of intensity at each time step in order to get the development stage corresponding to our own criteria. This will mainly be useful for visualization on the dashboard and in order to extract the intensity level at the landfall time.
+
+def classify_storm(row): # keep development stage from raw data
     match row['maximum_wind_speed']:
         case speed if speed >= CYCLONE_SPEED:
             return 'cyclone'
@@ -248,28 +314,29 @@ def classify_storm(row):
             return 'moderate tropical storm'
 
 
-# +
-# Determine leadtime from issue date and forecast date
-gdf['leadtime'] = gdf.time - fc_details['reference_time']
-
-# Apply the status function to the leadtime column
-gdf['status'] = gdf['leadtime'].apply(determine_status)
-
 # Apply the classify_storm function to the DataFrame
 gdf['type'] = gdf.apply(classify_storm, axis=1)
-# -
 
 gdf.tail()
 
-time_series_gdf = gdf.drop(['position_accuracy', 'development', 'wind_contour_28kt', 'wind_contour_34kt', 'wind_contour_48kt', 'wind_contour_64kt', 'wind_buffer_28', 'wind_buffer_34', 'buffer_location'], axis=1)
+# +
+# Conversion to json
+
+time_series_gdf = gdf.drop(['position_accuracy', 'development', 'wind_contour_28kt', 'wind_contour_34kt', 'wind_contour_48kt', 'wind_contour_64kt', 'wind_buffer_28', 'wind_buffer_34'], axis=1)
 time_series_gdf['time'] = time_series_gdf['time'].dt.strftime('%Y-%m-%d %H:%M:%S')
 time_series_gdf['wind_buffer_48'] = time_series_gdf['wind_buffer_48'].apply(lambda geom: geom.wkt if geom is not None else geom)
 time_series_gdf['wind_buffer_64'] = time_series_gdf['wind_buffer_64'].apply(lambda geom: geom.wkt if geom is not None else geom)
-time_series_gdf['leadtime'] = time_series_gdf['leadtime'].astype(str)
 time_series_json = time_series_gdf.to_json()
 time_series_json
+# -
 
 # ### Get landfall details
+
+# If available, we would like to visualize some information about the landfall on the dashboard. These information are extracted from the GeoDataFrame defined above and then stored in a json dict.  
+#
+# - The impact time (6hr time interval). This is determined by identifying the timesteps between which the system wind buffer (here I took 48kt: ***TBC***) crosses the coastline. 
+# - The impact district: first district impacted, by taking only center of the track.
+# - The impact intensity (taken at the time step right before landfall).
 
 # +
 # Determine landfall time
@@ -309,7 +376,7 @@ if transition_mask.any():
         "landfall_impact_intensity": landfall_intensity
     }
 
-    print(f"Landfall detected at time: {landfall_time}")
+    print(f"Landfall detected at time: {landfall_time}") 
     print(f"Landfall intensity: {landfall_intensity}")
     print(f"Landfall in district: {landfall_district}")
 
@@ -414,3 +481,14 @@ with open('tropical_storm_output_test.json', 'w') as json_file:
     json.dump(tropical_storm_output, json_file, indent=4)  # Write the JSON with indentation for readability
 
 print("Output saved to tropical_storm_output_test.json")  # Confirmation message
+# -
+
+# The output file is also stored on SharePoint for sharing: 
+# https://wfp.sharepoint.com/:u:/s/HQGeospatial/EeL5hnrW48RBnwoB2fXMVeQBnt1XFsrILxBsr3aY35FcFg?e=IxmMmz
+
+# **Remaining tasks:**
+#
+# - Drop 64 5-day: only use 48 for Readiness
+# - Landfall: add leadtime until landfall + intensity range + patch to check if coastal district else interpolate
+# - Remove classify_storm function and take development stage from data
+# - Decide whether pilot district filtering should be done here or downstream
