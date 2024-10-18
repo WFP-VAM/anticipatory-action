@@ -2,7 +2,7 @@ import logging
 
 import click
 
-logging.basicConfig(level="INFO")
+logging.basicConfig(level="INFO", force=True)
 
 import warnings
 
@@ -391,24 +391,23 @@ def save_districts_results(
     params,
     gdf,
 ):
+    # Aggregate by district
     obs_district = aggregate_by_district(observations, gdf, params)
     probs_district = aggregate_by_district(probabilities, gdf, params)
     probs_bc_district = aggregate_by_district(probabilities_bc, gdf, params)
 
-    obs_district.to_zarr(
-        f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}/obs/{params.index} {period_name}/observations.zarr",
-        mode="w",
-    )
+    # Convert the 'category' coordinate to string type 
+    probs_district['category'] = probs_district['category'].astype(str)
+    probs_bc_district['category'] = probs_bc_district['category'].astype(str)
 
-    probs_district.to_zarr(
-        f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}/{issue}/{params.index} {period_name}/probabilities.zarr",
-        mode="w",
-    )
+    # Define file paths
+    obs_path = f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}/obs/{params.index} {period_name}/observations.zarr"
+    probs_path = f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}/{issue}/{params.index} {period_name}/probabilities.zarr"
+    probs_bc_path = f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}/{issue}/{params.index} {period_name}/probabilities_bc.zarr"
 
-    probs_bc_district.to_zarr(
-        f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}/{issue}/{params.index} {period_name}/probabilities_bc.zarr",
-        mode="w",
-    )
+    obs_district.to_zarr(obs_path, mode="w")
+    probs_district.to_zarr(probs_path, mode="w")
+    probs_bc_district.to_zarr(probs_bc_path, mode="w")
 
 
 if __name__ == "__main__":
