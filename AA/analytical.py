@@ -396,9 +396,9 @@ def save_districts_results(
     probs_district = aggregate_by_district(probabilities, gdf, params)
     probs_bc_district = aggregate_by_district(probabilities_bc, gdf, params)
 
-    # Convert the 'category' coordinate to string type 
-    probs_district['category'] = probs_district['category'].astype(str)
-    probs_bc_district['category'] = probs_bc_district['category'].astype(str)
+    # Convert the 'category' coordinate to string type
+    probs_district["category"] = probs_district["category"].astype(str)
+    probs_bc_district["category"] = probs_bc_district["category"].astype(str)
 
     # Define file paths
     obs_path = f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}/obs/{params.index} {period_name}/observations.zarr"
