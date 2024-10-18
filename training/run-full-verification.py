@@ -8,7 +8,7 @@
 #       format_version: '1.5'
 #       jupytext_version: 1.16.2
 #   kernelspec:
-#     display_name: Python 3 (ipykernel)
+#     display_name: aa-env
 #     language: python
 #     name: python3
 # ---
@@ -49,7 +49,7 @@ from IPython.display import Markdown as md
 # **First, please define the country ISO code and the index of interest**
 
 
-country = "ZWE"
+country = "MOZ"
 index = "SPI"  # 'SPI' or 'DRYSPELL'
 
 
@@ -118,6 +118,12 @@ forecasts_folder_path = f"{params.data_path}/data/{params.iso}/zarr/{params.cali
 # *Note2: if you want to re-run the workflow for issue months that you have already processed before, please delete the roc scores files in the `auc/split_by_issue` folder for the issue months of interest. Otherwise, the script will directly load the roc scores from the local files.*
 
 # +
+# Create directory for ROC scores df per issue month in case it doesn't exist
+os.makedirs(
+    f"{params.data_path}/data/{params.iso}/auc/split_by_issue",
+    exist_ok=True,
+)
+
 # Define empty list for each issue month's ROC score dataframe
 fbf_roc_issues = []
 
@@ -147,31 +153,29 @@ fbf_roc = pd.concat(fbf_roc_issues)
 display(fbf_roc)
 # -
 
+roc
+
 # Let's have a look at how the computed probabilities data looks like.
 
-xr.open_zarr(f"{forecasts_folder_path}/05/spi ON/probabilities.zarr")
+xr.open_zarr(f"{forecasts_folder_path}/05/{params.index} ON/probabilities.zarr")
 
 # We can also check how the CHIRPS-based anomalies that have been saved look like. They have been used to calculate the roc scores and will be used to select the triggers. 
 
-xr.open_zarr(f"{forecasts_folder_path}/obs/spi ON/observations.zarr")
+xr.open_zarr(f"{forecasts_folder_path}/obs/{params.index} ON/observations.zarr")
 
 # By running the next cell, you can save the dataframe containing the ROC scores. We commented it here so we don't overwrite the file with all the issue months with a file that only contains a few issue months. 
 
 
-# +
-#fbf_roc.to_csv(
-#   f"{params.data_path}/data/{params.iso}/auc/fbf.districts.roc.{params.index}.{params.calibration_year}.csv",
-#   index=False,
-#)
-# -
+fbf_roc.to_csv(
+   f"{params.data_path}/data/{params.iso}/auc/fbf.districts.roc.{params.index}.{params.calibration_year}.csv",
+   index=False,
+)
 
 # Now we can read this dataframe locally to visualize the ROC scores.
 
 roc = pd.read_csv(
     f"{params.data_path}/data/{params.iso}/auc/fbf.districts.roc.{params.index}.{params.calibration_year}.csv",
 )
-
-roc
 
 # +
 display(
@@ -182,14 +186,14 @@ display(
 display(roc)
 
 # Filter to include only 'AUC_best' scores and pivot the table
-roc_pivot = roc.loc[(roc.district.isin(params.districts)) & (roc.category.isin(['Normal']))].pivot_table(
+roc_pivot = roc.loc[(roc.district.isin(params.districts)) & (roc.category.isin(['Moderate']))].pivot_table(
     values="AUC_best", index="Index", columns="district"
 )
 
 # Plot the heatmap
 plt.figure(figsize=(10, 8))
 sns.heatmap(roc_pivot, annot=True, cmap="YlGnBu", cbar_kws={"label": "AUC_best"})
-plt.title("AUC_best Scores Heatmap - Below Normal")
+plt.title("AUC_best Scores Heatmap - Moderate")
 plt.xlabel("District")
 plt.ylabel("Index")
 plt.show()
@@ -247,7 +251,7 @@ if os.path.exists(
     gt_merged = pd.concat(
         [
             wcd.sort_values("index", ascending=False).head(4)
-            for (d, c, w), wcd in trigs_gt.groupby(["district", "category", "Window"])
+            for (d, c, w), wcd in trigs_gt.groupby(["district", "category", "window"])
         ]
     )
 
@@ -328,13 +332,13 @@ triggers_full.to_csv(
 )
 
 
-triggers_full.loc[triggers_full.issue_ready == 6]
+triggers_full #.loc[triggers_full.issue_ready == 6]
 
 # ### Visualize coverage
 
 
-#columns = ["W1-Mild", "W1-Moderate", "W1-Severe", "W2-Mild", "W2-Moderate", "W2-Severe"]
-columns = ["W1-Normal", "W2-Normal"]
+columns = ["W1-Mild", "W1-Moderate", "W1-Severe", "W2-Mild", "W2-Moderate", "W2-Severe"]
+#columns = ["W1-Normal", "W2-Normal"]
 get_coverage(triggers_full, triggers_full["district"].sort_values().unique(), columns)
 
 
