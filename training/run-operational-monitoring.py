@@ -8,7 +8,7 @@
 #       format_version: '1.5'
 #       jupytext_version: 1.16.2
 #   kernelspec:
-#     display_name: Python 3 (ipykernel)
+#     display_name: aa-env
 #     language: python
 #     name: python3
 # ---
@@ -41,7 +41,7 @@ from hip.analysis.analyses.drought import get_accumulation_periods
 # **First, please define the country ISO code, the issue month and the index of interest**
 
 
-country = "ZWE"
+country = "MOZ"
 issue = 5
 index = "SPI"  # 'SPI' or 'DRYSPELL'
 

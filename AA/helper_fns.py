@@ -18,18 +18,18 @@ PORTUGUESE_CATEGORIES = dict(
 def create_flexible_dataarray(start_season, end_season):
     # Create the start and end dates
     start_date = datetime.datetime(1990, start_season, 1)
-    end_date = datetime.datetime(1991, end_season+1, 28)
+    end_date = datetime.datetime(1991, end_season + 1, 28)
 
     # Generate the date range
-    date_range = pd.date_range(start=start_date, end=end_date, freq='M')
+    date_range = pd.date_range(start=start_date, end=end_date, freq="M")
 
     # Create the DataArray
     data_array = xr.DataArray(
         np.arange(1, len(date_range) + 1),  # Create a range of values for demonstration
         coords=dict(time=(["time"], date_range)),
-        dims="time"
+        dims="time",
     )
-    
+
     return data_array
 
 
@@ -69,6 +69,7 @@ def aggregate_by_district(ds, gdf, params):
     ds_by_district = xr.concat(
         list_districts.values(), pd.Index(list_districts.keys(), name="district")
     )
+    ds_by_district["district"] = ds_by_district.astype(str)
 
     return ds_by_district
 
@@ -78,14 +79,13 @@ def merge_un_biased_probs(probs_district, probs_bc_district, params, period_name
     fbf_bc = params.fbf_districts_df
     fbf_bc = fbf_bc.loc[fbf_bc["Index"] == f"{params.index.upper()} {period_name}"]
     fbf_bc = fbf_bc[["district", "category", "issue", "BC"]]
-    
+
     # If params.fbf_districts_df has Portuguese category names, ensure these are English
-    CATEGORY_TRANSLATIONS = {
-        "Leve": "Mild",
-        "Moderado": "Moderate",
-        "Severo": "Severe"}
-    fbf_bc['category'] = fbf_bc['category'].apply(lambda x: CATEGORY_TRANSLATIONS.get(x, x))
-    
+    CATEGORY_TRANSLATIONS = {"Leve": "Mild", "Moderado": "Moderate", "Severo": "Severe"}
+    fbf_bc["category"] = fbf_bc["category"].apply(
+        lambda x: CATEGORY_TRANSLATIONS.get(x, x)
+    )
+
     fbf_bc_da = fbf_bc.set_index(["district", "category", "issue"]).to_xarray().BC
     fbf_bc_da = fbf_bc_da.expand_dims(dim={"index": [f"{params.index} {period_name}"]})
 
@@ -255,7 +255,7 @@ def read_observations(area, local_path):
         )
         logging.info("Reading of observations from HDC STAC...")
         observations = persist_with_progress_bar(observations)
-        observations.to_zarr(local_path, mode='w', consolidated=True)
+        observations.to_zarr(local_path, mode="w", consolidated=True)
     return observations
 
 

@@ -7,7 +7,7 @@ import os
 
 import click
 
-logging.basicConfig(level="INFO")
+logging.basicConfig(level="INFO", force=True)
 
 import warnings
 
