@@ -69,7 +69,7 @@ def aggregate_by_district(ds, gdf, params):
     ds_by_district = xr.concat(
         list_districts.values(), pd.Index(list_districts.keys(), name="district")
     )
-    ds_by_district["district"] = ds_by_district.astype(str)
+    ds_by_district["district"] = ds_by_district.district.astype(str)
 
     return ds_by_district
 
