@@ -51,7 +51,7 @@ Make sure it is active before running any workflow.
 
 *To do prior to the training:*
 
-Please start downloading the data from [that link](https://data.earthobservation.vam.wfp.org/public-share/aa/zwe.zip) and save it within the **data** folder of the *anticipatory-action* repo. You may not have the data folder in your filesystem if you just cloned the github repository, in that case please create it within the anticipatory-action folder. 
+Please start downloading the data from [that link](https://data.earthobservation.vam.wfp.org/public-share/aa/mozambique/moz.zip) and save it within the **data** folder of the *anticipatory-action* repo. You may not have the data folder in your filesystem if you just cloned the github repository, in that case please create it within the anticipatory-action folder. 
 
 Once that is done, make sure you have the following structure within your filesystem:
 

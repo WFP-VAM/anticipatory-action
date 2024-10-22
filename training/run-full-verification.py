@@ -21,7 +21,7 @@
 
 # If you have not downloaded the data yet, please go to that link:
 #
-# https://data.earthobservation.vam.wfp.org/public-share/aa/zwe.zip
+# https://data.earthobservation.vam.wfp.org/public-share/aa/mozambique/moz.zip
 
 # **Import required libraries and functions**
 
