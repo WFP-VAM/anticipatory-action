@@ -17,7 +17,7 @@ Start by installing **GitHub desktop** on your machine using this [link](https:/
 
 Then open GitHub desktop and follow this [tutorial](https://docs.github.com/en/desktop/overview/getting-started-with-github-desktop#part-1-installing-and-authenticating) to authenticate. This requires having a GitHub account, so please create an account if you don't have one yet. 
 
-Once this is done, you can follow these steps [here](https://data.earthobservation.vam.wfp.org/public-share/aa/2022_moz.zip) to clone the [anticipatory action repository](https://github.com/WFP-VAM/anticipatory-action/).
+Once this is done, you can follow these steps [here](https://docs.github.com/en/desktop/adding-and-cloning-repositories/cloning-a-repository-from-github-to-github-desktop) to clone the [anticipatory action repository](https://github.com/WFP-VAM/anticipatory-action/).
 
 
 ## 2. Create an environment with Anaconda <a class="anchor" id="chapter2"></a>
@@ -51,7 +51,7 @@ Make sure it is active before running any workflow.
 
 *To do prior to the training:*
 
-Please start downloading the data from [that link](https://data.earthobservation.vam.wfp.org/public-share/aa/zwe.zip) and save it within the **data** folder of the *anticipatory-action* repo. You may not have the data folder in your filesystem if you just cloned the github repository, in that case please create it within the anticipatory-action folder. 
+Please start downloading the data from [that link](https://data.earthobservation.vam.wfp.org/public-share/aa/mozambique/moz.zip) and save it within the **data** folder of the *anticipatory-action* repo. You may not have the data folder in your filesystem if you just cloned the github repository, in that case please create it within the anticipatory-action folder. 
 
 Once that is done, make sure you have the following structure within your filesystem:
 
