@@ -123,6 +123,7 @@ def run_issue_verification(forecasts, observations, issue, params, gdf):
     else:
 
         # Get accumulation periods (DJ, JF, FM, DJF, JFM...)
+        # TODO we could filter the accumulation periods using the windows indicators parameter instead in order not to waste running time
         accumulation_periods = get_accumulation_periods(
             forecasts,
             params.start_season,

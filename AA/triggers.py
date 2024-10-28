@@ -90,6 +90,7 @@ def run_triggers_selection(params, vulnerability):
     obs = obs.sel(time=probs.year.values).load()
 
     # Trick to align couples of issue months inside apply_ufunc
+    # TODO add flexible way of handling ready/set data as we could have single probs datasets
     probs_ready = probs.sel(
         issue=np.uint8(params.issue_months)[:-1]
     ).load()  # use start/end season here
@@ -309,6 +310,7 @@ def _make_grid(arraylist):
 
 @jit(nopython=True)
 def _meshxy(x, y):
+    # TODO Adapt to 1d or create equivalent
     xx = np.empty(shape=(x.size, y.size), dtype=x.dtype)
     yy = np.empty(shape=(x.size, y.size), dtype=y.dtype)
     for i in range(y.size):
@@ -320,7 +322,7 @@ def _meshxy(x, y):
 
 @jit(nopython=True)
 def brute_numba(func, ranges, args=()):
-    # TODO Move to hip-analysis
+    # TODO Adapt this function if possible or implement another one such as it also handles 1d minimizations
     """
     Numba-compatible implementation of scipy.optimize.brute designed only for 2d minimizations.
     Minimize a function over a given range by brute force.
@@ -480,9 +482,11 @@ def filter_triggers_by_window(
             hr, fr = stats[0], stats[1]
             tdf.loc[(tdf["index"] == ind) & (tdf.issue == iss), "HR"] = hr
             tdf.loc[(tdf["index"] == ind) & (tdf.issue == iss), "FR"] = fr
+        # TODO replace 2 * n_to_keep by len(threshold_ranges) * n_to_keep
         if len(tdf) < (2 * n_to_keep):  # more than two pairs otherwise no need
             return tdf
         else:
+            # TODO confirm that when filtering by window, we indeed keep the trigger with the best hit rate
             best_four = (
                 tdf.sort_values("lead_time")
                 .sort_values("FR")
