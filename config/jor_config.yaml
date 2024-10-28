@@ -1,0 +1,79 @@
+# Issue month: months corresponding to the forecasts used for monitoring
+issue_months:
+  - "05"
+  - TBC
+
+# First year of season to monitor operationally (e.g. 2024 for 2024/2025 season)
+monitoring_year: 2024
+
+# Last year of calibration period used for triggers selection (e.g. 2022 for 1981-2022)
+calibration_year: 2022
+
+# Minimum length of indicator periods (ON, NDJ, JFMA...)
+min_index_period: 3
+
+# Maximum length of indicator periods (ON, NDJ, JFMA...)
+max_index_period: 3
+
+# First month of the wet season
+start_season: TBC
+
+# Last month of the wet season
+end_season: TBC
+
+# Start date of historical time series used in anomaly computation
+hist_anomaly_start: null
+
+# End date of historical time series used in anomaly computation
+hist_anomaly_stop: "2018-12-31"
+
+# Save (and overwrite if exists) ds (obs or probs) for future trigger choice
+save_zarr: true
+
+# Data path where to store intermediate and final outputs (should include data folder)
+data_path: "."
+
+# Thresholds defining different drought intensities used in probabilities computation
+intensity_thresholds:
+  Wet_Normal: .44 # TODO will need to change processing logic for this
+  Normal: -0.44
+  
+
+# Vulnerability class of triggers for each district: general or non-regret (GT or NRT)
+districts_vulnerability: 
+  Beitbridge: "NRT"
+  TODO
+
+# Tolerance for thresholds for each category, used to compute false alarm with tolerance
+tolerance:
+  Normal: 0
+
+# Skill requirements for General Triggers
+general_t:
+  HR: 0.5  # W/out exceptions: HR=0.55
+  SR: 0.55
+  FR: 0.45
+  RP: 4.0
+
+# Skill requirements for Non Regret Triggers
+non_regret_t:
+  HR: 0.5  # W/out exceptions: HR=0.70
+  SR: 0.55
+  FR: 0.45
+  RP: 3.0
+
+# Window definitions for SPI and DRYSPELL indicators
+windows:
+  spi:
+    window1: ["OND"]
+    window2: ["JFM"]
+  dryspell:
+    window1: [ "OND" ]
+    window2: [ "JFM" ]
+
+
+# NEW PARAMETERS TO ADD
+
+# Admin level for monitoring. Traditionally was 2, but for Jordan should be 1.
+
+# Trigger search ranges. Jordan will use a single month trigger. We should artificially set the second trigger search range to [0].

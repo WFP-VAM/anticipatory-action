@@ -48,7 +48,7 @@ def run(country, issue, index):
 
     area = AnalysisArea.from_admin_boundaries(
         iso3=country.upper(),
-        admin_level=2,
+        admin_level=2, # Parameterize
         resolution=0.25,
         datetime_range=f"1981-01-01/{params.monitoring_year + 1}-06-30",
     )
@@ -88,6 +88,7 @@ def run(country, issue, index):
         )
 
     # Get accumulation periods (DJ, JF, FM, DJF, JFM...)
+    # TODO we could filter the accumulation periods using the windows indicators parameter instead in order not to waste running time
     accumulation_periods = get_accumulation_periods(
         forecasts,
         params.start_season,

@@ -41,12 +41,13 @@ def run_triggers_selection(params, vulnerability):
     # have function that takes obs / probs and returns triggers
     area = AnalysisArea.from_admin_boundaries(
         iso3=params.iso.upper(),
-        admin_level=2,
+        admin_level=2,# Paramterize
         resolution=0.25,
         datetime_range=f"1981-01-01/{params.calibration_year}-06-30",
     )
 
     gdf = area.get_dataset([area.BASE_AREA_DATASET])
+    # Potentially adapt based on target admin_level parameter
     admin1 = area.get_admin_boundaries(iso3=params.iso, admin_level=1).drop(
         ["geometry", "adm0_Code"], axis=1
     )
@@ -89,6 +90,7 @@ def run_triggers_selection(params, vulnerability):
     obs = obs.sel(time=probs.year.values).load()
 
     # Trick to align couples of issue months inside apply_ufunc
+    # TODO add flexible way of handling ready/set data as we could have single probs datasets
     probs_ready = probs.sel(
         issue=np.uint8(params.issue_months)[:-1]
     ).load()  # use start/end season here
@@ -211,6 +213,15 @@ def _compute_confusion_matrix(true, pred):
     return result
 
 
+
+def metereological_trigger_objective():
+    """
+    Ranks triggers by the highest difference between hit rate and false alarm rate.
+    """
+    pass
+
+
+
 @jit(
     nopython=True,
     cache=True,
@@ -234,6 +245,9 @@ def objective(
     sorting=False,
     eps=1e-6,
 ):
+    # TODO Refactor this function into steps that are general to all objective functions (e.g. calculate metrics)
+    # vs the calculation of the actual objective value, which can differ depending on applications.
+
     # Align obs and probs when leadtime between Jan and end_season
     # TODO align these time steps at the analytical level
     if leadtime <= end_season:
@@ -299,6 +313,7 @@ def _make_grid(arraylist):
 
 @jit(nopython=True)
 def _meshxy(x, y):
+    # TODO Adapt to 1d or create equivalent
     xx = np.empty(shape=(x.size, y.size), dtype=x.dtype)
     yy = np.empty(shape=(x.size, y.size), dtype=y.dtype)
     for i in range(y.size):
@@ -310,7 +325,7 @@ def _meshxy(x, y):
 
 @jit(nopython=True)
 def brute_numba(func, ranges, args=()):
-    # TODO Move to hip-analysis
+    # TODO Adapt this function if possible or implement another one such as it also handles 1d minimizations
     """
     Numba-compatible implementation of scipy.optimize.brute designed only for 2d minimizations.
     Minimize a function over a given range by brute force.
@@ -402,14 +417,18 @@ def find_optimal_triggers(
         best_score: int, score (mainly hit rate) corresponding to the best triggers
     """
 
+    # TODO Read trigger search ranges from params. Returns like:
+    threshold_range = [{"start": 0.0,"stop":1.0,"step": 0.01},
+                       {"start": 0.0,"stop":1.0,"step": 0.01}]
+
     # Define grid
-    threshold_range = (0.0, 1.0)
     grid = (
-        np.arange(threshold_range[0], threshold_range[1], step=0.01),
-        np.arange(threshold_range[0], threshold_range[1], step=0.01),
+        np.arange(**threshold_range[0]),
+        np.arange(**threshold_range[1]),
     )
 
     # Launch research
+    # Objective will now differ between applications. TODO the objective function should become a parameter.
     best_triggers, best_score = brute_numba(
         objective,
         grid,
@@ -466,9 +485,11 @@ def filter_triggers_by_window(
             hr, fr = stats[0], stats[1]
             tdf.loc[(tdf["index"] == ind) & (tdf.issue == iss), "HR"] = hr
             tdf.loc[(tdf["index"] == ind) & (tdf.issue == iss), "FR"] = fr
+        # TODO replace 2 * n_to_keep by len(threshold_ranges) * n_to_keep
         if len(tdf) < (2 * n_to_keep):  # more than two pairs otherwise no need
             return tdf
         else:
+            # TODO confirm that when filtering by window, we indeed keep the trigger with the best hit rate
             best_four = (
                 tdf.sort_values("lead_time")
                 .sort_values("FR")
