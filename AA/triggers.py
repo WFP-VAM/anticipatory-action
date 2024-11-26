@@ -15,16 +15,15 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 from config.params import Params
-from hip.analysis.analyses.drought import concat_obs_levels, get_accumulation_periods
+from hip.analysis.analyses.drought import (concat_obs_levels,
+                                           get_accumulation_periods)
 from hip.analysis.aoi.analysis_area import AnalysisArea
-from numba import jit
+from numba import jit, types
+from numba.typed import Dict
 
-from AA.helper_fns import (
-    create_flexible_dataarray,
-    merge_un_biased_probs,
-    triggers_da_to_df,
-    format_triggers_df_for_dashboard,
-)
+from AA.helper_fns import (create_flexible_dataarray,
+                           format_triggers_df_for_dashboard,
+                           merge_un_biased_probs, triggers_da_to_df)
 
 
 @click.command()
@@ -95,9 +94,19 @@ def run_triggers_selection(params, vulnerability):
     probs_set = probs.sel(issue=np.uint8(params.issue_months)[1:]).load()
     probs_set["issue"] = [i - 1 if i != 1 else 12 for i in probs_set.issue.values]
 
+    if vulnerability in [None, "TBD"]:
+        process_pilot_district_trigger_metrics(
+            obs=obs,
+            probs_ready=probs_ready,
+            probs_set=probs_set,
+            params=params,
+            vulnerability="TBD",
+        )
+        return
+
     # Distribute computation of triggers
     logging.info(
-        f"Starting computation of triggers the whole {params.iso.upper()} country..."
+        f"Starting computation of triggers for the whole {params.iso.upper()} country..."
     )
     trigs, score = xr.apply_ufunc(
         find_optimal_triggers,
@@ -128,12 +137,12 @@ def run_triggers_selection(params, vulnerability):
     score["index"] = score.index.astype(str)
 
     trigs.to_zarr(
-        f"{params.data_path}/data/{params.iso}/triggers/triggers_{params.index}_{params.calibration_year}_{vulnerability}.zarr",
-        mode="w",
+       f"{params.data_path}/data/{params.iso}/triggers/triggers_{params.index}_{params.calibration_year}_{vulnerability}.zarr",
+       mode="w",
     )
     score.to_zarr(
-        f"{params.data_path}/data/{params.iso}/triggers/score_{params.index}_{params.calibration_year}_{vulnerability}.zarr",
-        mode="w",
+       f"{params.data_path}/data/{params.iso}/triggers/score_{params.index}_{params.calibration_year}_{vulnerability}.zarr",
+       mode="w",
     )
     logging.info(f"Triggers and score datasets saved as a back-up")
 
@@ -179,8 +188,8 @@ def run_triggers_selection(params, vulnerability):
     triggers = format_triggers_df_for_dashboard(df_window, params)
 
     triggers.to_csv(
-        f"{params.data_path}/data/{params.iso}/triggers/triggers.{params.index}.{params.calibration_year}.{vulnerability}.csv",
-        index=False,
+       f"{params.data_path}/data/{params.iso}/triggers/triggers.{params.index}.{params.calibration_year}.{vulnerability}.csv",
+       index=False,
     )
 
     logging.info(
@@ -213,6 +222,7 @@ def _compute_confusion_matrix(true, pred):
 
 @jit(
     nopython=True,
+    parallel=True,
     cache=True,
 )
 def objective(
@@ -245,12 +255,18 @@ def objective(
     prediction = np.logical_and(prob_issue0 > t[0], prob_issue1 > t[1]).astype(np.int16)
 
     cm = _compute_confusion_matrix(obs_bool.astype(np.int16), prediction)
-    _, false, fn, hits = cm.astype(np.int16).ravel()
+    misses, false, fn, hits = cm.astype(np.int16).ravel()
 
     number_actions = np.sum(prediction)
 
     if hits + false == 0:  # avoid divisions by zero
-        return [penalty, penalty] if sorting else [penalty]
+        if sorting:
+            mul = 2
+        elif vulnerability == "TBD":
+            mul = 9
+        else:
+            mul = 1
+        return np.array([penalty] * mul)
 
     false_alarm_rate = false / (false + hits + eps)
     false_tol = np.sum(prediction & (obs_val > tolerance[category]))
@@ -261,30 +277,46 @@ def objective(
     freq = number_actions / len(obs_val)
     return_period = np.round(1 / freq if freq != 0 else 0, 0)
 
-    requirements = general_req if vulnerability == "GT" else non_regret_req
-    req_RP = (
-        requirements["RP"]
-        + 1 * (category[:3].lower() == "mod")
-        + 3 * (category[:3].lower() == "sev")
-    )
+    if vulnerability in ["GT", "NRT"]:
+        requirements = general_req if vulnerability == "GT" else non_regret_req
+        req_RP = (
+            requirements["RP"]
+            + 1 * (category[:3].lower() == "mod")
+            + 3 * (category[:3].lower() == "sev")
+        )
 
-    constraints = np.array(
-        [
-            hit_rate >= requirements["HR"],
-            success_rate >= (requirements["SR"] * number_actions),
-            failure_rate <= (requirements["FR"] * number_actions),
-            return_period >= req_RP,
-            (leadtime - (issue + 1)) % 12 > 1,
-        ]
-    ).astype(np.int16)
+        constraints = np.array(
+            [
+                hit_rate >= requirements["HR"],
+                success_rate >= (requirements["SR"] * number_actions),
+                failure_rate <= (requirements["FR"] * number_actions),
+                return_period >= req_RP,
+                (leadtime - (issue + 1)) % 12 > 1,
+            ]
+        ).astype(np.int16)
 
     if sorting:
-        return [-hit_rate, failure_rate / (number_actions + eps)]
+        return np.array([-hit_rate, failure_rate / (number_actions + eps)])
+    elif vulnerability == "TBD":
+        return np.array(
+            [
+                misses,
+                false,
+                fn,
+                hits,
+                hit_rate,
+                false_alarm_rate,
+                success_rate / (number_actions + eps),
+                failure_rate / (number_actions + eps),
+                return_period,
+            ]
+        )
     else:
+        assert vulnerability in ["GT", "NRT"]
         if np.all(constraints):
-            return [-hit_rate + alpha * false_alarm_rate]
+            return np.array([-hit_rate + alpha * false_alarm_rate])
         else:
-            return [penalty]
+            return np.array([penalty])
 
 
 @jit(nopython=True)
@@ -431,6 +463,183 @@ def find_optimal_triggers(
     return best_triggers, best_score
 
 
+def evaluate_grid_metrics(
+    observations_bool,
+    observations_val,
+    prob_ready,
+    prob_set,
+    lead_time,
+    issue,
+    category,
+    params,
+    vulnerability="TBD",
+):
+    """
+    Evaluate all metrics (HR, FAR, FR, SR, RP) over the entire grid using apply_ufunc.
+
+    Args:
+        observations_bool: np.array, categorical observations for the specified category
+        observations_val: np.array, observed rainfall values (or SPI)
+        prob_ready: np.array, forecast probabilities for the ready month
+        prob_set: np.array, forecast probabilities for the set month
+        lead_time: int, lead time month
+        issue: int, issue month
+        category: str, intensity level
+        params: Params, configuration parameters dictionary
+
+    Returns:
+        metrics_da: xarray.DataArray, structured array with grid evaluations for all metrics
+    """
+    # Ensure category alignment
+    prob_ready = prob_ready.reindex(category=category.coords["category"].values)
+    prob_set = prob_set.reindex(category=category.coords["category"].values)
+    observations_bool = observations_bool.reindex(
+        category=category.coords["category"].values
+    )
+    observations_val = observations_val.reindex(
+        category=category.coords["category"].values
+    )
+
+    # Define the threshold grid
+    thresholds = np.arange(0.0, 1.0, step=0.01)
+    grid_ready, grid_set = np.meshgrid(thresholds, thresholds, indexing="ij")
+
+    # Combine thresholds into pairs
+    grid_thresholds = np.stack(
+        [grid_ready, grid_set], axis=-1
+    )  # Shape: (ready, set, 2)
+    grid_da = xr.DataArray(
+        grid_thresholds,
+        dims=["ready", "set", "threshold"],
+        coords={"ready": thresholds, "set": thresholds, "threshold": ["ready", "set"]},
+    )
+
+    # Apply the `objective` function across the threshold grid
+    metrics_da = xr.apply_ufunc(
+        objective,
+        grid_da,
+        observations_val,
+        observations_bool,
+        prob_ready,
+        prob_set,
+        lead_time,
+        issue,
+        category,
+        vulnerability,
+        kwargs={
+            "tolerance": params.tolerance,
+            "general_req": Dict.empty(key_type=types.unicode_type, value_type=types.f8),
+            "non_regret_req": Dict.empty(
+                key_type=types.unicode_type, value_type=types.f8
+            ),
+        },
+        input_core_dims=[
+            ["threshold"],
+            ["time"],
+            ["time"],
+            ["year"],
+            ["year"],
+            [],
+            [],
+            [],
+            [],
+        ],
+        output_core_dims=[["metric"]],
+        vectorize=True,
+        dask="parallelized",
+    )
+
+    metrics_da["metric"] = ["TN", "FP", "FN", "TP", "HR", "FAR", "SR", "FR", "RP"]
+
+    metrics_da["district"] = metrics_da.district.astype(str)
+    metrics_da["category"] = metrics_da.category.astype(str)
+    metrics_da["metric"] = metrics_da.metric.astype(str)
+
+    return metrics_da
+
+
+def process_pilot_district_trigger_metrics(
+    obs,
+    probs_ready,
+    probs_set,
+    params,
+    vulnerability,
+):
+    """
+    Process and export trigger metrics for pilot districts with vulnerability set to "TBD".
+
+    Parameters:
+    -----------
+    obs : xarray.Dataset
+        Dataset containing observational data with `bool`, `val`, `lead_time`, and `category` variables.
+    probs_ready : xarray.Dataset
+        Dataset containing readiness probabilities with `prob` and `issue` variables.
+    probs_set : xarray.Dataset
+        Dataset containing set probabilities with `prob` variable.
+    params : object
+        Parameters object containing configuration such as `data_path`, `iso`, and `districts_vulnerability`.
+
+    Returns:
+    --------
+    None
+        Saves the resulting DataFrame as a CSV file and exits the function.
+    """
+    logging.info(
+        f"Starting computation of metrics for the {params.iso.upper()} pilot districts..."
+    )
+
+    # Set filter for pilot districts
+    pilots = list(params.districts_vulnerability.keys())
+    obs = obs.sel(district=pilots)
+    probs_ready = probs_ready.sel(district=pilots)
+    probs_set = probs_set.sel(district=pilots)
+
+    # Evaluate grid metrics
+    grid_metrics_da = evaluate_grid_metrics(
+        obs.bool,
+        obs.val,
+        probs_ready.prob,
+        probs_set.prob,
+        obs.lead_time,
+        probs_ready.issue,
+        obs.category,
+        params,
+        vulnerability,
+    )
+
+    # Convert the result to DataFrame and filter out unnecessary rows/columns
+    grid_metrics_df = grid_metrics_da.to_dataframe(name="value")
+    grid_metrics_df = grid_metrics_df.loc[grid_metrics_df.value < 100000].reset_index()
+    if "spatial_ref" in grid_metrics_df.columns:
+        grid_metrics_df = grid_metrics_df.drop("spatial_ref", axis=1)
+
+    # Define the 'issue_set' column and rename 'issue' to 'issue_ready'
+    grid_metrics_df["issue_set"] = grid_metrics_df.issue + 1
+    grid_metrics_df = grid_metrics_df.rename(columns={"issue": "issue_ready"})
+
+    # Pivot the DataFrame to create a tabular format
+    grid_metrics_df = grid_metrics_df.pivot(
+        index=[
+            "ready",
+            "set",
+            "index",
+            "district",
+            "category",
+            "issue_ready",
+            "lead_time",
+            "issue_set",
+        ],
+        columns="metric",
+        values="value",
+    ).reset_index()
+
+    # Define output path and save the DataFrame as a CSV file
+    output_path = f"{params.data_path}/data/{params.iso}/triggers/triggers_metrics_vulnerability_tbd.csv"
+    grid_metrics_df.to_csv(output_path, index=False)
+
+    logging.info(f"Metrics for pilot districts saved to {output_path}")
+
+
 def filter_triggers_by_window(
     df_leadtime, probs_ready, probs_set, obs, vulnerability, params
 ):
@@ -528,7 +737,9 @@ def read_aggregated_obs(path_to_zarr, params):
 
 
 def read_aggregated_probs(path_to_zarr, params):
-    list_issue_paths = sorted(glob.glob(f"{path_to_zarr}/*"))[:-1]  # Last one is the `obs` folder.
+    list_issue_paths = sorted(glob.glob(f"{path_to_zarr}/*"))[
+        :-1
+    ]  # Last one is the `obs` folder.
     list_index = {}
     for l in list_issue_paths:
         list_index_raw = [
