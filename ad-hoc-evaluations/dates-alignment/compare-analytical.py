@@ -29,7 +29,7 @@ from config.params import Params
 
 country = "MOZ"
 
-params = Params(iso=country, index='SPI')
+params = Params(iso=country, index='DRYSPELL')
 
 
 # ### Comparison on the full output at the district level
@@ -94,14 +94,16 @@ comparison['difference'] = comparison.AUC_best - comparison.AUC_ref
 # Filter comparison on pilot districts
 comparison = comparison.loc[comparison.district.isin(params.districts)]
 
-plot_hist(comparison, title="Before/After dates alignment AUC (BC and not) difference at the district level", xlabel="AUC difference (New - Old)", xmin=-.05, xmax=.05, s=800)
+# Histogram of non-null differences
+plot_hist(comparison.loc[comparison.difference != 0], title="Before/After dates alignment AUC (BC and not) difference at the district level", xlabel="AUC difference (New - Old)", xmin=-.05, xmax=.05, s=100)
 
 
 # ### Difference (auc_to_compare - python_reference) on the full output by category / district / index / issue
 
 # +
 x_axis = [5, 6, 7, 8, 9, 10, 11, 12, 1, 2]
-y_axis = ['SPI ON', 'SPI ND', 'SPI DJ', 'SPI JF', 'SPI FM', 'SPI MA', 'SPI AM', 'SPI MJ', 'SPI OND', 'SPI NDJ', 'SPI DJF', 'SPI JFM', 'SPI FMA', 'SPI MAM', 'SPI AMJ']
+y_axis = ['ON', 'ND', 'DJ', 'JF', 'FM', 'MA', 'AM', 'MJ', 'OND', 'NDJ', 'DJF', 'JFM', 'FMA', 'MAM', 'AMJ']
+y_axis = [params.index.upper() + " " + ind for ind in y_axis]
 
 def draw_heatmap(**kwargs):
     data = kwargs.pop('data')
@@ -131,7 +133,8 @@ fg.fig.suptitle('MILD CATEGORY')
 
 # +
 x_axis = [5, 6, 7, 8, 9, 10, 11, 12, 1, 2]
-y_axis = ['SPI ON', 'SPI ND', 'SPI DJ', 'SPI JF', 'SPI FM', 'SPI MA', 'SPI AM', 'SPI MJ', 'SPI OND', 'SPI NDJ', 'SPI DJF', 'SPI JFM', 'SPI FMA', 'SPI MAM', 'SPI AMJ']
+y_axis = ['ON', 'ND', 'DJ', 'JF', 'FM', 'MA', 'AM', 'MJ', 'OND', 'NDJ', 'DJF', 'JFM', 'FMA', 'MAM', 'AMJ']
+y_axis = [params.index.upper() + " " + ind for ind in y_axis]
 
 def draw_heatmap(**kwargs):
     data = kwargs.pop('data')
@@ -164,7 +167,8 @@ fg = sns.FacetGrid(
 fg.map_dataframe(draw_heatmap, annot=True, annot_kws={"size":4}, cbar=True, cmap='RdYlGn', center=0)
 
 # +
-x_axis = ['SPI ON', 'SPI ND', 'SPI DJ', 'SPI JF', 'SPI FM', 'SPI MA', 'SPI AM', 'SPI MJ', 'SPI OND', 'SPI NDJ', 'SPI DJF', 'SPI JFM', 'SPI FMA', 'SPI MAM', 'SPI AMJ']
+x_axis = ['ON', 'ND', 'DJ', 'JF', 'FM', 'MA', 'AM', 'MJ', 'OND', 'NDJ', 'DJF', 'JFM', 'FMA', 'MAM', 'AMJ']
+x_axis = [params.index.upper() + " " + ind for ind in x_axis]
 y_axis = ["Chiure", "Chibuto", "Chicualacuala", "Guija", "Mabalane", "Mapai", "Massingir", "Caia", "Chemba", "Changara", "Marara"]
 
 def draw_heatmap(**kwargs):
