@@ -26,7 +26,6 @@ from AA.helper_fns import (
     format_triggers_df_for_dashboard,
 )
 
-
 @click.command()
 @click.argument("country", required=True, type=str)
 @click.argument("index", default="SPI")
@@ -234,14 +233,6 @@ def objective(
     sorting=False,
     eps=1e-6,
 ):
-    # Align obs and probs when leadtime between Jan and end_season
-    # TODO align these time steps at the analytical level
-    if leadtime <= end_season:
-        obs_val = obs_val[1:]
-        obs_bool = obs_bool[1:]
-        prob_issue0 = prob_issue0[:-1]
-        prob_issue1 = prob_issue1[:-1]
-
     prediction = np.logical_and(prob_issue0 > t[0], prob_issue1 > t[1]).astype(np.int16)
 
     cm = _compute_confusion_matrix(obs_bool.astype(np.int16), prediction)
