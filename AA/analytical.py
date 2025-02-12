@@ -254,11 +254,13 @@ def calculate_forecast_probabilities(
         levels_obs: xarray.Dataset, categorical observations at the pixel level for specified index
     """
 
-    # Remove 1980 season to harmonize observations between different indexes
-    if int(issue) >= params.end_season:
-        observations = observations.where(
-            observations.time.dt.date >= datetime.date(1981, 10, 1), drop=True
-        )
+    # Remove 1980 season to harmonize datasets between different indicators 
+    forecasts = forecasts.where(
+        forecasts.time.dt.date >= datetime.date(1981, params.start_season, 1), drop=True
+    )
+    observations = observations.where(
+        observations.time.dt.date >= datetime.date(1981, params.start_season, 1), drop=True
+    )
 
     # Accumulation
     accumulation_fc = run_accumulation_index(
@@ -268,14 +270,6 @@ def calculate_forecast_probabilities(
         observations.chunk(dict(time=-1)), params.aggregate, period_months
     )
     logging.info(f"Completed accumulation")
-
-    # Remove potential inconsistent observations
-    accumulation_obs = accumulation_obs.sel(
-        time=slice(
-            datetime.date(1979, 1, 1),
-            datetime.date(params.calibration_year - 1, 12, 31),
-        )
-    )
 
     # Anomaly
     anomaly_fc = run_gamma_standardization(

@@ -126,10 +126,6 @@ class Params:
         for key, value in config.items():
             setattr(self, key, value)
 
-        # +1 to monitoring year if operational issue month falls in 2nd part of cross-year season
-        if isinstance(self.issue, int) and self.issue < self.start_monitoring:
-            self.monitoring_year += 1
-
         # Set the aggregate method      
         self.aggregate = AGGREGATES[self.index]
 
