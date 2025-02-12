@@ -1,13 +1,12 @@
-import logging
+import datetime
 import glob
+import logging
 import os
 
-import datetime
 import geopandas as gpd
 import numpy as np
 import pandas as pd
 import xarray as xr
-
 from hip.analysis.compute.utils import persist_with_progress_bar
 
 PORTUGUESE_CATEGORIES = dict(
@@ -163,6 +162,32 @@ def get_coverage(triggers_df, districts: list, columns: list):
         f"The coverage is {round(100 * np.sum(cov.values > 0) / np.size(cov.values), 1)} %"
     )
     return cov
+
+
+def load_trigger_with_reference(params, variant_folder=None):
+    """
+    Load trigger data and reference trigger data for comparison.
+
+    Args:
+        params: An object containing parameters such as data_path, iso, and calibration_year.
+        variant_folder (str, optional): If provided, modifies the data path to load from an alternative directory.
+
+    Returns:
+        dict: A dictionary containing DataFrames for GT, NRT, and pilots triggers and reference triggers.
+    """
+    base_path = f"{params.data_path}/data/{variant_folder or params.iso}"
+
+    files = ["GT", "NRT", "pilots"]
+
+    triggers = {}
+    for file in files:
+        trigger_path = f"{base_path}/triggers/triggers.spi.dryspell.{params.calibration_year}.{file}.csv"
+        ref_path = f"{params.data_path}/data/{params.iso}/triggers/triggers.spi.dryspell.{params.calibration_year}.{file}.csv"
+
+        triggers[f"triggers_{file}"] = pd.read_csv(trigger_path)
+        triggers[f"reference_{file}"] = pd.read_csv(ref_path)
+
+    return triggers
 
 
 def merge_probabilities_triggers_dashboard(probs, triggers, params, period):

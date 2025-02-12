@@ -17,57 +17,47 @@
 
 # %cd ../..
 
+import warnings
+
 # +
 import numpy as np
 import pandas as pd
 
-import warnings
-warnings.filterwarnings('ignore')
+warnings.filterwarnings("ignore")
 
+from AA.helper_fns import get_coverage, load_trigger_with_reference
 # +
 from config.params import Params
 
-from AA.helper_fns import get_coverage
 # -
 
-# Get parameters 
+# Get parameters
 
 country = "MOZ"
 
-params = Params(iso=country, index='SPI')
+params = Params(iso=country, index="SPI")
 
 # Get triggers
 
-# +
-refGT = pd.read_csv(f"{params.data_path}/data/{params.iso}/triggers/triggers.spi.dryspell.{params.calibration_year}.GT.csv")
-refNRT = pd.read_csv(f"{params.data_path}/data/{params.iso}/triggers/triggers.spi.dryspell.{params.calibration_year}.NRT.csv")
-
-ref = pd.read_csv(f"{params.data_path}/data/{params.iso}/triggers/triggers.spi.dryspell.{params.calibration_year}.pilots.csv")
-
-# +
-trigsGT = pd.read_csv(f"{params.data_path}/data/{params.iso}_align_dates/triggers/triggers.spi.dryspell.{params.calibration_year}.GT.csv")
-trigsNRT = pd.read_csv(f"{params.data_path}/data/{params.iso}_align_dates/triggers/triggers.spi.dryspell.{params.calibration_year}.NRT.csv")
-
-trigs = pd.read_csv(f"{params.data_path}/data/{params.iso}_align_dates/triggers/triggers.spi.dryspell.{params.calibration_year}.pilots.csv")
-# -
+triggers = load_trigger_with_reference(params, "moz_align_dates")
 
 # Compare coverages of Python GT and NRT triggers
 
 # GENERAL TRIGGERS - NEW
 columns = ["W1-Mild", "W1-Moderate", "W1-Severe", "W2-Mild", "W2-Moderate", "W2-Severe"]
-get_coverage(trigsGT, params.districts, columns)
+get_coverage(triggers["triggers_GT"], params.districts, columns)
 
 # GENERAL TRIGGERS - OLD
-get_coverage(refGT, params.districts, columns)
+get_coverage(triggers["reference_GT"], params.districts, columns)
 
 # NON-REGRET TRIGGERS - NEW
-get_coverage(trigsNRT, params.districts, columns)
+get_coverage(triggers["triggers_NRT"], params.districts, columns)
 
 # NON-REGRET TRIGGERS - OLD
-get_coverage(refNRT, params.districts, columns)
+get_coverage(triggers["reference_NRT"], params.districts, columns)
 
 # Get coverage of final output
 
-get_coverage(trigs, params.districts, columns)
+get_coverage(triggers["triggers_pilots"], params.districts, columns)
 
-
+get_coverage(triggers["reference_pilots"], params.districts, columns)
