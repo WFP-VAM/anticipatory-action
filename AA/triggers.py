@@ -84,9 +84,6 @@ def run_triggers_selection(params, vulnerability):
         f"Completed reading of aggregated probabilities for the whole {params.iso.upper()} country"
     )
 
-    # Filter year dimension: temporary before harmonization with analytical script
-    obs = obs.sel(time=probs.year.values).load()
-
     # Trick to align couples of issue months inside apply_ufunc
     probs_ready = probs.sel(
         issue=np.uint8(params.issue_months)[:-1]
@@ -111,7 +108,7 @@ def run_triggers_selection(params, vulnerability):
         params,
         vectorize=True,
         join="outer",
-        input_core_dims=[["time"], ["time"], ["year"], ["year"], [], [], [], [], []],
+        input_core_dims=[["time"], ["time"], ["time"], ["time"], [], [], [], [], []],
         output_core_dims=[["trigger"], []],
         dask="parallelized",
         keep_attrs=True,
@@ -137,8 +134,8 @@ def run_triggers_selection(params, vulnerability):
     logging.info(f"Triggers and score datasets saved as a back-up")
 
     # Reset cells of xarray of no interest as nan
-    trigs = trigs.where(probs.prob.count("year") != 0, np.nan)
-    score = score.where(probs.prob.count("year") != 0, np.nan)
+    trigs = trigs.where(probs.prob.count("time") != 0, np.nan)
+    score = score.where(probs.prob.count("time") != 0, np.nan)
 
     # Format trigs and score into a dataframe
     trigs_df = triggers_da_to_df(trigs, score).dropna()
@@ -506,7 +503,7 @@ def read_aggregated_obs(path_to_zarr, params):
     obs_val = xr.open_mfdataset(
         list_val_paths,
         engine="zarr",
-        preprocess=lambda ds: ds["band"],
+        preprocess=lambda ds: ds["mean"],
         combine="nested",
         concat_dim="index",
     )
@@ -536,14 +533,14 @@ def read_aggregated_probs(path_to_zarr, params):
             index_raw = xr.open_mfdataset(
                 list_index_raw,
                 engine="zarr",
-                preprocess=lambda ds: ds["tp"],
+                preprocess=lambda ds: ds["mean"],
                 combine="nested",
                 concat_dim="index",
             )
             index_bc = xr.open_mfdataset(
                 list_index_bc,
                 engine="zarr",
-                preprocess=lambda ds: ds["scen"],
+                preprocess=lambda ds: ds["mean"],
                 combine="nested",
                 concat_dim="index",
             )
