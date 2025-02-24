@@ -28,7 +28,7 @@ from hip.analysis.analyses.drought import (
 from hip.analysis.aoi.analysis_area import AnalysisArea
 from hip.analysis.ops._statistics import evaluate_roc_forecasts
 
-from AA.helper_fns import aggregate_by_district, read_forecasts, read_observations
+from AA.helper_fns import compute_district_average, read_forecasts, read_observations
 
 from hip.analysis.compute.utils import start_dask
 
@@ -50,8 +50,6 @@ def run(country, index):
         resolution=0.25,
         datetime_range=f"1981-01-01/{params.calibration_year}-06-30",
     )
-
-    gdf = area.get_dataset([area.BASE_AREA_DATASET])
 
     observations = read_observations(
         area,
@@ -85,7 +83,7 @@ def run(country, index):
                 observations,
                 issue,
                 params,
-                gdf,
+                area,
             )
         )
         logging.info(
@@ -101,7 +99,7 @@ def run(country, index):
     logging.info(f"FbF dataframe saved for {country}")
 
 
-def run_issue_verification(forecasts, observations, issue, params, gdf):
+def run_issue_verification(forecasts, observations, issue, params, area):
     """
     Run analytical / verification pipeline for one issue month
 
@@ -109,7 +107,7 @@ def run_issue_verification(forecasts, observations, issue, params, gdf):
         observations: xarray.Dataset, rainfall observations dataset
         issue: str, issue month of forecasts to analyse
         params: Params, parameters class
-        gdf: geopandas.GeoDataFrame, shapefile including admin2 levels
+        area: hip.analysis.aoi.analysis_area.AnalysisArea object
     Returns:
         fbf_issue: pandas.DataFrame, dataframe with roc scores for all indexes, districts, categories and a specified issue month
     """
@@ -142,7 +140,7 @@ def run_issue_verification(forecasts, observations, issue, params, gdf):
                 forecasts,
                 observations,
                 params,
-                gdf,
+                area,
                 period_name,
                 period_months,
                 issue,
@@ -169,7 +167,7 @@ def verify_index_across_districts(
     forecasts,
     observations,
     params,
-    gdf,
+    area,
     period_name,
     period_months,
     issue,
@@ -181,7 +179,7 @@ def verify_index_across_districts(
         forecasts: xarray.Dataset, rainfall forecasts dataset for specific issue month
         observations: xarray.Dataset, rainfall observations dataset
         params: Params, parameters class
-        gdf: geopandas.GeoDataFrame, shapefile including admin2 levels
+        area: hip.analysis.aoi.analysis_area.AnalysisArea object
         period_name: str, name of index period (eg "ON")
         period_months: tuple, months of index period (eg (10, 11))
     Returns:
@@ -204,18 +202,18 @@ def verify_index_across_districts(
 
     if params.save_zarr:
         save_districts_results(
-            obs_values,
-            probs,
-            probs_bc,
+            observations,
+            probabilities,
+            probabilities_bc,
+            area,
             issue,
             period_name,
             params,
-            gdf,
         )
 
     # Aggregate by district
-    auc_district = aggregate_by_district(auc, gdf, params)
-    auc_bc_district = aggregate_by_district(auc_bc, gdf, params)
+    auc_district = compute_district_average(auc, area)
+    auc_bc_district = compute_district_average(auc_bc, area)
 
     # Choose W/ or W/OUT BC based on AUROC
     fbf_index_df = get_verification_df(
@@ -264,10 +262,10 @@ def calculate_forecast_probabilities(
 
     # Accumulation
     accumulation_fc = run_accumulation_index(
-        forecasts.chunk(dict(time=-1)), params.aggregate, period_months, forecasts=True
+        forecasts.chunk(dict(time=-1)), params.aggregate, period_months, (params.start_season, params.end_season), forecasts=True
     )
     accumulation_obs = run_accumulation_index(
-        observations.chunk(dict(time=-1)), params.aggregate, period_months
+        observations.chunk(dict(time=-1)), params.aggregate, period_months, (params.start_season, params.end_season)
     )
     logging.info(f"Completed accumulation")
 
@@ -356,10 +354,10 @@ def calculate_forecast_probabilities(
 
 def get_verification_df(auc, auc_bc):
     # Convert AUC datasets to dataframes
-    auc_df = auc.to_dataframe().drop("spatial_ref", axis=1)
+    auc_df = auc.to_dataframe()
     auc_df.columns = ["AUC"]
 
-    auc_bc_df = auc_bc.to_dataframe().drop("spatial_ref", axis=1)
+    auc_bc_df = auc_bc.to_dataframe()
     auc_bc_df.columns = ["AUC_BC"]
 
     # Select method based on AUROC score
@@ -380,15 +378,15 @@ def save_districts_results(
     observations,
     probabilities,
     probabilities_bc,
+    area,
     issue,
     period_name,
     params,
-    gdf,
 ):
     # Aggregate by district
-    obs_district = aggregate_by_district(observations, gdf, params)
-    probs_district = aggregate_by_district(probabilities, gdf, params)
-    probs_bc_district = aggregate_by_district(probabilities_bc, gdf, params)
+    obs_district = compute_district_average(observations, area)
+    probs_district = compute_district_average(probabilities, area)
+    probs_bc_district = compute_district_average(probabilities_bc, area)
 
     # Convert the 'category' coordinate to string type
     probs_district["category"] = probs_district["category"].astype(str)
