@@ -264,10 +264,17 @@ def calculate_forecast_probabilities(
 
     # Accumulation
     accumulation_fc = run_accumulation_index(
-        forecasts.chunk(dict(time=-1)), params.aggregate, period_months, forecasts=True
+        forecasts.chunk(dict(time=-1)), 
+        params.aggregate, 
+        period_months, 
+        (params.start_season, params.end_season), 
+        forecasts=True,
     )
     accumulation_obs = run_accumulation_index(
-        observations.chunk(dict(time=-1)), params.aggregate, period_months
+        observations.chunk(dict(time=-1)),
+        params.aggregate,
+        period_months,
+        (params.start_season, params.end_season),
     )
     logging.info(f"Completed accumulation")
 

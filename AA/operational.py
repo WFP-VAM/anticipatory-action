@@ -29,7 +29,7 @@ from hip.analysis.analyses.drought import (
 from hip.analysis.aoi.analysis_area import AnalysisArea
 
 from AA.helper_fns import (
-    aggregate_by_district,
+    compute_district_average,
     merge_probabilities_triggers_dashboard,
     merge_un_biased_probs,
     read_forecasts,
@@ -52,8 +52,6 @@ def run(country, issue, index):
         resolution=0.25,
         datetime_range=f"1981-01-01/{params.monitoring_year + 1}-06-30",
     )
-
-    gdf = area.get_dataset([area.BASE_AREA_DATASET])
 
     forecasts = read_forecasts(
         area,
@@ -103,7 +101,7 @@ def run(country, issue, index):
             observations,
             params,
             triggers_df,
-            gdf,
+            area,
             period_name,
             period_months,
         )
@@ -132,7 +130,7 @@ def run(country, issue, index):
 
 
 def run_full_index_pipeline(
-    forecasts, observations, params, triggers, gdf, period_name, period_months
+    forecasts, observations, params, triggers, area, period_name, period_months
 ):
     """
     Run operational pipeline for single index (period)
@@ -142,7 +140,7 @@ def run_full_index_pipeline(
         observations: xarray.Dataset, rainfall observations dataset
         params: Params, parameters class
         triggers: pd.DataFrame, selected triggers (output of triggers.py)
-        gdf: geopandas.GeoDataFrame, shapefile including admin2 levels
+        area: hip.analysis.aoi.analysis_area.AnalysisArea object
         period_name: str, name of index period (eg "ON")
         period_months: tuple, months of index period (eg (10, 11))
     Returns:
@@ -154,17 +152,17 @@ def run_full_index_pipeline(
     )
 
     # Aggregate by district
-    probs_district = aggregate_by_district(probabilities, gdf, params)
-    probs_bc_district = aggregate_by_district(probabilities_bc, gdf, params)
+    probs_district = compute_district_average(probabilities, area)
+    probs_bc_district = compute_district_average(probabilities_bc, area)
 
     # Build single xarray with merged unbiased/biased probabilities
     probs_by_district = merge_un_biased_probs(
-        probs_district, probs_bc_district, params, period_name
+        probs_district.squeeze('time'), probs_bc_district.squeeze('time'), params, period_name
     )
 
     # Merge probabilities with triggers
     probs_df, merged_df = merge_probabilities_triggers_dashboard(
-        probs_by_district, triggers, params, period_name
+        probs_by_district.drop_vars('time'), triggers, params, period_name
     )
 
     logging.info(
@@ -197,10 +195,17 @@ def run_aa_probabilities(forecasts, observations, params, period_months):
 
     # Accumulation
     accumulation_fc = run_accumulation_index(
-        forecasts.chunk(dict(time=-1)), params.aggregate, period_months, forecasts=True
+        forecasts.chunk(dict(time=-1)), 
+        params.aggregate, 
+        period_months, 
+        (params.start_season, params.end_season),
+        forecasts=True,
     )
     accumulation_obs = run_accumulation_index(
-        observations.chunk(dict(time=-1)), params.aggregate, period_months
+        observations.chunk(dict(time=-1)),
+        params.aggregate,
+        period_months,
+        (params.start_season, params.end_season),
     )
     logging.info(f"Completed accumulation")
 
