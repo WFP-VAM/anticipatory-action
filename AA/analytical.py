@@ -1,36 +1,30 @@
+import datetime
 import logging
+import os
+import warnings
 
 import click
 
 logging.basicConfig(level="INFO", force=True)
 
-import warnings
-
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
-import datetime
-import os
-import traceback
-
-import dask
 import numpy as np
 import pandas as pd
 import xarray as xr
-from config.params import Params
-from hip.analysis.analyses.drought import (
-    compute_probabilities,
-    concat_obs_levels,
-    get_accumulation_periods,
-    run_accumulation_index,
-    run_bias_correction,
-    run_gamma_standardization,
-)
+from hip.analysis.analyses.drought import (compute_probabilities,
+                                           concat_obs_levels,
+                                           get_accumulation_periods,
+                                           run_accumulation_index,
+                                           run_bias_correction,
+                                           run_gamma_standardization)
 from hip.analysis.aoi.analysis_area import AnalysisArea
+from hip.analysis.compute.utils import start_dask
 from hip.analysis.ops._statistics import evaluate_roc_forecasts
 
-from AA.helper_fns import compute_district_average, read_forecasts, read_observations
-
-from hip.analysis.compute.utils import start_dask
+from AA.helper_fns import (compute_district_average, read_forecasts,
+                           read_observations)
+from config.params import Params
 
 
 @click.command()
@@ -202,9 +196,9 @@ def verify_index_across_districts(
 
     if params.save_zarr:
         save_districts_results(
-            observations,
-            probabilities,
-            probabilities_bc,
+            obs_values,
+            probs,
+            probs_bc,
             area,
             issue,
             period_name,
@@ -252,20 +246,21 @@ def calculate_forecast_probabilities(
         levels_obs: xarray.Dataset, categorical observations at the pixel level for specified index
     """
 
-    # Remove 1980 season to harmonize datasets between different indicators 
+    # Remove 1980 season to harmonize datasets between different indicators
     forecasts = forecasts.where(
         forecasts.time.dt.date >= datetime.date(1981, params.start_season, 1), drop=True
     )
     observations = observations.where(
-        observations.time.dt.date >= datetime.date(1981, params.start_season, 1), drop=True
+        observations.time.dt.date >= datetime.date(1981, params.start_season, 1),
+        drop=True,
     )
 
     # Accumulation
     accumulation_fc = run_accumulation_index(
-        forecasts.chunk(dict(time=-1)), 
-        params.aggregate, 
-        period_months, 
-        (params.start_season, params.end_season), 
+        forecasts.chunk(dict(time=-1)),
+        params.aggregate,
+        period_months,
+        (params.start_season, params.end_season),
         forecasts=True,
     )
     accumulation_obs = run_accumulation_index(
@@ -274,7 +269,7 @@ def calculate_forecast_probabilities(
         period_months,
         (params.start_season, params.end_season),
     )
-    logging.info(f"Completed accumulation")
+    logging.info("Completed accumulation")
 
     # Anomaly
     anomaly_fc = run_gamma_standardization(
@@ -288,7 +283,7 @@ def calculate_forecast_probabilities(
         params.hist_anomaly_start,
         params.hist_anomaly_stop,
     )
-    logging.info(f"Completed anomaly")
+    logging.info("Completed anomaly")
 
     # Bias correction
     anomaly_bc = xr.concat(
@@ -297,8 +292,8 @@ def calculate_forecast_probabilities(
                 anomaly_fc,
                 anomaly_obs,
                 start_monitoring=params.start_monitoring,
-                year=params.monitoring_year,
-                issue=int(params.issue),
+                year=year,
+                issue=int(issue),
                 nearest_neighbours=8,
                 enso=True,
             )
@@ -306,7 +301,7 @@ def calculate_forecast_probabilities(
         ],
         dim="time",
     )
-    logging.info(f"Completed bias correction")
+    logging.info("Completed bias correction")
 
     if params.index == "dryspell":
         anomaly_fc *= -1
@@ -325,7 +320,7 @@ def calculate_forecast_probabilities(
     probabilities = probabilities.where(
         probabilities.year < params.calibration_year, drop=True
     )
-    logging.info(f"Completed probabilities")
+    logging.info("Completed probabilities")
 
     # Convert obs-based SPIs to booleans
     levels_obs = concat_obs_levels(
@@ -340,7 +335,7 @@ def calculate_forecast_probabilities(
     levels_obs["time"] = levels_obs.time.dt.year.values
     levels_obs = levels_obs.rename({"time": "year"})
     levels_obs = levels_obs.sel(year=probabilities.year)
-    logging.info(f"Completed categorical observations")
+    logging.info("Completed categorical observations")
 
     # Probabilities after Bias Correction
     probabilities_bc = (
@@ -354,7 +349,7 @@ def calculate_forecast_probabilities(
     probabilities_bc = probabilities_bc.where(
         probabilities_bc.year < params.calibration_year, drop=True
     )
-    logging.info(f"Completed probabilities with bias correction")
+    logging.info("Completed probabilities with bias correction")
 
     return probabilities, probabilities_bc, anomaly_obs, levels_obs
 
