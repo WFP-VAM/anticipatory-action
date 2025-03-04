@@ -17,6 +17,9 @@ monitoring_year: 2024
 # Last year of calibration period used for triggers selection (e.g. 2022 for 1981-2022)
 calibration_year: 2022
 
+# Month from which the monitoring starts (e.g. 5 if the first predictions are produced in May)
+start_monitoring: 5
+
 # Minimum length of indicator periods (ON, NDJ, JFMA...)
 min_index_period: 2
 
@@ -39,7 +42,7 @@ hist_anomaly_stop: "2018-12-31"
 save_zarr: true
 
 # Data path where to store intermediate and final outputs (should include data folder)
-data_path: "/s3/scratch/amine.barkaoui/aa" # .
+data_path: "." # /s3/scratch/amine.barkaoui/aa
 
 # Thresholds defining different drought intensities used in probabilities computation
 intensity_thresholds:

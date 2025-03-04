@@ -127,7 +127,7 @@ os.makedirs(
 # Define empty list for each issue month's ROC score dataframe
 fbf_roc_issues = []
 
-for issue in ["06"]: #params.issue_months:
+for issue in ["05", "06"]: # params.issue_months:
 
     forecasts = read_forecasts(
         area,
