@@ -296,9 +296,9 @@ def calculate_forecast_probabilities(
             run_bias_correction(
                 anomaly_fc,
                 anomaly_obs,
-                params.start_monitoring,
-                year,
-                int(issue),
+                start_monitoring=params.start_monitoring,
+                year=params.monitoring_year,
+                issue=int(params.issue),
                 nearest_neighbours=8,
                 enso=True,
             )

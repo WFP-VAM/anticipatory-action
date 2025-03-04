@@ -42,7 +42,7 @@ hist_anomaly_stop: "2018-12-31"
 save_zarr: true
 
 # Data path where to store intermediate and final outputs (should include data folder)
-data_path: "." # "/s3/scratch/amine.barkaoui/aa"
+data_path: "/s3/scratch/amine.barkaoui/aa" # "."
 
 # Thresholds defining different drought intensities used in probabilities computation
 intensity_thresholds:
