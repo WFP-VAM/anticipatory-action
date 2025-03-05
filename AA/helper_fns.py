@@ -32,21 +32,42 @@ def create_flexible_dataarray(start_season, end_season):
     return data_array
 
 
-def triggers_da_to_df(triggers_da, hr_da):
-    triggers_df = triggers_da.to_dataframe().drop(["spatial_ref"], axis=1).dropna()
-    triggers_df = triggers_df.reset_index().set_index(
-        ["index", "category", "district", "issue"]
-    )
-    triggers_df.columns = ["trigger", "trigger_value", "lead_time"]
-    hr_df = (
-        hr_da.to_dataframe()
+def triggers_da_to_df(triggers_da, score_da):
+    """Converts trigger and score DataArrays to a merged DataFrame.
+
+    This function processes two xarray DataArrays containing trigger values and scores,
+    converts them to pandas DataFrames, and merges them based on specified indices.
+
+    Args:
+        triggers_da (xarray.DataArray): DataArray containing trigger information.
+        score_da (xarray.DataArray): DataArray containing score information.
+
+    Returns:
+        pandas.DataFrame: A DataFrame combining trigger values and scores, with duplicates removed.
+    """
+    # Convert triggers to DataFrame, clean and set index
+    triggers_df = (
+        triggers_da.to_dataframe()
+        .drop(columns=["spatial_ref"], errors="ignore")
+        .dropna()
         .reset_index()
-        .drop("lead_time", axis=1)
-        .set_index(["district", "category", "issue", "index"])
+        .set_index(["index", "category", "district", "issue"])
+        .rename(columns={"bool": "trigger_value"})
     )
-    triggers_df = triggers_df.join(hr_df)
-    triggers_df = triggers_df.drop(["spatial_ref"], axis=1)
-    triggers_df.columns = ["trigger", "lead_time", "trigger_value", "HR"]
+
+    # Convert score to DataFrame, clean and set index
+    score_df = (
+        score_da.to_dataframe()
+        .reset_index()
+        .drop(columns=["lead_time"], errors="ignore")
+        .set_index(["district", "category", "issue", "index"])
+        .rename(columns={"bool": "HR"})
+    )
+
+    # Join triggers with score
+    triggers_df = triggers_df.join(score_df)
+
+    # Reset index and remove duplicates
     return triggers_df.reset_index().drop_duplicates()
 
 
