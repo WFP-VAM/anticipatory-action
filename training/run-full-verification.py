@@ -27,23 +27,22 @@
 
 # %cd ..
 
+import logging
 # +
 import os
-import logging
-import xarray as xr
+
+import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
-import matplotlib.pyplot as plt
-
-from config.params import Params
+import xarray as xr
+from hip.analysis.aoi.analysis_area import AnalysisArea
+from IPython.display import Markdown as md
 
 from AA.analytical import run_issue_verification
+from AA.helper_fns import get_coverage, read_forecasts, read_observations
 from AA.triggers import run_triggers_selection
-from AA.helper_fns import get_coverage, read_observations, read_forecasts
+from config.params import Params
 
-from hip.analysis.aoi.analysis_area import AnalysisArea
-
-from IPython.display import Markdown as md
 # -
 
 # **First, please define the country ISO code and the index of interest**
@@ -102,7 +101,9 @@ observations
 # If your dataset is not available via hip-analysis or if you already have stored locally the forecasts you would like to use, you can edit the path below and forecasts will be read in the analytical loop. Once again, make sure that your coordinates match those of the observations, that your forecasts are daily, and that you have 51 members. The name of the data variable must be 'tp'.
 
 
-forecasts_folder_path = f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}"
+forecasts_folder_path = (
+    f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}"
+)
 
 
 # Congratulations! You've completed the part that requires the most energy during this process. Now all you have to do is run the different cells and check the results!
@@ -127,7 +128,7 @@ os.makedirs(
 # Define empty list for each issue month's ROC score dataframe
 fbf_roc_issues = []
 
-for issue in ["05", "06"]: # params.issue_months:
+for issue in ["05", "06"]:  # params.issue_months:
 
     forecasts = read_forecasts(
         area,
@@ -142,7 +143,7 @@ for issue in ["05", "06"]: # params.issue_months:
             observations,
             issue,
             params,
-            gdf,
+            area,
         )
     )
     logging.info(
@@ -159,16 +160,16 @@ roc
 
 xr.open_zarr(f"{forecasts_folder_path}/05/{params.index} ON/probabilities.zarr")
 
-# We can also check how the CHIRPS-based anomalies that have been saved look like. They have been used to calculate the roc scores and will be used to select the triggers. 
+# We can also check how the CHIRPS-based anomalies that have been saved look like. They have been used to calculate the roc scores and will be used to select the triggers.
 
 xr.open_zarr(f"{forecasts_folder_path}/obs/{params.index} ON/observations.zarr")
 
-# By running the next cell, you can save the dataframe containing the ROC scores. We commented it here so we don't overwrite the file with all the issue months with a file that only contains a few issue months. 
+# By running the next cell, you can save the dataframe containing the ROC scores. We commented it here so we don't overwrite the file with all the issue months with a file that only contains a few issue months.
 
 
 fbf_roc.to_csv(
-   f"{params.data_path}/data/{params.iso}/auc/fbf.districts.roc.{params.index}.{params.calibration_year}.csv",
-   index=False,
+    f"{params.data_path}/data/{params.iso}/auc/fbf.districts.roc.{params.index}.{params.calibration_year}.csv",
+    index=False,
 )
 
 # Now we can read this dataframe locally to visualize the ROC scores.
@@ -186,9 +187,9 @@ display(
 display(roc)
 
 # Filter to include only 'AUC_best' scores and pivot the table
-roc_pivot = roc.loc[(roc.district.isin(params.districts)) & (roc.category.isin(['Moderate']))].pivot_table(
-    values="AUC_best", index="Index", columns="district"
-)
+roc_pivot = roc.loc[
+    (roc.district.isin(params.districts)) & (roc.category.isin(["Moderate"]))
+].pivot_table(values="AUC_best", index="Index", columns="district")
 
 # Plot the heatmap
 plt.figure(figsize=(10, 8))
@@ -209,14 +210,14 @@ plt.show()
 vulnerability = "NRT"  # "GT"
 
 
-run_triggers_selection(
-    params, vulnerability
-)
+run_triggers_selection(params, vulnerability)
 
 
 # Please have a look at the triggers dataset before any filtering by lead time / window.
 
-xr.open_zarr(f"{params.data_path}/data/{params.iso}/triggers/triggers_{params.index}_{params.calibration_year}_{vulnerability}.zarr")
+xr.open_zarr(
+    f"{params.data_path}/data/{params.iso}/triggers/triggers_{params.index}_{params.calibration_year}_{vulnerability}.zarr"
+)
 
 # Then, we keep the best pair for each lead time and the 4 best pairs of triggers per window of activation (in terms of Hit Rate first, and Failure Rate then).
 
@@ -232,7 +233,7 @@ triggers
 
 # Now, you are done with the processing of one index (SPI or DRYSPELL). So you can rerun everything from the beginning with the other index. If you've already done it, you can run the next cell so it will merge all the different outputs to provide you with the very final dataframe that will be used operationally.
 
-# The next cells merge SPI and DRYSPELL for each vulnerability level. So SPI is taken first, and if no SPI is available DRYSPELL is included. 
+# The next cells merge SPI and DRYSPELL for each vulnerability level. So SPI is taken first, and if no SPI is available DRYSPELL is included.
 
 # Read all GT csvs
 if os.path.exists(
@@ -288,7 +289,7 @@ if os.path.exists(
         index=False,
     )
 
-# Now we read dataframes for both vulnerability levels if they exist and merge them according to the vulnerability defined for each district in the config file. 
+# Now we read dataframes for both vulnerability levels if they exist and merge them according to the vulnerability defined for each district in the config file.
 
 # Read GT and NRT dataframes
 if os.path.exists(
@@ -332,13 +333,13 @@ triggers_full.to_csv(
 )
 
 
-triggers_full #.loc[triggers_full.issue_ready == 6]
+triggers_full  # .loc[triggers_full.issue_ready == 6]
 
 # ### Visualize coverage
 
 
 columns = ["W1-Mild", "W1-Moderate", "W1-Severe", "W2-Mild", "W2-Moderate", "W2-Severe"]
-#columns = ["W1-Normal", "W2-Normal"]
+# columns = ["W1-Normal", "W2-Normal"]
 get_coverage(triggers_full, triggers_full["district"].sort_values().unique(), columns)
 
 

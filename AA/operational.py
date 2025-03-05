@@ -18,7 +18,6 @@ import traceback
 
 import dask
 import pandas as pd
-from config.params import Params
 from hip.analysis.analyses.drought import (
     compute_probabilities,
     get_accumulation_periods,
@@ -35,6 +34,7 @@ from AA.helper_fns import (
     read_forecasts,
     read_observations,
 )
+from config.params import Params
 
 
 @click.command()
@@ -140,7 +140,7 @@ def run_full_index_pipeline(
         observations: xarray.Dataset, rainfall observations dataset
         params: Params, parameters class
         triggers: pd.DataFrame, selected triggers (output of triggers.py)
-        area: hip.analysis.aoi.analysis_area.AnalysisArea object
+        area: hip.analysis.AnalysisArea object with aoi information
         period_name: str, name of index period (eg "ON")
         period_months: tuple, months of index period (eg (10, 11))
     Returns:
@@ -157,12 +157,12 @@ def run_full_index_pipeline(
 
     # Build single xarray with merged unbiased/biased probabilities
     probs_by_district = merge_un_biased_probs(
-        probs_district.squeeze('time'), probs_bc_district.squeeze('time'), params, period_name
+        probs_district, probs_bc_district, params, period_name
     )
 
     # Merge probabilities with triggers
     probs_df, merged_df = merge_probabilities_triggers_dashboard(
-        probs_by_district.drop_vars('time'), triggers, params, period_name
+        probs_by_district, triggers, params, period_name
     )
 
     logging.info(
@@ -185,19 +185,20 @@ def run_aa_probabilities(forecasts, observations, params, period_months):
         probabilities: xarray.Dataset, raw probabilities for specified period
         probabilities_bc: xarray.Dataset, bias-corrected probabilities for specified period
     """
-    # Remove 1980 season to harmonize datasets between different indexes 
+    # Remove 1980 season to harmonize datasets between different indexes
     forecasts = forecasts.where(
         forecasts.time.dt.date >= datetime.date(1981, params.start_season, 1), drop=True
     )
     observations = observations.where(
-        observations.time.dt.date >= datetime.date(1981, params.start_season, 1), drop=True
+        observations.time.dt.date >= datetime.date(1981, params.start_season, 1),
+        drop=True,
     )
 
     # Accumulation
     accumulation_fc = run_accumulation_index(
-        forecasts.chunk(dict(time=-1)), 
-        params.aggregate, 
-        period_months, 
+        forecasts.chunk(dict(time=-1)),
+        params.aggregate,
+        period_months,
         (params.start_season, params.end_season),
         forecasts=True,
     )
@@ -207,7 +208,7 @@ def run_aa_probabilities(forecasts, observations, params, period_months):
         period_months,
         (params.start_season, params.end_season),
     )
-    logging.info(f"Completed accumulation")
+    logging.info("Completed accumulation")
 
     # Anomaly
     anomaly_fc = run_gamma_standardization(
@@ -221,7 +222,7 @@ def run_aa_probabilities(forecasts, observations, params, period_months):
         params.hist_anomaly_start,
         params.hist_anomaly_stop,
     )
-    logging.info(f"Completed anomaly")
+    logging.info("Completed anomaly")
 
     # Bias correction
     index_bc = run_bias_correction(
@@ -233,7 +234,7 @@ def run_aa_probabilities(forecasts, observations, params, period_months):
         nearest_neighbours=8,
         enso=True,
     )
-    logging.info(f"Completed bias correction")
+    logging.info("Completed bias correction")
 
     if params.index == "dryspell":
         anomaly_fc *= -1
@@ -250,7 +251,7 @@ def run_aa_probabilities(forecasts, observations, params, period_months):
     probabilities_bc = compute_probabilities(
         index_bc, levels=params.intensity_thresholds
     ).round(2)
-    logging.info(f"Completed probabilities")
+    logging.info("Completed probabilities")
 
     return probabilities, probabilities_bc
 

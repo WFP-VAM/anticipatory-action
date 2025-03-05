@@ -5,11 +5,11 @@
 #       extension: .py
 #       format_name: light
 #       format_version: '1.5'
-#       jupytext_version: 1.16.2
+#       jupytext_version: 1.16.7
 #   kernelspec:
-#     display_name: hip-analysis-dev-env
+#     display_name: hdc
 #     language: python
-#     name: python3
+#     name: conda-env-hdc-py
 # ---
 
 # This notebook is not used operationally or for any validation, its only purpose is to have a clear understanding of the core functions of the AA workflow. The outputs and dimensions of each main step can thus be identified here.
@@ -18,38 +18,30 @@
 
 # %cd ..
 
+import datetime
 # +
 import os
-import datetime
+
 import pandas as pd
-
+from AA.helper_fns import (compute_district_average,
+                           merge_probabilities_triggers_dashboard,
+                           merge_un_biased_probs, read_forecasts,
+                           read_observations)
 from config.params import Params
-
-from AA.helper_fns import (
-    read_forecasts,
-    read_observations,
-    aggregate_by_district,
-    merge_un_biased_probs,
-    merge_probabilities_triggers_dashboard,
-)
-
-from hip.analysis.analyses.drought import (
-    get_accumulation_periods,
-    run_accumulation_index,
-    run_gamma_standardization,
-    run_bias_correction,
-    compute_probabilities,
-)
-
+from hip.analysis.analyses.drought import (compute_probabilities,
+                                           get_accumulation_periods,
+                                           run_accumulation_index,
+                                           run_bias_correction,
+                                           run_gamma_standardization)
 from hip.analysis.aoi.analysis_area import AnalysisArea
+
 # -
 
 # **Define parameters**
 
 # The `config/{country}_config.yaml` file gathers all the parameters used in the operational script and that can be customized. For example, the *monitoring_year*, the list of districts or the intensity levels can be defined in that file.
 
-params = Params(iso='ZWE', issue=10, index='SPI')
-params.monitoring_year = 2023
+params = Params(iso="MOZ", issue=5, index="SPI")
 
 # **Read shapefile**
 
@@ -92,7 +84,9 @@ observations
 # Now that we got all the data we need, let's read the triggers file so we can merge the probabilities with it once we have them.
 
 # Read triggers file
-if os.path.exists(f"{params.data_path}/data/{params.iso}/probs/aa_probabilities_triggers_pilots.csv"):
+if os.path.exists(
+    f"{params.data_path}/data/{params.iso}/probs/aa_probabilities_triggers_pilots.csv"
+):
     triggers_df = pd.read_csv(
         f"{params.data_path}/data/{params.iso}/probs/aa_probabilities_triggers_pilots.csv",
     )
@@ -117,35 +111,35 @@ accumulation_periods
 # Here we focus on the pipeline for one indicator (one period) so we select a single element from the above dictionary (November-December using October forecasts).
 
 # Get single use case
-period_name, period_months = list(accumulation_periods.items())[4]
+period_name, period_months = list(accumulation_periods.items())[1]  # [4]
 period_name, period_months
 
 # **Run accumulation (sum for SPI)**
 
-# Remove 1980 season to harmonize observations between different indexes 
-if int(params.issue) >= params.start_monitoring:
-    observations = observations.where(
-        observations.time.dt.date >= datetime.date(1981, 10, 1), drop=True
-    )
+# Remove 1980 season to harmonize datasets between different indexes
+forecasts = forecasts.where(
+    forecasts.time.dt.date >= datetime.date(1981, params.start_season, 1), drop=True
+)
+observations = observations.where(
+    observations.time.dt.date >= datetime.date(1981, params.start_season, 1), drop=True
+)
 
 # Accumulation
 accumulation_fc = run_accumulation_index(
-    forecasts.chunk(dict(time=-1)), params.aggregate, period_months, forecasts=True
+    forecasts.chunk(dict(time=-1)),
+    params.aggregate,
+    period_months,
+    (params.start_season, params.end_season),
+    forecasts=True,
 )
 accumulation_obs = run_accumulation_index(
-    observations.chunk(dict(time=-1)), params.aggregate, period_months
+    observations.chunk(dict(time=-1)),
+    params.aggregate,
+    period_months,
+    (params.start_season, params.end_season),
 )
-
-accumulation_fc
-
-accumulation_obs
 
 # **Run standardization (SPI)**
-
-# Remove inconsistent observations
-accumulation_obs = accumulation_obs.sel(
-    time=slice(datetime.date(1979, 1, 1), datetime.date(params.monitoring_year - 1, 12, 31))
-)
 
 # Anomaly
 anomaly_fc = run_gamma_standardization(
@@ -160,23 +154,18 @@ anomaly_obs = run_gamma_standardization(
     params.hist_anomaly_stop,
 )
 
-anomaly_fc
-
-anomaly_obs
-
 # **Run bias correction**
 
 # Bias correction
 index_bc = run_bias_correction(
     anomaly_fc,
     anomaly_obs,
-    params.end_season,
-    params.monitoring_year,
-    int(params.issue),
+    start_monitoring=params.start_monitoring,
+    year=params.monitoring_year,
+    issue=int(params.issue),
     nearest_neighbours=8,
     enso=True,
 )
-display(index_bc)
 
 # **Run probabilities**
 
@@ -201,23 +190,23 @@ display(probabilities_bc)
 
 # **Admin-2 level aggregation**
 
-# +
-# Aggregate by district
-probs_district = aggregate_by_district(probabilities, gdf, params)
-probs_bc_district = aggregate_by_district(probabilities_bc, gdf, params)
+probs_district = compute_district_average(probabilities, area)
+
+probs_bc_district = compute_district_average(probabilities_bc, area)
 
 # Build single xarray with merged unbiased/biased probabilities
 probs_by_district = merge_un_biased_probs(
-    probs_district, probs_bc_district, params, period_name
+    probs_district.squeeze("time"),
+    probs_bc_district.squeeze("time"),
+    params,
+    period_name,
 )
-display(probs_by_district)
-# -
 
 # **Dataframe formatting**
 
 # Merge probabilities with triggers
 probs_df, merged_df = merge_probabilities_triggers_dashboard(
-    probs_by_district, triggers_df, params, period_name
+    probs_by_district.drop_vars("time"), triggers_df, params, period_name
 )
 
 probs_df
