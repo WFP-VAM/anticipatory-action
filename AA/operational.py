@@ -18,17 +18,22 @@ import traceback
 
 import dask
 import pandas as pd
-from hip.analysis.analyses.drought import (compute_probabilities,
-                                           get_accumulation_periods,
-                                           run_accumulation_index,
-                                           run_bias_correction,
-                                           run_gamma_standardization)
+from hip.analysis.analyses.drought import (
+    compute_probabilities,
+    get_accumulation_periods,
+    run_accumulation_index,
+    run_bias_correction,
+    run_gamma_standardization,
+)
 from hip.analysis.aoi.analysis_area import AnalysisArea
 
-from AA.helper_fns import (compute_district_average,
-                           merge_probabilities_triggers_dashboard,
-                           merge_un_biased_probs, read_forecasts,
-                           read_observations)
+from AA.helper_fns import (
+    compute_district_average,
+    merge_probabilities_triggers_dashboard,
+    merge_un_biased_probs,
+    read_forecasts,
+    read_observations,
+)
 from config.params import Params
 
 
@@ -135,7 +140,7 @@ def run_full_index_pipeline(
         observations: xarray.Dataset, rainfall observations dataset
         params: Params, parameters class
         triggers: pd.DataFrame, selected triggers (output of triggers.py)
-        area: hip.analysis.aoi.analysis_area.AnalysisArea object
+        area: hip.analysis.AnalysisArea object with aoi information
         period_name: str, name of index period (eg "ON")
         period_months: tuple, months of index period (eg (10, 11))
     Returns:

@@ -12,18 +12,19 @@ warnings.simplefilter(action="ignore", category=FutureWarning)
 import numpy as np
 import pandas as pd
 import xarray as xr
-from hip.analysis.analyses.drought import (compute_probabilities,
-                                           concat_obs_levels,
-                                           get_accumulation_periods,
-                                           run_accumulation_index,
-                                           run_bias_correction,
-                                           run_gamma_standardization)
+from hip.analysis.analyses.drought import (
+    compute_probabilities,
+    concat_obs_levels,
+    get_accumulation_periods,
+    run_accumulation_index,
+    run_bias_correction,
+    run_gamma_standardization,
+)
 from hip.analysis.aoi.analysis_area import AnalysisArea
 from hip.analysis.compute.utils import start_dask
 from hip.analysis.ops._statistics import evaluate_roc_forecasts
 
-from AA.helper_fns import (compute_district_average, read_forecasts,
-                           read_observations)
+from AA.helper_fns import compute_district_average, read_forecasts, read_observations
 from config.params import Params
 
 
@@ -101,7 +102,7 @@ def run_issue_verification(forecasts, observations, issue, params, area):
         observations: xarray.Dataset, rainfall observations dataset
         issue: str, issue month of forecasts to analyse
         params: Params, parameters class
-        area: hip.analysis.aoi.analysis_area.AnalysisArea object
+        area: hip.analysis.AnalysisArea object with aoi information
     Returns:
         fbf_issue: pandas.DataFrame, dataframe with roc scores for all indexes, districts, categories and a specified issue month
     """
@@ -173,7 +174,7 @@ def verify_index_across_districts(
         forecasts: xarray.Dataset, rainfall forecasts dataset for specific issue month
         observations: xarray.Dataset, rainfall observations dataset
         params: Params, parameters class
-        area: hip.analysis.aoi.analysis_area.AnalysisArea object
+        area: hip.analysis.AnalysisArea object with aoi information
         period_name: str, name of index period (eg "ON")
         period_months: tuple, months of index period (eg (10, 11))
     Returns:
