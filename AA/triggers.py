@@ -1,11 +1,8 @@
-import sys
-sys.path.append('..')
-
 import logging
 
 import click
 
-logging.basicConfig(level="INFO")
+logging.basicConfig(level="INFO", force=True)
 
 import warnings
 
@@ -18,15 +15,16 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 from config.params import Params
-from dask.distributed import Client
-from hip.analysis.analyses.drought import (concat_obs_levels,
-                                           get_accumulation_periods)
+from hip.analysis.analyses.drought import concat_obs_levels, get_accumulation_periods
 from hip.analysis.aoi.analysis_area import AnalysisArea
 from numba import jit
-from numba.core import types
-from numba.typed import Dict
 
-from helper_fns import merge_un_biased_probs, triggers_da_to_df
+from AA.helper_fns import (
+    create_flexible_dataarray,
+    merge_un_biased_probs,
+    triggers_da_to_df,
+    format_triggers_df_for_dashboard,
+)
 
 
 @click.command()
@@ -34,15 +32,18 @@ from helper_fns import merge_un_biased_probs, triggers_da_to_df
 @click.argument("index", default="SPI")
 @click.argument("vulnerability", default="GT")
 def run(country, index, vulnerability):
-    client = Client()
-
     params = Params(iso=country, index=index)
 
+    run_triggers_selection(params, vulnerability)
+
+
+def run_triggers_selection(params, vulnerability):
+    # have function that takes obs / probs and returns triggers
     area = AnalysisArea.from_admin_boundaries(
-        iso3=country.upper(),
+        iso3=params.iso.upper(),
         admin_level=2,
         resolution=0.25,
-        datetime_range=f"1981-01-01/{params.year}-06-30",
+        datetime_range=f"1981-01-01/{params.calibration_year}-06-30",
     )
 
     gdf = area.get_dataset([area.BASE_AREA_DATASET])
@@ -52,40 +53,25 @@ def run(country, index, vulnerability):
     admin1.columns = ["Code_1", "adm1_name"]
     gdf = pd.merge(gdf, admin1, how="left", left_on=["adm1_Code"], right_on=["Code_1"])
 
-    # TODO make this generic
-    rfh = xr.DataArray(
-        np.arange(1, 10),
-        coords=dict(
-            time=(
-                ["time"],
-                pd.date_range(
-                    f"{params.start_season}/1/1990",
-                    f"{params.end_season + 1}/28/1991",
-                    freq="M",
-                ),
-            )
-        ),
-    )
+    rfh = create_flexible_dataarray(params.start_season, params.end_season)
     periods = get_accumulation_periods(
         rfh, 0, 0, params.min_index_period, params.max_index_period
     )
 
     obs = read_aggregated_obs(
-        f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/zarr/{params.year}/obs",
+        f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}/obs",
         params,
     )
+
     obs = obs.assign_coords(
         lead_time=("index", [periods[i.split(" ")[-1]][0] for i in obs.index.values])
     )
-    # Tmp fix of obs category
-    if country == "MOZ":
-        obs["category"] = ["Severo", "Moderado", "Leve"]
     logging.info(
-        f"Completed reading of aggregated observations for the whole {params.iso} country"
+        f"Completed reading of aggregated observations for the whole {params.iso.upper()} country"
     )
 
     probs_ds = read_aggregated_probs(
-        f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/zarr/{params.year}",
+        f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}",
         params,
     )
     probs = xr.concat(
@@ -96,7 +82,7 @@ def run(country, index, vulnerability):
         dim="index",
     )
     logging.info(
-        f"Completed reading of aggregated probabilities for the whole {params.iso} country"
+        f"Completed reading of aggregated probabilities for the whole {params.iso.upper()} country"
     )
 
     # Filter year dimension: temporary before harmonization with analytical script
@@ -104,12 +90,15 @@ def run(country, index, vulnerability):
 
     # Trick to align couples of issue months inside apply_ufunc
     probs_ready = probs.sel(
-        issue=np.uint8(params.issue)[:-1]
+        issue=np.uint8(params.issue_months)[:-1]
     ).load()  # use start/end season here
-    probs_set = probs.sel(issue=np.uint8(params.issue)[1:]).load()
+    probs_set = probs.sel(issue=np.uint8(params.issue_months)[1:]).load()
     probs_set["issue"] = [i - 1 if i != 1 else 12 for i in probs_set.issue.values]
 
     # Distribute computation of triggers
+    logging.info(
+        f"Starting computation of triggers the whole {params.iso.upper()} country..."
+    )
     trigs, score = xr.apply_ufunc(
         find_optimal_triggers,
         obs.bool,
@@ -139,11 +128,11 @@ def run(country, index, vulnerability):
     score["index"] = score.index.astype(str)
 
     trigs.to_zarr(
-        f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/triggers/triggers_{params.index}_{params.year}_{vulnerability}.zarr",
+        f"{params.data_path}/data/{params.iso}/triggers/triggers_{params.index}_{params.calibration_year}_{vulnerability}.zarr",
         mode="w",
     )
     score.to_zarr(
-        f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/triggers/score_{params.index}_{params.year}_{vulnerability}.zarr",
+        f"{params.data_path}/data/{params.iso}/triggers/score_{params.index}_{params.calibration_year}_{vulnerability}.zarr",
         mode="w",
     )
     logging.info(f"Triggers and score datasets saved as a back-up")
@@ -154,15 +143,11 @@ def run(country, index, vulnerability):
 
     # Format trigs and score into a dataframe
     trigs_df = triggers_da_to_df(trigs, score).dropna()
-    trigs_df = trigs_df.loc[
-        trigs_df['HR'] < 0
-    ]  # remove row when trigger not found (penalty)
-    
+    trigs_df = trigs_df.query("HR < 0")  # remove row when trigger not found (penalty)
+
     # Add window information depending on district
     trigs_df["Window"] = [
-        get_window_district(
-            params.iso, params.index, gdf, row["index"].split(" ")[-1], row.district
-        )
+        get_window_district(gdf, row["index"].split(" ")[-1], row.district, params)
         for _, row in trigs_df.iterrows()
     ]
 
@@ -189,67 +174,18 @@ def run(country, index, vulnerability):
         vulnerability,
         params,
     )
-    
+
     # Format triggers dataframe for dashboard
     triggers = format_triggers_df_for_dashboard(df_window, params)
-    
+
     triggers.to_csv(
-        f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/triggers/triggers.{params.index}.{params.year}.{vulnerability}.csv",
+        f"{params.data_path}/data/{params.iso}/triggers/triggers.{params.index}.{params.calibration_year}.{vulnerability}.csv",
         index=False,
     )
 
     logging.info(
         f"Triggers dataframe saved as a csv for {params.index} {vulnerability}"
     )
-
-    client.close()
-
-
-def _get_skill_requirements(iso):
-    # Define some constants
-    # The Dict.empty() constructs a typed dictionary.
-    TOLERANCE = Dict.empty(
-        key_type=types.unicode_type,
-        value_type=types.f8,
-    )
-    GENERAL_T = Dict.empty(
-        key_type=types.unicode_type,
-        value_type=types.f8,
-    )
-    NON_REGRET_T = Dict.empty(
-        key_type=types.unicode_type,
-        value_type=types.f8,
-    )
-
-    if iso == "MOZ":
-        TOLERANCE["Normal"] = 0
-        TOLERANCE["Leve"] = 0
-        TOLERANCE["Moderado"] = -0.44
-        TOLERANCE["Severo"] = -0.68
-        GENERAL_T["HR"] = 0.5
-        GENERAL_T["SR"] = 0.65
-        GENERAL_T["FR"] = 0.35
-        GENERAL_T["RP"] = 4.0
-        NON_REGRET_T["HR"] = 0.5
-        NON_REGRET_T["SR"] = 0.55
-        NON_REGRET_T["FR"] = 0.45
-        NON_REGRET_T["RP"] = 3.0  # W/out exceptions: HR=0.65
-
-    elif iso == "ZWE":
-        TOLERANCE["Normal"] = 0
-        TOLERANCE["Mild"] = 0
-        TOLERANCE["Moderate"] = -0.44
-        TOLERANCE["Severe"] = -0.68
-        GENERAL_T["HR"] = 0.50
-        GENERAL_T["SR"] = 0.55
-        GENERAL_T["FR"] = 0.45
-        GENERAL_T["RP"] = 4.0  # W/out exceptions: HR=0.55
-        NON_REGRET_T["HR"] = 0.50
-        NON_REGRET_T["SR"] = 0.55
-        NON_REGRET_T["FR"] = 0.45
-        NON_REGRET_T["RP"] = 3.0  # W/out exceptions: HR=0.70
-
-    return TOLERANCE, GENERAL_T, NON_REGRET_T
 
 
 @jit(nopython=True, cache=True)
@@ -473,8 +409,6 @@ def find_optimal_triggers(
         np.arange(threshold_range[0], threshold_range[1], step=0.01),
     )
 
-    TOLERANCE, GENERAL_T, NON_REGRET_T = _get_skill_requirements(params.iso)
-
     # Launch research
     best_triggers, best_score = brute_numba(
         objective,
@@ -488,9 +422,9 @@ def find_optimal_triggers(
             issue,
             category,
             vulnerability,
-            TOLERANCE,
-            GENERAL_T,
-            NON_REGRET_T,
+            params.tolerance,
+            params.general_t,
+            params.non_regret_t,
         ),
     )
 
@@ -500,8 +434,6 @@ def find_optimal_triggers(
 def filter_triggers_by_window(
     df_leadtime, probs_ready, probs_set, obs, vulnerability, params
 ):
-    TOLERANCE, GENERAL_T, NON_REGRET_T = _get_skill_requirements(params.iso)
-
     def sel_row(da, row, index, issue=None):
         da_sel = da.sel(district=row.district.unique(), index=index)
         if "issue" in da.dims:
@@ -525,9 +457,9 @@ def filter_triggers_by_window(
                     sel_row(probs_ready.prob, tdf, ind, issue).issue.values[0],
                     str(sel_row(obs.bool, tdf, ind).category.values[0]),
                     vulnerability,
-                    TOLERANCE,
-                    GENERAL_T,
-                    NON_REGRET_T,
+                    params.tolerance,
+                    params.general_t,
+                    params.non_regret_t,
                     sorting=True,
                 )
             )
@@ -553,90 +485,24 @@ def filter_triggers_by_window(
     return pd.concat(triggers_window_list)
 
 
-WINDOW1_SPI_MOZ = {
-    "Cabo_Delgado": ["DJ", "DJF", "JF", "JFM", "FM"],  # North
-    "Gaza": ["ON", "OND", "ND", "NDJ", "DJ"],  # South
-    "Inhambane": ["ON", "OND", "ND", "NDJ", "DJ"],
-    "Manica": ["ND", "NDJ", "DJ", "DJF", "JF"],  # Central
-    "Maputo": ["ON", "OND", "ND", "NDJ", "DJ"],
-    "Maputo City": ["ON", "OND", "ND", "NDJ", "DJ"],
-    "Nampula": ["DJ", "DJF", "JF", "JFM", "FM"],
-    "Niassa": ["DJ", "DJF", "JF", "JFM", "FM"],
-    "Sofala": ["ND", "NDJ", "DJ", "DJF", "JF"],
-    "Tete": ["ND", "NDJ", "DJ", "DJF", "JF"],
-    "Zambezia": ["ND", "NDJ", "DJ", "DJF", "JF"],
-}
-
-WINDOW1_DRY_MOZ = {
-    "Cabo_Delgado": ["DJ", "JF", "FM"],  # North
-    "Gaza": [],  # South
-    "Inhambane": [],
-    "Manica": ["DJ", "JF"],  # Central
-    "Maputo": [],
-    "Maputo City": [],
-    "Nampula": ["DJ", "JF", "FM"],
-    "Niassa": ["DJ", "JF", "FM"],
-    "Sofala": ["DJ", "JF"],
-    "Tete": ["DJ", "JF"],
-    "Zambezia": ["DJ", "JF"],
-}
-
-WINDOW2_SPI_MOZ = {
-    "Cabo_Delgado": ["FMA", "MA", "MAM", "AM", "AMJ", "MJ"],  # North
-    "Gaza": ["DJF", "JF", "JFM", "FM", "FMA", "MA"],  # South
-    "Inhambane": ["DJF", "JF", "JFM", "FM", "FMA", "MA"],
-    "Manica": ["JFM", "FM", "FMA", "MA", "MAM", "AM"],  # Central
-    "Maputo": ["DJF", "JF", "JFM", "FM", "FMA", "MA"],
-    "Maputo City": ["DJF", "JF", "JFM", "FM", "FMA", "MA"],
-    "Nampula": ["FMA", "MA", "MAM", "AM", "AMJ", "MJ"],
-    "Niassa": ["FMA", "MA", "MAM", "AM", "AMJ", "MJ"],
-    "Sofala": ["JFM", "FM", "FMA", "MA", "MAM", "AM"],
-    "Tete": ["JFM", "FM", "FMA", "MA", "MAM", "AM"],
-    "Zambezia": ["JFM", "FM", "FMA", "MA", "MAM", "AM"],
-}
-
-WINDOW2_DRY_MOZ = {
-    "Cabo_Delgado": ["MA", "AM", "MJ"],  # North
-    "Gaza": ["DJ", "JF", "FM", "MA"],  # South
-    "Inhambane": ["DJ", "JF", "FM", "MA"],
-    "Manica": ["JF", "FM", "MA", "AM"],  # Central
-    "Maputo": ["DJ", "JF", "FM", "MA"],
-    "Maputo City": ["DJ", "JF", "FM", "MA"],
-    "Nampula": ["MA", "AM", "MJ"],
-    "Niassa": ["MA", "AM", "MJ"],
-    "Sofala": ["JF", "FM", "MA", "AM"],
-    "Tete": ["JF", "FM", "MA", "AM"],
-    "Zambezia": ["JF", "FM", "MA", "AM"],
-}
-
-WINDOW1_SPI_ZWE = ["ON", "OND", "ND", "NDJ"]
-WINDOW2_SPI_ZWE = ["DJ", "DJF", "JF", "JFM", "FM", "FMA"]
-
-WINDOW1_DRY_ZWE = []
-WINDOW2_DRY_ZWE = ["DJ", "JF", "FM"]
-
-
-def get_window_district(iso, index, shp, indicator, district):
+def get_window_district(shp, indicator, district, params):
     province = shp.loc[shp.Name == district].adm1_name.unique()[0]
-    if iso == "MOZ":
-        if (index == "spi") and (indicator in WINDOW1_SPI_MOZ[province]):
+
+    # Get window1 and window2 definitions
+    window1 = params.get_windows("window1")
+    window2 = params.get_windows("window2")
+
+    if isinstance(window1, dict):
+        if indicator in window1[province]:
             return "Window 1"
-        elif (index == "spi") and (indicator in WINDOW2_SPI_MOZ[province]):
-            return "Window 2"
-        elif (index == "dryspell") and (indicator in WINDOW1_DRY_MOZ[province]):
-            return "Window 1"
-        elif (index == "dryspell") and (indicator in WINDOW2_DRY_MOZ[province]):
+        elif indicator in window2[province]:
             return "Window 2"
         else:
             return np.nan
-    if iso == "ZWE":
-        if (index == "spi") and (indicator in WINDOW1_SPI_ZWE):
+    else:
+        if indicator in window1:
             return "Window 1"
-        elif (index == "spi") and (indicator in WINDOW2_SPI_ZWE):
-            return "Window 2"
-        elif (index == "dryspell") and (indicator in WINDOW1_DRY_ZWE):
-            return "Window 1"
-        elif (index == "dryspell") and (indicator in WINDOW2_DRY_ZWE):
+        elif indicator in window2:
             return "Window 2"
         else:
             return np.nan
@@ -657,12 +523,12 @@ def read_aggregated_obs(path_to_zarr, params):
 
     obs = xr.Dataset({"bool": obs_bool, "val": obs_val})
     obs["time"] = [pd.to_datetime(t).year for t in obs.time.values]
-    obs["index"] = [i.split("/")[-2] for i in list_val_paths]
+    obs["index"] = [os.path.split(os.path.dirname(i))[-1] for i in list_val_paths]
     return obs
 
 
 def read_aggregated_probs(path_to_zarr, params):
-    list_issue_paths = glob.glob(f"{path_to_zarr}/*")[:-1]  # remove obs folder
+    list_issue_paths = sorted(glob.glob(f"{path_to_zarr}/*"))[:-1]  # Last one is the `obs` folder.
     list_index = {}
     for l in list_issue_paths:
         list_index_raw = [
@@ -673,7 +539,7 @@ def read_aggregated_probs(path_to_zarr, params):
             os.path.join(i, "probabilities_bc.zarr")
             for i in glob.glob(f"{l}/{params.index} *")
         ]
-        index_names = [i.split("/")[-2] for i in list_index_raw]
+        index_names = [os.path.split(os.path.dirname(i))[-1] for i in list_index_raw]
 
         try:
             index_raw = xr.open_mfdataset(
@@ -693,7 +559,7 @@ def read_aggregated_probs(path_to_zarr, params):
 
             ds_index = xr.Dataset({"raw": index_raw, "bc": index_bc})
             ds_index["index"] = index_names
-            list_index[int(l.split("/")[-1])] = ds_index
+            list_index[int(os.path.split(l)[-1])] = ds_index
         except:
             continue
 

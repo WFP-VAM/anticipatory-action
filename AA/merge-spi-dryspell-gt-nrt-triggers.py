@@ -5,11 +5,11 @@
 #       extension: .py
 #       format_name: light
 #       format_version: '1.5'
-#       jupytext_version: 1.16.1
+#       jupytext_version: 1.16.4
 #   kernelspec:
-#     display_name: hdc
+#     display_name: hip-workshop
 #     language: python
-#     name: conda-env-hdc-py
+#     name: hip-workshop
 # ---
 
 # ### Get final triggers file by merging:
@@ -17,159 +17,129 @@
 # 2. GT/NRT triggers dataframes based on district vulnerability
 
 
+# %cd ..
+
 # +
 import pandas as pd
 from config.params import Params
+import os
 
-from helper_fns import merge_un_biased_probs, triggers_da_to_df
+from AA.helper_fns import format_triggers_df_for_dashboard, get_coverage, merge_un_biased_probs, triggers_da_to_df
 # -
 
 # Read GT and NRT
 params = Params(iso="MOZ", index="SPI")
 
-# +
-# Read all csvs
-spigt = pd.read_csv(
-    f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/triggers/triggers.spi.{params.year}.GT.csv"
-)
-drygt = pd.read_csv(
-    f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/triggers/triggers.dryspell.{params.year}.GT.csv"
-)
-trigs_gt = pd.concat([spigt, drygt])
-trigs_gt["vulnerability"] = "GT"
+params.iso
 
-spinrt = pd.read_csv(
-    f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/triggers/triggers.spi.{params.year}.NRT.csv"
-)
-drynrt = pd.read_csv(
-    f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/triggers/triggers.dryspell.{params.year}.NRT.csv"
-)
-trigs_nrt = pd.concat([spinrt, drynrt])
-trigs_nrt["vulnerability"] = "NRT"
+# +
+# ### Get and save final dataframe
+
+# Now, you are done with the processing of one index (SPI or DRYSPELL). So you can rerun everything from the beginning with the other index. If you've already done it, you can run the next cell so it will merge all the different outputs to provide you with the very final dataframe that will be used operationally.
+
+# The next cells merge SPI and DRYSPELL for each vulnerability level. So SPI is taken first, and if no SPI is available DRYSPELL is included. 
+
+# Read all GT csvs
+if os.path.exists(
+    f"{params.data_path}/data/{params.iso}/triggers/triggers.spi.{params.calibration_year}.GT.csv"
+):
+    spigt = pd.read_csv(
+        f"{params.data_path}/data/{params.iso}/triggers/triggers.spi.{params.calibration_year}.GT.csv"
+    )
+    drygt = pd.read_csv(
+        f"{params.data_path}/data/{params.iso}/triggers/triggers.dryspell.{params.calibration_year}.GT.csv"
+    )
+    trigs_gt = pd.concat([spigt, drygt])
+    trigs_gt["vulnerability"] = "GT"
+
+    # Keep SPI by default and DRYSPELL when not available for GT
+    gt_merged = pd.concat(
+        [
+            wcd.sort_values("index", ascending=False).head(4)
+            for (d, c, w), wcd in trigs_gt.groupby(["district", "category", "window"])
+        ]
+    )
+
+    # Save GT
+    gt_merged.to_csv(
+        f"{params.data_path}/data/{params.iso}/triggers/triggers.spi.dryspell.{params.calibration_year}.GT.csv",
+        index=False,
+    )
 # -
 
-# Keep SPI by default and DRYSPELL when not available for GT
-gt_merged = pd.concat(
-    [
-        wcd.sort_values("index", ascending=False).head(8)
-        for (d, c, w), wcd in trigs_gt.groupby(["district", "category", "Window"])
-    ]
-)
+gt_merged.head()
 
-# Keep SPI by default and DRYSPELL when not available for NRT
-nrt_merged = pd.concat(
-    [
-        wcd.sort_values("index", ascending=False).head(8)
-        for (d, c, w), wcd in trigs_nrt.groupby(["district", "category", "Window"])
-    ]
-)
+# Read all NRT csvs
+if os.path.exists(
+    f"{params.data_path}/data/{params.iso}/triggers/triggers.spi.{params.calibration_year}.NRT.csv"
+):
+    spinrt = pd.read_csv(
+        f"{params.data_path}/data/{params.iso}/triggers/triggers.spi.{params.calibration_year}.NRT.csv"
+    )
+    drynrt = pd.read_csv(
+        f"{params.data_path}/data/{params.iso}/triggers/triggers.dryspell.{params.calibration_year}.NRT.csv"
+    )
+    trigs_nrt = pd.concat([spinrt, drynrt])
+    trigs_nrt["vulnerability"] = "NRT"
 
-# Save GT
-gt_merged.to_csv(
-    f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/triggers/triggers.spi.dryspell.{params.year}.GT.csv",
-    index=False,
-)
+    # Keep SPI by default and DRYSPELL when not available for NRT
+    nrt_merged = pd.concat(
+        [
+            wcd.sort_values("index", ascending=False).head(4)
+            for (d, c, w), wcd in trigs_nrt.groupby(["district", "category", "window"])
+        ]
+    )
 
-# Save NRT
-nrt_merged.to_csv(
-    f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/triggers/triggers.spi.dryspell.{params.year}.NRT.csv",
-    index=False,
-)
+    # Save NRT
+    nrt_merged.to_csv(
+        f"{params.data_path}/data/{params.iso}/triggers/triggers.spi.dryspell.{params.calibration_year}.NRT.csv",
+        index=False,
+    )
 
-# Filter vulnerability based on district
+nrt_merged.head()
 
-gt_merged = pd.read_csv(
-    f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/triggers/triggers.spi.dryspell.{params.year}.GT.csv",
-)
-nrt_merged = pd.read_csv(
-    f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/triggers/triggers.spi.dryspell.{params.year}.NRT.csv",
-)
+# +
+# Now we read dataframes for both vulnerability levels if they exist and merge them according to the vulnerability defined for each district in the config file. 
 
-# Merge GT and NRT
+# Read GT and NRT dataframes
+if os.path.exists(
+    f"{params.data_path}/data/{params.iso}/triggers/triggers.spi.dryspell.{params.calibration_year}.GT.csv"
+):
+    gt_merged = pd.read_csv(
+        f"{params.data_path}/data/{params.iso}/triggers/triggers.spi.dryspell.{params.calibration_year}.GT.csv",
+    )
+if os.path.exists(
+    f"{params.data_path}/data/{params.iso}/triggers/triggers.spi.dryspell.{params.calibration_year}.NRT.csv"
+):
+    nrt_merged = pd.read_csv(
+        f"{params.data_path}/data/{params.iso}/triggers/triggers.spi.dryspell.{params.calibration_year}.NRT.csv",
+    )
+
+# Filter vulnerability based on district: merge GT and NRT
 triggers_full = pd.DataFrame()
 for d, v in params.districts_vulnerability.items():
     if v == "GT":
-        triggers_full = pd.concat(
-            [triggers_full, gt_merged.loc[gt_merged.district == d]]
-        )
+        if params.iso == "zwe":
+            tmp = gt_merged.loc[
+                (gt_merged.district == d) & (gt_merged.category == "Moderate")
+            ]
+        else:
+            tmp = gt_merged.loc[gt_merged.district == d]
+        triggers_full = pd.concat([triggers_full, tmp])
     else:
-        triggers_full = pd.concat(
-            [triggers_full, nrt_merged.loc[nrt_merged.district == d]]
-        )
-
-# Filter vulnerability by taking ET first
-
-gt_merged = pd.read_csv(
-    f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/triggers/triggers.spi.dryspell.{params.year}.GT.csv",
-)
-nrt_merged = pd.read_csv(
-    f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/triggers/triggers.spi.dryspell.{params.year}.NRT.csv",
-)
-
-# +
-# Take NRT
-triggers_full = pd.DataFrame()
-for d, v in params.districts_vulnerability.items():
-    triggers_full = pd.concat([triggers_full, nrt_merged.loc[nrt_merged.district == d]])
-    
-if params.iso == 'ZWE':
-    triggers_full = triggers_full.loc[triggers_full.category == 'Normal']
+        if params.iso == "zwe":
+            tmp = nrt_merged.loc[
+                (nrt_merged.district == d) & (nrt_merged.category == "Normal")
+            ]
+        else:
+            tmp = nrt_merged.loc[nrt_merged.district == d]
+        triggers_full = pd.concat([triggers_full, tmp])
 # -
 
-# Visualize coverage
-
-import numpy as np
-def get_coverage(triggers_df, districts: list, columns: list):
-    cov = pd.DataFrame(
-        columns=columns,
-        index=districts,
-    )
-    for d, r in cov.iterrows():
-        val = []
-        for w in triggers_df["Window"].unique():
-            for c in triggers_df["category"].unique():
-                if script == "python":
-                    val.append(
-                        len(
-                            triggers_df[
-                                (triggers_df["Window"] == w)
-                                & (triggers_df["category"] == c)
-                                & (triggers_df["district"] == d)
-                            ]
-                        )
-                        // 2
-                    )
-                else:
-                    val.append(
-                        len(
-                            triggers_df[
-                                (triggers_df["Window"] == w)
-                                & (triggers_df["category"] == c)
-                                & (triggers_df["district"] == d)
-                            ]
-                        )
-                    )
-        cov.loc[d] = val
-
-    print(
-        f"The coverage using the {script} script is {round(100 * np.sum(cov.values > 0) / np.size(cov.values), 1)} %"
-    )
-    return cov
-
-
-columns = ["W1-Mild", "W1-Moderate", "W1-Severe", "W2-Mild", "W2-Moderate", "W2-Severe"]
-#columns = ["W1-Normal", "W2-Normal"]
-get_coverage(triggers_full, triggers_full["district"].sort_values().unique(), columns)
-
-# Ratio of dryspell triggers
-len(triggers_full.loc[triggers_full["index"].str[0] == "d"]) / len(triggers_full)
-
-triggers_full.loc[triggers_full.Window == 'Window 2'].head(10)
+triggers_full.head()
 
 # Save final triggers file
 triggers_full.to_csv(
-    f"/s3/scratch/amine.barkaoui/aa/data/{params.iso.lower()}/triggers/triggers.spi.dryspell.{params.year}.pilots.csv",
+    f"{params.data_path}/data/{params.iso}/triggers/triggers.spi.dryspell.{params.calibration_year}.pilots.csv",
     index=False,
 )
-
-
