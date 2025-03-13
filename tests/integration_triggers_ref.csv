@@ -1,0 +1,10 @@
+district,index,category,window,issue_ready,issue_set,trigger_ready,trigger_set
+Caia,SPI ND,Mild,Window 1,6.0,7.0,0.0,0.28
+Caia,SPI ND,Moderate,Window 1,6.0,7.0,0.0,0.24
+Cheringoma,SPI ND,Mild,Window 1,6.0,7.0,0.0,0.3
+Cheringoma,SPI ND,Moderate,Window 1,6.0,7.0,0.0,0.24
+Maringue,SPI ND,Mild,Window 1,6.0,7.0,0.0,0.3
+Maringue,SPI ND,Moderate,Window 1,6.0,7.0,0.0,0.24
+Marromeu,SPI ND,Mild,Window 1,6.0,7.0,0.31,0.17
+Morrumbala,SPI ND,Mild,Window 1,6.0,7.0,0.27,0.23
+Mutarara,SPI ND,Mild,Window 1,6.0,7.0,0.0,0.31
