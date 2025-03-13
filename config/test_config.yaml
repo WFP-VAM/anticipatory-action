@@ -1,0 +1,121 @@
+# Issue month: months corresponding to the forecasts used for monitoring
+issue_months:
+  - "06"
+  - "07"
+
+# First year of season to monitor operationally (e.g. 2024 for 2024/2025 season)
+monitoring_year: 2024
+
+# Last year of calibration period used for triggers selection (e.g. 2022 for 1981-2022)
+calibration_year: 2022
+
+# Month from which the monitoring starts (e.g. 5 if the first predictions are produced in May)
+start_monitoring: 5
+
+# Minimum length of indicator periods (ON, NDJ, JFMA...)
+min_index_period: 2
+
+# Maximum length of indicator periods (ON, NDJ, JFMA...)
+max_index_period: 3
+
+# First month of the wet season
+start_season: 10
+
+# Last month of the wet season
+end_season: 6
+
+# Start date of historical time series used in anomaly computation
+hist_anomaly_start: null
+
+# End date of historical time series used in anomaly computation
+hist_anomaly_stop: "2018-12-31"
+
+# Save (and overwrite if exists) ds (obs or probs) for future trigger choice
+save_zarr: true
+
+# Data path where to store intermediate and final outputs (should include data folder)
+data_path: "." # /s3/scratch/amine.barkaoui/aa
+
+# Thresholds defining different drought intensities used in probabilities computation
+intensity_thresholds:
+  Severe: -1
+  Moderate: -0.85
+  Mild: -0.68
+
+# Vulnerability class of triggers for each district: general or non-regret (GT or NRT)
+districts_vulnerability: 
+  Caia: "NRT"
+
+# Tolerance for thresholds for each category, used to compute false alarm with tolerance
+tolerance:
+  Normal: 0
+  Mild: 0
+  Moderate: -0.44
+  Severe: -0.68
+
+# Skill requirements for General Triggers
+general_t:
+  HR: 0.5
+  SR: 0.65
+  FR: 0.35
+  RP: 4.0
+
+# Skill requirements for Non Regret Triggers
+non_regret_t:
+  HR: 0.5  # W/out exceptions: HR=0.65
+  SR: 0.55
+  FR: 0.45
+  RP: 3.0
+
+# Window definitions for SPI and DRYSPELL indicators
+windows:
+  spi:
+    window1:
+      Cabo_Delgado: ["DJ", "DJF", "JF", "JFM", "FM"]
+      Gaza: ["ON", "OND", "ND", "NDJ", "DJ"]
+      Inhambane: ["ON", "OND", "ND", "NDJ", "DJ"]
+      Manica: ["ND", "NDJ", "DJ", "DJF", "JF"]
+      Maputo: ["ON", "OND", "ND", "NDJ", "DJ"]
+      Maputo City: ["ON", "OND", "ND", "NDJ", "DJ"]
+      Nampula: ["DJ", "DJF", "JF", "JFM", "FM"]
+      Niassa: ["DJ", "DJF", "JF", "JFM", "FM"]
+      Sofala: ["ND", "NDJ", "DJ", "DJF", "JF"]
+      Tete: ["ND", "NDJ", "DJ", "DJF", "JF"]
+      Zambezia: ["ND", "NDJ", "DJ", "DJF", "JF"]
+    window2:
+      Cabo_Delgado: ["FMA", "MA", "MAM", "AM", "AMJ", "MJ"]
+      Gaza: ["DJF", "JF", "JFM", "FM", "FMA", "MA"]
+      Inhambane: ["DJF", "JF", "JFM", "FM", "FMA", "MA"]
+      Manica: ["JFM", "FM", "FMA", "MA", "MAM", "AM"]
+      Maputo: ["DJF", "JF", "JFM", "FM", "FMA", "MA"]
+      Maputo City: ["DJF", "JF", "JFM", "FM", "FMA", "MA"]
+      Nampula: ["FMA", "MA", "MAM", "AM", "AMJ", "MJ"]
+      Niassa: ["FMA", "MA", "MAM", "AM", "AMJ", "MJ"]
+      Sofala: ["JFM", "FM", "FMA", "MA", "MAM", "AM"]
+      Tete: ["JFM", "FM", "FMA", "MA", "MAM", "AM"]
+      Zambezia: ["JFM", "FM", "FMA", "MA", "MAM", "AM"]
+  dryspell:
+    window1:
+      Cabo_Delgado: ["DJ", "JF", "FM"]
+      Gaza: []
+      Inhambane: []
+      Manica: ["DJ", "JF"]
+      Maputo: []
+      Maputo City: []
+      Nampula: ["DJ", "JF", "FM"]
+      Niassa: ["DJ", "JF", "FM"]
+      Sofala: ["DJ", "JF"]
+      Tete: ["DJ", "JF"]
+      Zambezia: ["DJ", "JF"]
+    window2:
+      Cabo_Delgado: ["MA", "AM", "MJ"]
+      Gaza: ["DJ", "JF", "FM", "MA"]
+      Inhambane: ["DJ", "JF", "FM", "MA"]
+      Manica: ["JF", "FM", "MA", "AM"]
+      Maputo: ["DJ", "JF", "FM", "MA"]
+      Maputo City: ["DJ", "JF", "FM", "MA"]
+      Nampula: ["MA", "AM", "MJ"]
+      Niassa: ["MA", "AM", "MJ"]
+      Sofala: ["JF", "FM", "MA", "AM"]
+      Tete: ["JF", "FM", "MA", "AM"]
+      Zambezia: ["JF", "FM", "MA", "AM"]
