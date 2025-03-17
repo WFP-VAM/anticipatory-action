@@ -27,15 +27,15 @@
 
 # +
 import os
-import pandas as pd
 
+import pandas as pd
+from hip.analysis.analyses.drought import get_accumulation_periods
+from hip.analysis.aoi.analysis_area import AnalysisArea
+
+from AA.helper_fns import read_forecasts, read_observations
+from AA.operational import run_full_index_pipeline
 from config.params import Params
 
-from AA.helper_fns import read_observations, read_forecasts
-from AA.operational import run_full_index_pipeline
-
-from hip.analysis.aoi.analysis_area import AnalysisArea
-from hip.analysis.analyses.drought import get_accumulation_periods
 # -
 
 # **First, please define the country ISO code, the issue month and the index of interest**
@@ -112,7 +112,9 @@ forecasts.isel(ensemble=0).mean("time").hip.viz.map(
 
 
 # Read triggers file
-if os.path.exists(f"{params.data_path}/data/{params.iso}/probs/aa_probabilities_triggers_pilots.csv"):
+if os.path.exists(
+    f"{params.data_path}/data/{params.iso}/probs/aa_probabilities_triggers_pilots.csv"
+):
     triggers_df = pd.read_csv(
         f"{params.data_path}/data/{params.iso}/probs/aa_probabilities_triggers_pilots.csv",
     )
@@ -148,7 +150,7 @@ probs_merged_dataframes = [
         observations,
         params,
         triggers_df,
-        gdf,
+        area,
         period_name,
         period_months,
     )

@@ -18,7 +18,6 @@ import traceback
 
 import dask
 import pandas as pd
-from config.params import Params
 from hip.analysis.analyses.drought import (
     compute_probabilities,
     get_accumulation_periods,
@@ -29,12 +28,13 @@ from hip.analysis.analyses.drought import (
 from hip.analysis.aoi.analysis_area import AnalysisArea
 
 from AA.helper_fns import (
-    aggregate_by_district,
+    compute_district_average,
     merge_probabilities_triggers_dashboard,
     merge_un_biased_probs,
     read_forecasts,
     read_observations,
 )
+from config.params import Params
 
 
 @click.command()
@@ -52,8 +52,6 @@ def run(country, issue, index):
         resolution=0.25,
         datetime_range=f"1981-01-01/{params.monitoring_year + 1}-06-30",
     )
-
-    gdf = area.get_dataset([area.BASE_AREA_DATASET])
 
     forecasts = read_forecasts(
         area,
@@ -103,7 +101,7 @@ def run(country, issue, index):
             observations,
             params,
             triggers_df,
-            gdf,
+            area,
             period_name,
             period_months,
         )
@@ -132,7 +130,7 @@ def run(country, issue, index):
 
 
 def run_full_index_pipeline(
-    forecasts, observations, params, triggers, gdf, period_name, period_months
+    forecasts, observations, params, triggers, area, period_name, period_months
 ):
     """
     Run operational pipeline for single index (period)
@@ -142,7 +140,7 @@ def run_full_index_pipeline(
         observations: xarray.Dataset, rainfall observations dataset
         params: Params, parameters class
         triggers: pd.DataFrame, selected triggers (output of triggers.py)
-        gdf: geopandas.GeoDataFrame, shapefile including admin2 levels
+        area: hip.analysis.AnalysisArea object with aoi information
         period_name: str, name of index period (eg "ON")
         period_months: tuple, months of index period (eg (10, 11))
     Returns:
@@ -154,8 +152,8 @@ def run_full_index_pipeline(
     )
 
     # Aggregate by district
-    probs_district = aggregate_by_district(probabilities, gdf, params)
-    probs_bc_district = aggregate_by_district(probabilities_bc, gdf, params)
+    probs_district = compute_district_average(probabilities, area)
+    probs_bc_district = compute_district_average(probabilities_bc, area)
 
     # Build single xarray with merged unbiased/biased probabilities
     probs_by_district = merge_un_biased_probs(
@@ -187,27 +185,30 @@ def run_aa_probabilities(forecasts, observations, params, period_months):
         probabilities: xarray.Dataset, raw probabilities for specified period
         probabilities_bc: xarray.Dataset, bias-corrected probabilities for specified period
     """
-    # Remove 1980 season to harmonize observations between different indexes
-    if int(params.issue) >= params.end_season:
-        observations = observations.where(
-            observations.time.dt.date >= datetime.date(1981, 10, 1), drop=True
-        )
+    # Remove 1980 season to harmonize datasets between different indexes
+    forecasts = forecasts.where(
+        forecasts.time.dt.date >= datetime.date(1981, params.start_season, 1), drop=True
+    )
+    observations = observations.where(
+        observations.time.dt.date >= datetime.date(1981, params.start_season, 1),
+        drop=True,
+    )
 
     # Accumulation
     accumulation_fc = run_accumulation_index(
-        forecasts.chunk(dict(time=-1)), params.aggregate, period_months, forecasts=True
+        forecasts.chunk(dict(time=-1)),
+        params.aggregate,
+        period_months,
+        (params.start_season, params.end_season),
+        forecasts=True,
     )
     accumulation_obs = run_accumulation_index(
-        observations.chunk(dict(time=-1)), params.aggregate, period_months
+        observations.chunk(dict(time=-1)),
+        params.aggregate,
+        period_months,
+        (params.start_season, params.end_season),
     )
-    logging.info(f"Completed accumulation")
-
-    # Remove inconsistent observations
-    accumulation_obs = accumulation_obs.sel(
-        time=slice(
-            datetime.date(1979, 1, 1), datetime.date(params.monitoring_year - 1, 12, 31)
-        )
-    )
+    logging.info("Completed accumulation")
 
     # Anomaly
     anomaly_fc = run_gamma_standardization(
@@ -221,7 +222,7 @@ def run_aa_probabilities(forecasts, observations, params, period_months):
         params.hist_anomaly_start,
         params.hist_anomaly_stop,
     )
-    logging.info(f"Completed anomaly")
+    logging.info("Completed anomaly")
 
     # Bias correction
     index_bc = run_bias_correction(
@@ -233,7 +234,7 @@ def run_aa_probabilities(forecasts, observations, params, period_months):
         nearest_neighbours=8,
         enso=True,
     )
-    logging.info(f"Completed bias correction")
+    logging.info("Completed bias correction")
 
     if params.index == "dryspell":
         anomaly_fc *= -1
@@ -250,7 +251,7 @@ def run_aa_probabilities(forecasts, observations, params, period_months):
     probabilities_bc = compute_probabilities(
         index_bc, levels=params.intensity_thresholds
     ).round(2)
-    logging.info(f"Completed probabilities")
+    logging.info("Completed probabilities")
 
     return probabilities, probabilities_bc
 

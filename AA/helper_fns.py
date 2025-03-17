@@ -1,13 +1,11 @@
-import logging
+import datetime
 import glob
+import logging
 import os
 
-import datetime
-import geopandas as gpd
 import numpy as np
 import pandas as pd
 import xarray as xr
-
 from hip.analysis.compute.utils import persist_with_progress_bar
 
 PORTUGUESE_CATEGORIES = dict(
@@ -33,45 +31,88 @@ def create_flexible_dataarray(start_season, end_season):
     return data_array
 
 
-def triggers_da_to_df(triggers_da, hr_da):
-    triggers_df = triggers_da.to_dataframe().drop(["spatial_ref"], axis=1).dropna()
-    triggers_df = triggers_df.reset_index().set_index(
-        ["index", "category", "district", "issue"]
-    )
-    triggers_df.columns = ["trigger", "trigger_value", "lead_time"]
-    hr_df = (
-        hr_da.to_dataframe()
+def triggers_da_to_df(triggers_da, score_da):
+    """Converts trigger and score DataArrays to a merged DataFrame.
+
+    This function processes two xarray DataArrays containing trigger values and scores,
+    converts them to pandas DataFrames, and merges them based on specified indices.
+
+    Args:
+        triggers_da (xarray.DataArray): DataArray containing trigger information.
+        score_da (xarray.DataArray): DataArray containing score information.
+
+    Returns:
+        pandas.DataFrame: A DataFrame combining trigger values and scores, with duplicates removed.
+    """
+    # Convert triggers to DataFrame, clean and set index
+    triggers_df = (
+        triggers_da.to_dataframe()
+        .drop(columns=["spatial_ref"], errors="ignore")
+        .dropna()
         .reset_index()
-        .drop("lead_time", axis=1)
-        .set_index(["district", "category", "issue", "index"])
+        .set_index(["index", "category", "district", "issue"])
+        .rename(columns={"bool": "trigger_value"})
     )
-    triggers_df = triggers_df.join(hr_df)
-    triggers_df = triggers_df.drop(["spatial_ref"], axis=1)
-    triggers_df.columns = ["trigger", "lead_time", "trigger_value", "HR"]
+
+    # Convert score to DataFrame, clean and set index
+    score_df = (
+        score_da.to_dataframe()
+        .reset_index()
+        .drop(columns=["lead_time"], errors="ignore")
+        .set_index(["district", "category", "issue", "index"])
+        .rename(columns={"bool": "HR"})
+    )
+
+    # Join triggers with score
+    triggers_df = triggers_df.join(score_df)
+
+    # Reset index and remove duplicates
     return triggers_df.reset_index().drop_duplicates()
 
 
-def aggregate_by_district(ds, gdf, params):
-    PROJ = "+proj=longlat +ellps=clrk66 +towgs84=-80,-100,-228,0,0,0,0 +no_defs"
+def compute_district_average(da, area):
+    """
+    Computes zonal statistics on an xarray DataArray for both observations and probabilities.
 
-    # Clip ds to districts
-    list_districts = {}
-    for _, row in gdf.iterrows():
-        try:
-            list_districts[row["Name"]] = (
-                ds.rio.write_crs(PROJ)
-                .rio.clip(gpd.GeoSeries(row.geometry))
-                .mean(dim=["latitude", "longitude"])
-            )
-        except:
-            continue
+    Args:
+        da : xarray.DataArray, Input DataArray (can be observations or probabilities).
+        area : hip.analysis.aoi.analysis_area.AnalysisArea: object characterizing the area
+            and admin level of interest.
+    Returns: xarray.DataArray, DataArray with computed district averages.
+    """
+    # Ensure consistent time dimension
+    if "year" in da.dims:
+        da = da.rename({"year": "time"})
 
-    ds_by_district = xr.concat(
-        list_districts.values(), pd.Index(list_districts.keys(), name="district")
-    )
-    ds_by_district["district"] = ds_by_district.district.astype(str)
+    # Determine dimensions to group by (exclude spatial dimensions)
+    groupby_dim = set(da.dims) - {"latitude", "longitude", "time"}
 
-    return ds_by_district
+    # Transpose dims to ensure equality of shapes
+    da = da.transpose(..., *groupby_dim, "latitude", "longitude")
+
+    # Compute zonal stats: handle different groupby dimensions lengths
+    if len(groupby_dim) > 1:
+        raise NotImplementedError(
+            "Zonal stats with more than one groupby dimension are not supported."
+        )
+    elif len(groupby_dim) == 1:
+        da_grouped = da.groupby(*groupby_dim).map(
+            lambda da: area.zonal_stats(
+                da.squeeze(groupby_dim), stats=["mean"], zone_ids=None, zones=None
+            ).to_xarray()["mean"]
+        )
+    else:
+        da_grouped = area.zonal_stats(
+            da, stats=["mean"], zone_ids=None, zones=None
+        ).to_xarray()["mean"]
+
+    # Rename 'zone' to 'district' for consistency
+    da_grouped = da_grouped.rename({"zone": "district"})
+
+    # Ensure district is a string type
+    da_grouped["district"] = da_grouped.district.astype(str)
+
+    return da_grouped
 
 
 def merge_un_biased_probs(probs_district, probs_bc_district, params, period_name):
@@ -165,9 +206,35 @@ def get_coverage(triggers_df, districts: list, columns: list):
     return cov
 
 
+def load_trigger_with_reference(params, variant_folder=None):
+    """
+    Load trigger data and reference trigger data for comparison.
+
+    Args:
+        params: An object containing parameters such as data_path, iso, and calibration_year.
+        variant_folder (str, optional): If provided, modifies the data path to load from an alternative directory.
+
+    Returns:
+        dict: A dictionary containing DataFrames for GT, NRT, and pilots triggers and reference triggers.
+    """
+    base_path = f"{params.data_path}/data/{variant_folder or params.iso}"
+
+    files = ["GT", "NRT", "pilots"]
+
+    triggers = {}
+    for file in files:
+        trigger_path = f"{base_path}/triggers/triggers.spi.dryspell.{params.calibration_year}.{file}.csv"
+        ref_path = f"{params.data_path}/data/{params.iso}/triggers/triggers.spi.dryspell.{params.calibration_year}.{file}.csv"
+
+        triggers[f"triggers_{file}"] = pd.read_csv(trigger_path)
+        triggers[f"reference_{file}"] = pd.read_csv(ref_path)
+
+    return triggers
+
+
 def merge_probabilities_triggers_dashboard(probs, triggers, params, period):
     # Format probabilities
-    probs_df = probs.to_dataframe().reset_index().drop("spatial_ref", axis=1)
+    probs_df = probs.to_dataframe().reset_index()
     probs_df["prob"] = [np.round(p, 2) for p in probs_df.prob.values]
     probs_df["index"] = probs_df["index"].str.upper()
     probs_df["aggregation"] = np.repeat(
