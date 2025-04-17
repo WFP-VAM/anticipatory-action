@@ -1,13 +1,11 @@
+import datetime
 import os
-import yaml
 from dataclasses import dataclass, field
 
 import hdc.algo
-import datetime
 import numpy as np
 import pandas as pd
-import geopandas as gpd
-
+import yaml
 from numba import types
 from numba.typed import Dict
 
@@ -26,11 +24,11 @@ AGGREGATES = {
 def load_config(iso):
     config_file = f"./config/{iso}_config.yaml"
     if os.path.exists(config_file):
-        with open(config_file, 'r') as f:
+        with open(config_file, "r") as f:
             return yaml.safe_load(f)
     else:
         raise FileNotFoundError(f"Configuration file for {iso} not found.")
-    
+
 
 @dataclass
 class Params:
@@ -75,6 +73,8 @@ class Params:
         output path where to store intermediate and final outputs (should include data folder)
     districts: list
         list of districts for which we want to compute triggers
+    indicators: list
+        list of indicators for which we want to compute triggers
     fbf_districts_df : pd.DataFrame
         dataframe containing information about districts to bias correct
     intensity_thresholds : dict
@@ -93,7 +93,7 @@ class Params:
 
     iso: str
     index: str
-    issue: int = None 
+    issue: int = None
     issue_months: list = None
     monitoring_year: int = 2024
     calibration_year: int = 2022
@@ -108,6 +108,7 @@ class Params:
     save_zarr: bool = True
     data_path: str = "."
     districts: list = field(init=None)
+    indicators: list = field(init=None)
     fbf_districts_df: pd.DataFrame = field(init=False, default_factory=pd.DataFrame)
     intensity_thresholds: dict = field(init=None)
     districts_vulnerability: dict = field(init=None)
@@ -126,11 +127,15 @@ class Params:
         for key, value in config.items():
             setattr(self, key, value)
 
-        # Set the aggregate method      
+        # Set the aggregate method
         self.aggregate = AGGREGATES[self.index]
 
         # Get districts list using vulnerability dictionary to avoid duplication of definitions
-        self.districts = self.districts_vulnerability.keys()
+        self.districts = (
+            list(self.districts_vulnerability.keys())
+            if self.districts_vulnerability
+            else None
+        )
 
         # Read fbf roc dataframe if exists for triggers selection
         fbf_districts_path = f"{self.data_path}/data/{self.iso}/auc/fbf.districts.roc.{self.index}.2022.csv"
@@ -152,6 +157,12 @@ class Params:
 
         # Load the windows for the current index
         self.windows = config["windows"][self.index]
+
+        # Extract the indicators of interest
+        self.indicators = [
+            self.index + " " + ind
+            for ind in np.unique(list((set().union(*self.windows.values()))))
+        ]
 
     def get_windows(self, window_type):
         return self.windows.get(window_type, {})
