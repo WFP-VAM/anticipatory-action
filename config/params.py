@@ -47,8 +47,8 @@ class Params:
         issue month: month of interest for operational script
     issue_months : list
         issue months list: list of issue months to use for triggers selection and verification
-    monitoring_year : int
-        first year of season to monitor operationally (e.g. 2024 for 2024/2025 season)
+    vulnerability : str
+        vulnerability level, can be GT (General), NRT (Non-Regret) or TBD (to be discussed)
     calibration_year: int
         last year of calibration period used for triggers selection (e.g. 2022 for 1981-2022)
     start_monitoring: int
@@ -83,10 +83,8 @@ class Params:
         vulnerability class of triggers for each district: regret or non-regret
     tolerance: dict
         thresholds with tolerance for each category, used to compute false alarm with tolerance
-    general_t: dict
-        skill requirements for General Triggers in terms of Hit Rate, Success Rate, Failure Rate, Return Period
-    non_regret_t: dict
-        skill requirements for Non Regret Triggers in terms of Hit Rate, Success Rate, Failure Rate, Return Period
+    requirements: dict
+        skill requirements for GT or NRT, should include Hit Rate, Success Rate, Failure Rate, Return Period
     windows: dict
         dictionary containing two dictionaries (window1, window2) containing indicators for each window (by province or not)
     """
@@ -95,6 +93,7 @@ class Params:
     index: str
     issue: int = None
     issue_months: list = None
+    vulnerability: str = None
     monitoring_year: int = 2024
     calibration_year: int = 2022
     start_monitoring: int = 5
@@ -113,8 +112,7 @@ class Params:
     intensity_thresholds: dict = field(init=None)
     districts_vulnerability: dict = field(init=None)
     tolerance: dict = field(init=False)
-    general_t: dict = field(init=False)
-    non_regret_t: dict = field(init=False)
+    requirements: dict = field(init=None)
     windows: dict = field(init=False)
 
     def __post_init__(self):
@@ -142,18 +140,17 @@ class Params:
         if os.path.exists(fbf_districts_path):
             self.fbf_districts_df = read_fbf_districts(fbf_districts_path, self)
 
-        # Convert tolerance, general_t, and non_regret_t to typed dicts
+        # Read the tolerance thresholds and store them as a dict
         self.tolerance = Dict.empty(key_type=types.unicode_type, value_type=types.f8)
         for k, v in config["tolerance"].items():
             self.tolerance[k] = v
 
-        self.general_t = Dict.empty(key_type=types.unicode_type, value_type=types.f8)
-        for k, v in config["general_t"].items():
-            self.general_t[k] = v
-
-        self.non_regret_t = Dict.empty(key_type=types.unicode_type, value_type=types.f8)
-        for k, v in config["non_regret_t"].items():
-            self.non_regret_t[k] = v
+        # When vulnerability is not None, set the requirements based on GT or NRT criteria
+        self.requirements = Dict.empty(key_type=types.unicode_type, value_type=types.f8)
+        if self.vulnerability is not None and self.vulnerability in ["GT", "NRT"]:
+            config_key = "general_t" if self.vulnerability == "GT" else "non_regret_t"
+            for k, v in config[config_key].items():
+                self.requirements[k] = v
 
         # Load the windows for the current index
         self.windows = config["windows"][self.index]
@@ -166,3 +163,17 @@ class Params:
 
     def get_windows(self, window_type):
         return self.windows.get(window_type, {})
+
+    def update_vulnerability(self, vulnerability):
+        if vulnerability not in ["GT", "NRT", "TBD"]:
+            raise ValueError("vulnerability must be one of: GT, NRT, TBD")
+
+        self.vulnerability = vulnerability
+        self.requirements = Dict.empty(key_type=types.unicode_type, value_type=types.f8)
+
+        if vulnerability != "TBD":
+            config = load_config(self.iso)
+
+            config_key = "general_t" if self.vulnerability == "GT" else "non_regret_t"
+            for k, v in config[config_key].items():
+                self.requirements[k] = v
