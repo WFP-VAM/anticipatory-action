@@ -1,33 +1,32 @@
+import glob
 import logging
-
-import click
-
-logging.basicConfig(level="INFO", force=True)
-
+import os
 import warnings
 
-warnings.simplefilter(action="ignore")
-
-import glob
-import os
-
+import click
 import numpy as np
 import pandas as pd
 import xarray as xr
-from hip.analysis.analyses.drought import (concat_obs_levels,
-                                           get_accumulation_periods)
+from hip.analysis.analyses.drought import concat_obs_levels, get_accumulation_periods
 from hip.analysis.aoi.analysis_area import AnalysisArea
-from hip.analysis.compute.utils import start_dask
-from numba import jit, types
-from numba.typed import Dict
-from tqdm import tqdm
+from hip.analysis.compute.utils import persist_with_progress_bar, start_dask
 
-from AA._triggers_ready_set import (objective, run_pilot_districts_metrics,
-                                    run_ready_set_brute_selection)
-from AA.helper_fns import (create_flexible_dataarray,
-                           format_triggers_df_for_dashboard,
-                           merge_un_biased_probs, triggers_da_to_df)
+from AA._triggers_ready_set import (
+    filter_triggers_by_window,
+    get_window_district,
+    run_pilot_districts_metrics,
+    run_ready_set_brute_selection,
+)
+from AA.helper_fns import (
+    create_flexible_dataarray,
+    format_triggers_df_for_dashboard,
+    merge_un_biased_probs,
+    triggers_da_to_df,
+)
 from config.params import Params
+
+logging.basicConfig(level="INFO", force=True)
+warnings.simplefilter(action="ignore")
 
 
 @click.command()
@@ -36,6 +35,9 @@ from config.params import Params
 @click.argument("vulnerability", default="GT")
 def run(country, index, vulnerability):
     client = start_dask(n_workers=1)
+    logging.info("+++++++++++++")
+    logging.info(f"Dask dashboard: {client.dashboard_link}")
+    logging.info("+++++++++++++")
 
     params = Params(iso=country, index=index, vulnerability=vulnerability)
 
@@ -59,7 +61,6 @@ def run_triggers_selection(params):
         f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}/obs",
         params,
     )
-    obs = obs.sel(index=[params.index + " " + k for k in periods.keys()])
     obs = obs.assign_coords(
         lead_time=("index", [periods[i.split(" ")[-1]][0] for i in obs.index.values])
     )
@@ -95,7 +96,6 @@ def run_triggers_selection(params):
         ],
         dim="index",
     )
-    probs = probs.sel(index=[params.index + " " + k for k in periods.keys()])
     logging.info(
         f"Completed reading of aggregated probabilities for the whole {params.iso.upper()} country"
     )
@@ -108,9 +108,7 @@ def run_triggers_selection(params):
     probs = probs.sel(index=params.indicators)
 
     # Align couples of issue months inside apply_ufunc
-    probs_ready = probs.sel(
-        issue=np.uint8(params.issue_months)[:-1]
-    ).load()  # use start/end season here
+    probs_ready = probs.sel(issue=np.uint8(params.issue_months)[:-1]).load()
     probs_set = probs.sel(issue=np.uint8(params.issue_months)[1:]).load()
     probs_set["issue"] = [i - 1 if i != 1 else 12 for i in probs_set.issue.values]
 
@@ -131,6 +129,11 @@ def run_triggers_selection(params):
     probs_set = probs_set.chunk(
         dict(time=-1, category=-1, index=1, issue=1, district=1)
     )
+
+    # Persist chunked inputs before computation
+    obs = persist_with_progress_bar(obs)
+    probs_ready = persist_with_progress_bar(probs_ready)
+    probs_set = persist_with_progress_bar(probs_set)
 
     # Run triggers computation
     logging.info(
@@ -190,95 +193,11 @@ def run_triggers_selection(params):
     )
 
 
-def filter_triggers_by_window(df_leadtime, probs_ready, probs_set, obs, params):
-    def _sel_row(da, row, index, issue=None):
-        da_sel = da.sel(district=row.district.unique(), index=index)
-        if "issue" in da.dims:
-            da_sel = da_sel.sel(issue=issue)
-        if "category" in da.dims:
-            da_sel = da_sel.sel(category=row.category.unique())
-        return da_sel
-
-    def _get_top_pairs_per_window(tdf, n_to_keep=4):
-        for (ind, iss), sub_tdf in tdf.groupby(["index", "issue"]):
-            t = sub_tdf.sort_values("trigger").trigger_value.values
-            issue = sub_tdf.issue.unique()
-            out = np.empty(9, dtype=np.float64)
-            stats = objective(
-                t,
-                _sel_row(obs.val, tdf, ind).values[0],
-                _sel_row(obs.bool, tdf, ind).values[0][0],
-                _sel_row(probs_ready.prob, tdf, ind, issue).values[0][0][0],
-                _sel_row(probs_set.prob, tdf, ind, issue).values[0][0][0],
-                _sel_row(obs, tdf, ind).lead_time.values,
-                _sel_row(probs_ready.prob, tdf, ind, issue).issue.values[0],
-                _sel_row(obs, tdf, ind).tolerance.values,
-                0,
-                _sel_row(obs, tdf, ind).return_period.values,
-                np.float64(params.requirements["HR"]),
-                np.float64(params.requirements["SR"]),
-                np.float64(params.requirements["FR"]),
-                1e6,
-                10e-3,
-                1e-6,
-                np.empty(9, dtype=np.int8),
-                out,
-            )
-            hr, fr = stats[4], stats[7]
-            tdf.loc[(tdf["index"] == ind) & (tdf.issue == iss), "HR"] = hr
-            tdf.loc[(tdf["index"] == ind) & (tdf.issue == iss), "FR"] = fr
-        if len(tdf) < (2 * n_to_keep):  # more than two pairs otherwise no need
-            return tdf
-        else:
-            best_four = (
-                tdf.sort_values("lead_time")
-                .sort_values("FR")
-                .sort_values("HR", ascending=False)
-                .head(2 * n_to_keep)
-            )
-            return best_four
-
-    triggers_window_list = [
-        _get_top_pairs_per_window(r)
-        for _, r in df_leadtime.groupby(["district", "category", "Window"])
-    ]
-
-    return pd.concat(triggers_window_list)
-
-
-def get_window_district(area, indicator, district, params):
-    gdf = area.get_dataset([area.BASE_AREA_DATASET])
-    admin1 = area.get_admin_boundaries(iso3=params.iso, admin_level=1).drop(
-        ["geometry", "adm0_Code"], axis=1
-    )
-    admin1.columns = ["Code_1", "adm1_name"]
-    shp = pd.merge(gdf, admin1, how="left", left_on=["adm1_Code"], right_on=["Code_1"])
-
-    province = shp.loc[shp.Name == district].adm1_name.unique()[0]
-
-    # Get window1 and window2 definitions
-    window1 = params.get_windows("window1")
-    window2 = params.get_windows("window2")
-
-    if isinstance(window1, dict):
-        if indicator in window1[province]:
-            return "Window 1"
-        elif indicator in window2[province]:
-            return "Window 2"
-        else:
-            return np.nan
-    else:
-        if indicator in window1:
-            return "Window 1"
-        elif indicator in window2:
-            return "Window 2"
-        else:
-            return np.nan
-
-
 def read_aggregated_obs(path_to_zarr, params):
     list_index_paths = glob.glob(f"{path_to_zarr}/{params.index} *")
-    list_val_paths = [os.path.join(l, "observations.zarr") for l in list_index_paths]
+    list_val_paths = [
+        os.path.join(ind_path, "observations.zarr") for ind_path in list_index_paths
+    ]
 
     obs_val = xr.open_mfdataset(
         list_val_paths,
@@ -301,14 +220,14 @@ def read_aggregated_probs(path_to_zarr, params):
     ]  # Last one is the `obs` folder.
     list_index = {}
 
-    for l in list_issue_paths:
+    for iss_path in list_issue_paths:
         list_index_raw = [
             os.path.join(i, "probabilities.zarr")
-            for i in sorted(glob.glob(f"{l}/{params.index} *"))
+            for i in sorted(glob.glob(f"{iss_path}/{params.index} *"))
         ]
         list_index_bc = [
             os.path.join(i, "probabilities_bc.zarr")
-            for i in sorted(glob.glob(f"{l}/{params.index} *"))
+            for i in sorted(glob.glob(f"{iss_path}/{params.index} *"))
         ]
         index_names = [os.path.split(os.path.dirname(i))[-1] for i in list_index_raw]
 
@@ -329,7 +248,7 @@ def read_aggregated_probs(path_to_zarr, params):
 
         ds_index = xr.Dataset({"raw": index_raw, "bc": index_bc})
         ds_index["index"] = index_names
-        list_index[int(os.path.split(l)[-1])] = ds_index
+        list_index[int(os.path.split(iss_path)[-1])] = ds_index
 
     return xr.concat(list_index.values(), dim=pd.Index(list_index.keys(), name="issue"))
 
