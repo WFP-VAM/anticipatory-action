@@ -184,7 +184,7 @@ def run_triggers_selection(params):
     triggers = format_triggers_df_for_dashboard(df_window, params)
 
     triggers.to_csv(
-        f"{params.data_path}/data/{params.iso}/triggers/triggers.{params.index}.{params.calibration_year}.{params.vulnerability}.validate.csv",
+        f"{params.data_path}/data/{params.iso}/triggers/triggers.{params.index}.{params.calibration_year}.{params.vulnerability}.csv",
         index=False,
     )
 
