@@ -1,15 +1,6 @@
 # anticipatory-action
 
 
-## Validation and ad-hoc evaluations
-
-The `validation-nbs` folder contains the notebooks used to validate this pipeline in Python, based on reference results produced in R. In this folder you'll find several analyses for each stage of the workflow, showing the reliability of this new implementation, and comments explaining the sources of any discrepancies.
-
-The purpose of the `template-eval-nbs` folder is to host notebook templates that will enable system performance to be re-evaluated in terms of ROC scores, coverage, and Hit Rate / Failure Rate; after running the AA scripts with different parameters or different datasets. 
-
-Finally, we'll store in the `ad-hoc-evaluations` folder the results of specific evaluations obtained using the notebooks found in the `template-eval-nbs` folder. For instance, results related to the performance of the AA system using blended chirps or another type of forecast will be stored in this folder. 
-
-
 ## Running
 
 - If new features have been released on GitHub, you will have to pull the changes, run: `git pull origin main` in a shell or use the GitHub Desktop.
@@ -20,11 +11,7 @@ Finally, we'll store in the `ad-hoc-evaluations` folder the results of specific 
 $ conda activate aa-env
 ```
 
-- Make sure your parameters are well defined in `config/params.py`.
-
-- Make sure your forecasts and chirps folders are up to date in `data/<country-iso>/forecast` and `data/<country-iso>/chirps` (tmp)
-
-- Make sure your country shapefile is present in the folder `data/<country-iso>/shapefiles/`.
+- Make sure your parameters are well defined in `config/{iso}_config.yml`.
 
 - Make sure you are in the anticipatory-action folder: use the `cd` command to move to the anticipatory-action folder.
 
@@ -52,8 +39,16 @@ $ python analytical.py <ISO> <SPI/DRYSPELL>
 
 **Triggers script**
 
+Please choose a vulnerability level when you need to run the triggers script. You can either set it to:
+
+- *GT*: General Triggers, requirements defined in the config file
+
+- *NRT*: Non-Regret Triggers, requirements defined in the config file
+
+- *TBD*: vulnerability To Be Defined, the complete list of triggers will be saved and the calibration will be skipped
+
 ```commandline
-$ python triggers.py <ISO> <SPI/DRYSPELL>
+$ python triggers.py <ISO> <SPI/DRYSPELL> <VULNERABILITY>
 ```
 
 After running this script for SPI / DRYSPELL and General / Non-Regret Triggers you can use the `merge-spi-dryspell-gt-nrt-triggers.py` notebook to filter the triggers for each district regarding the selected vulnerability and merge spi and dryspell. It actually provides the very final output. 
@@ -63,11 +58,6 @@ After running this script for SPI / DRYSPELL and General / Non-Regret Triggers y
 ```commandline
 $ python operational.py <ISO> <issue-month> <SPI/DRYSPELL>
 ```
-
-
-### Check outputs
-
-In `data/outputs/FbF_Pilot_MockUp/`, the final outputs that will serve as input for the Tableau dashboard are stored in a csv format. It is possible to open these in excel to inspect the results.
 
 
 ## Set-up
@@ -129,3 +119,12 @@ To obtain the HDC STAC API token, go to [HDC token](https://auth.earthobservatio
 You are now done with setting up credentials for the HDC data.
 
 **You are now good to run the AA workflow**
+
+
+## Validation and ad-hoc evaluations
+
+The `validation-nbs` folder contains the notebooks used to validate this pipeline in Python, based on reference results produced in R. In this folder you'll find several analyses for each stage of the workflow, showing the reliability of this new implementation, and comments explaining the sources of any discrepancies.
+
+The purpose of the `template-eval-nbs` folder is to host notebook templates that will enable system performance to be re-evaluated in terms of ROC scores, coverage, and Hit Rate / Failure Rate; after running the AA scripts with different parameters or different datasets. 
+
+Finally, we'll store in the `ad-hoc-evaluations` folder the results of specific evaluations obtained using the notebooks found in the `template-eval-nbs` folder. For instance, results related to the performance of the AA system using blended chirps or another type of forecast will be stored in this folder. 
