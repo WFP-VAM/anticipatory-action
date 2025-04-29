@@ -2,7 +2,7 @@ import datetime
 import os
 from dataclasses import dataclass, field
 
-import hdc.algo
+import hdc.algo  # noqa: F401
 import numpy as np
 import pandas as pd
 import yaml
@@ -156,10 +156,13 @@ class Params:
         self.windows = config["windows"][self.index]
 
         # Extract the indicators of interest
-        self.indicators = [
-            self.index + " " + ind
-            for ind in np.unique(list((set().union(*self.windows.values()))))
-        ]
+        if type(next(iter(self.windows.values()))) is dict:
+            periods = np.unique(
+                list((set().union(*next(iter(self.windows.values())).values())))
+            )
+        else:
+            periods = np.unique(list((set().union(*self.windows.values()))))
+        self.indicators = [self.index + " " + ind for ind in periods]
 
     def get_windows(self, window_type):
         return self.windows.get(window_type, {})
