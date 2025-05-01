@@ -14,20 +14,28 @@
 
 # %cd ..
 
-import logging
 # +
+import logging
 import os
 
 import numpy as np
 import pandas as pd
+import s3fs
 import xarray as xr
 from AA.analytical import run_issue_verification
-from AA.helper_fns import (create_flexible_dataarray,
-                           format_triggers_df_for_dashboard,
-                           merge_un_biased_probs, triggers_da_to_df)
-from AA.triggers import (filter_triggers_by_window, find_optimal_triggers,
-                         get_window_district, read_aggregated_obs,
-                         read_aggregated_probs)
+from AA.helper_fns import (
+    create_flexible_dataarray,
+    format_triggers_df_for_dashboard,
+    merge_un_biased_probs,
+    triggers_da_to_df,
+)
+from AA.triggers import (
+    filter_triggers_by_window,
+    find_optimal_triggers,
+    get_window_district,
+    read_aggregated_obs,
+    read_aggregated_probs,
+)
 from config.params import Params
 from hip.analysis.analyses.drought import get_accumulation_periods
 from hip.analysis.aoi.analysis_area import AnalysisArea
@@ -35,9 +43,11 @@ from odc.geo.xr import xr_reproject
 
 AWS_PROFILE = os.getenv("AWS_PROFILE", None)
 
+s3fs_client = s3fs.S3FileSystem(profile=AWS_PROFILE)
 
 logging.basicConfig(level="INFO")
 logging.info(f"Using AWS_PROFILE: {AWS_PROFILE}")
+
 
 # +
 params = Params(iso="TEST", index="SPI")
@@ -59,12 +69,12 @@ area = AnalysisArea.from_admin_boundaries(
 )
 
 # Forecasts data reading
-ds_forecasts = xr.open_zarr("s3://hip-analysis-tests/fixtures/seas5.zarr")
+store = s3fs.S3Map(root="s3://hip-analysis-tests/fixtures/seas5.zarr", s3=s3fs_client)
+ds_forecasts = xr.open_zarr(store)
 
 # Observations data reading
-observations = xr.open_zarr("s3://hip-analysis-tests/fixtures/chirps.zarr")[
-    "CHIRPS-RFH_DAILY"
-]
+store = s3fs.S3Map(root="s3://hip-analysis-tests/fixtures/chirps.zarr", s3=s3fs_client)
+observations = xr.open_zarr(store)["CHIRPS-RFH_DAILY"]
 observations = xr_reproject(observations, ds_forecasts.odc.geobox)
 observations.attrs["nodata"] = np.nan
 
