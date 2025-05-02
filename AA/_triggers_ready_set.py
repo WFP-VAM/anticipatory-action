@@ -475,21 +475,17 @@ def evaluate_grid_metrics(
     return metrics_da
 
 
-def get_trigger_metrics_dataframe(obs, probs_ready, probs_set, data_path):
+def save_metrics_df(grid_metrics_da, data_path):
     """
-    Compute trigger metrics for a single district and save the results as a CSV file.
+    Convert grid metrics from a DataArray to a pivoted DataFrame and save it as a CSV file.
 
     Args:
-        obs: xarray.DataArray, observations dataset containing 'bool', 'val', 'lead_time', and 'category' variables.
-        probs_ready: xarray.DataArray, dataset containing readiness probabilities with 'prob' and 'issue' variables.
-        probs_set: xarray.DataArray, dataset containing set probabilities with 'prob' variable.
-        data_path: str, output folder path to save the CSV file.
+        grid_metrics_da: xarray.DataArray, containing the computed trigger metrics.
+        data_path: str, output folder path.
 
     Returns:
-        None
+        output_path: str, output file path.
     """
-    grid_metrics_da = evaluate_grid_metrics(obs, probs_ready, probs_set)
-
     grid_metrics_df = grid_metrics_da.to_dataframe(name="value").reset_index()
     grid_metrics_df = grid_metrics_df.loc[grid_metrics_df.value < 1e5]
 
@@ -515,6 +511,25 @@ def get_trigger_metrics_dataframe(obs, probs_ready, probs_set, data_path):
         f"{data_path}/triggers_metrics_tbd_{grid_metrics_df.district.unique()[0]}.csv"
     )
     grid_metrics_df.to_csv(output_path, index=False)
+    return output_path
+
+
+def get_trigger_metrics_dataframe(obs, probs_ready, probs_set, data_path):
+    """
+    Compute trigger metrics for a single district and save the results as a CSV file.
+
+    Args:
+        obs: xarray.DataArray, observations dataset containing 'bool', 'val', 'lead_time', and 'category' variables.
+        probs_ready: xarray.DataArray, dataset containing readiness probabilities with 'prob' and 'issue' variables.
+        probs_set: xarray.DataArray, dataset containing set probabilities with 'prob' variable.
+        data_path: str, output folder path to save the CSV file.
+
+    Returns:
+        None
+    """
+    grid_metrics_da = evaluate_grid_metrics(obs, probs_ready, probs_set)
+
+    output_path = save_metrics_df(grid_metrics_da, data_path)
 
     logging.info(f"Metrics saved to {output_path}")
 
