@@ -185,7 +185,8 @@ def brute_force(
 
     This function computes the objective function across an array of forecast probabilities
     (`prob_issue0`, `prob_issue1`) and observed values (`obs_val`, `obs_bool`).
-    The objective function is evaluated for a set of candidate trigger pairs (t1 and t2 ranging between 0 and 1 with a 0.01 step). The trigger pair with the lowest score is extracted as well as the score value.
+    The objective function is evaluated for a set of candidate trigger pairs (t1 and t2 ranging 
+    between 0 and 1 with a 0.01 step). The trigger pair with the lowest score is extracted as well as the score value.
 
     The function is optimized for parallel execution with `Numba`'s `guvectorize` decorator to perform
     calculations efficiently across a grid of inputs.
@@ -203,6 +204,7 @@ def brute_force(
         min_hit_rate: float, Minimum acceptable hit rate.
         min_success_rate: float, Minimum acceptable success rate.
         max_failure_rate: float, Maximum acceptable failure rate.
+        out_shape: np.ndarray, Array with the same size as result used as a trick to define the dimension of result in the decorator.
         result: np.ndarray, Array to store computed objective function value.
 
     Returns:
