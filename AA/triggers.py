@@ -61,6 +61,11 @@ def run_triggers_selection(params):
         f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}/obs",
         params,
     )
+
+    # Assign `lead_time`, `tolerance` and `return_period` as coordinates to enable
+    # straightforward broadcasting and efficient use in vectorized functions via
+    # `apply_ufunc` with `guvectorize`. These variables depend on others, but passing
+    # a dict to `guvectorize` is impossible.
     obs = obs.assign_coords(
         lead_time=("index", [periods[i.split(" ")[-1]][0] for i in obs.index.values])
     )
