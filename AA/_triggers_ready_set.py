@@ -434,7 +434,7 @@ def evaluate_grid_metrics(
         obs.lead_time,
         probs_ready.issue,
         obs.tolerance,
-        np.int64(0),  # filter_constraints
+        np.int64(0),  # set filter_constraints to 0 to prevent trigger selection
         np.int64(-1),  # min_return_period (inactive)
         np.float64(-1),  # min_hit_rate (inactive)
         np.float64(-1),  # min_success_rate (inactive)
