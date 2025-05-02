@@ -148,9 +148,7 @@ class Params:
             self.tolerance[k] = v
 
         # When vulnerability is not None, set the requirements based on GT or NRT criteria
-        self.requirements = Dict.empty(key_type=types.unicode_type, value_type=types.f8)
-        if self.vulnerability is not None:
-            self.load_vulnerability_requirements(self.vulnerability)
+        self.load_vulnerability_requirements(self.vulnerability)
 
         # Load the windows for the current index
         self.windows = config["windows"][self.index]
@@ -168,13 +166,13 @@ class Params:
         return self.windows.get(window_type, {})
 
     def load_vulnerability_requirements(self, vulnerability):
-        if vulnerability not in ["GT", "NRT", "TBD"]:
+        if vulnerability not in [None, "GT", "NRT", "TBD"]:
             raise ValueError("vulnerability must be one of: GT, NRT, TBD")
 
         self.vulnerability = vulnerability
         self.requirements = Dict.empty(key_type=types.unicode_type, value_type=types.f8)
 
-        if vulnerability != "TBD":
+        if vulnerability not in [None, "TBD"]:
             config = load_config(self.iso)
 
             config_key = "general_t" if self.vulnerability == "GT" else "non_regret_t"
