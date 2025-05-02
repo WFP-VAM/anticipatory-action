@@ -418,6 +418,7 @@ def evaluate_grid_metrics(
         coords={"ready": thresholds, "set": thresholds, "threshold": ["ready", "set"]},
     )
 
+    # Initialize empty placeholders for results from xr.apply_ufunc
     penalty = xr.DataArray(np.full(9, 1e6, dtype=np.float64), dims=["metric"])
     conf_matrix = xr.DataArray(np.zeros(4, dtype=np.int8), dims=["metric"])
     constraints = xr.DataArray(np.empty(5, dtype=np.int8), dims=["metric"])
