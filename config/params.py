@@ -48,7 +48,7 @@ class Params:
     issue_months : list
         issue months list: list of issue months to use for triggers selection and verification
     vulnerability : str
-        vulnerability level, can be GT (General), NRT (Non-Regret) or TBD (to be discussed)
+        vulnerability level, can be GT (General), NRT (Non-Regret) or TBD (To Be Determined)
     calibration_year: int
         last year of calibration period used for triggers selection (e.g. 2022 for 1981-2022)
     start_monitoring: int
