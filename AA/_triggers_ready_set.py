@@ -399,7 +399,7 @@ def evaluate_grid_metrics(
     Returns:
         metrics_da: xarray.DataArray, structured array with grid evaluations for all metrics
     """
-    # Ensure category alignment
+    # Ensure category alignment between observations and probabilities
     probs_ready = probs_ready.reindex(category=obs.category.coords["category"].values)
     probs_set = probs_set.reindex(category=obs.category.coords["category"].values)
 
