@@ -185,7 +185,7 @@ def brute_force(
 
     This function computes the objective function across an array of forecast probabilities
     (`prob_issue0`, `prob_issue1`) and observed values (`obs_val`, `obs_bool`).
-    The objective function is evaluated for a set of candidate trigger pairs (t1 and t2 ranging 
+    The objective function is evaluated for a set of candidate trigger pairs (t1 and t2 ranging
     between 0 and 1 with a 0.01 step). The trigger pair with the lowest score is extracted as well as the score value.
 
     The function is optimized for parallel execution with `Numba`'s `guvectorize` decorator to perform
@@ -394,8 +394,8 @@ def evaluate_grid_metrics(
         [Correct Rejections, False Positives, False Negatives, Hits, Hit Rate, False Alarm Rate, Success Rate, Failure Rate, Return Period]
 
     Args:
-        obs: xarray.Dataset, containing numerical and categorical observations
-        probs_ready: xarray.Dataset, forecast probabilities for the ready month
+        obs: xarray.Dataset, containing numerical and categorical observations, with dimensions (district, time, category, index)
+        probs_ready: xarray.Dataset, forecast probabilities for the ready month, with dimensions (district, time, category, index, issue)
         probs_set: xarray.Dataset, forecast probabilities for the set month
 
     Returns:
