@@ -167,7 +167,7 @@ class Params:
     def get_windows(self, window_type):
         return self.windows.get(window_type, {})
 
-    def update_vulnerability(self, vulnerability):
+    def load_vulnerability_requirements(self, vulnerability):
         if vulnerability not in ["GT", "NRT", "TBD"]:
             raise ValueError("vulnerability must be one of: GT, NRT, TBD")
 

@@ -208,7 +208,7 @@ plt.show()
 # Let's first define the vulnerability. We will run (if needed for at least one district) the triggers selection for two vulnerability levels: General Triggers & Non-Regret (or Emergency) Triggers.
 
 
-params.update_vulnerability("GT")  # "NRT"
+params.load_vulnerability_requirements("GT")  # "NRT"
 
 
 run_triggers_selection(params)
