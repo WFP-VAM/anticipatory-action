@@ -149,10 +149,8 @@ class Params:
 
         # When vulnerability is not None, set the requirements based on GT or NRT criteria
         self.requirements = Dict.empty(key_type=types.unicode_type, value_type=types.f8)
-        if self.vulnerability is not None and self.vulnerability in ["GT", "NRT"]:
-            config_key = "general_t" if self.vulnerability == "GT" else "non_regret_t"
-            for k, v in config[config_key].items():
-                self.requirements[k] = v
+        if self.vulnerability is not None:
+            self.load_vulnerability_requirements(self.vulnerability)
 
         # Load the windows for the current index
         self.windows = config["windows"][self.index]
