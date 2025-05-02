@@ -47,6 +47,8 @@ class Params:
         issue month: month of interest for operational script
     issue_months : list
         issue months list: list of issue months to use for triggers selection and verification
+    monitoring_year : int
+        first year of season to monitor operationally (e.g. 2024 for 2024/2025 season)
     vulnerability : str
         vulnerability level, can be GT (General), NRT (Non-Regret) or TBD (To Be Determined)
     calibration_year: int
