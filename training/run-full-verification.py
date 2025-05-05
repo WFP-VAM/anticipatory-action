@@ -6,11 +6,11 @@
 #       extension: .py
 #       format_name: light
 #       format_version: '1.5'
-#       jupytext_version: 1.16.2
+#       jupytext_version: 1.16.1
 #   kernelspec:
-#     display_name: aa-env
+#     display_name: hdc
 #     language: python
-#     name: python3
+#     name: conda-env-hdc-py
 # ---
 
 # ## Run full AA drought verification
@@ -28,6 +28,7 @@
 # %cd ..
 
 import logging
+
 # +
 import os
 
@@ -48,7 +49,7 @@ from config.params import Params
 # **First, please define the country ISO code and the index of interest**
 
 
-country = "MOZ"
+country = "MWI"
 index = "SPI"  # 'SPI' or 'DRYSPELL'
 
 
@@ -62,7 +63,9 @@ index = "SPI"  # 'SPI' or 'DRYSPELL'
 params = Params(iso=country, index=index)
 
 
+# + [markdown] jp-MarkdownHeadingCollapsed=true
 # ### Read data
+# -
 
 # Let's start by getting the Zimbabwe shapefile.
 
@@ -151,10 +154,8 @@ for issue in ["05", "06"]:  # params.issue_months:
     )
 
 fbf_roc = pd.concat(fbf_roc_issues)
-display(fbf_roc)
+display(fbf_roc)  # noqa: F821
 # -
-
-roc
 
 # Let's have a look at how the computed probabilities data looks like.
 
@@ -179,12 +180,12 @@ roc = pd.read_csv(
 )
 
 # +
-display(
+display(  # noqa: F821
     md(
         f"This roc file shows {round(100 * roc.BC.sum() / len(roc), 1)} % of bias-corrected values."
     )
 )
-display(roc)
+display(roc)  # noqa: F821
 
 # Filter to include only 'AUC_best' scores and pivot the table
 roc_pivot = roc.loc[
@@ -207,24 +208,18 @@ plt.show()
 # Let's first define the vulnerability. We will run (if needed for at least one district) the triggers selection for two vulnerability levels: General Triggers & Non-Regret (or Emergency) Triggers.
 
 
-vulnerability = "NRT"  # "GT"
+params.load_vulnerability_requirements("GT")  # "NRT"
 
 
-run_triggers_selection(params, vulnerability)
+run_triggers_selection(params)
 
-
-# Please have a look at the triggers dataset before any filtering by lead time / window.
-
-xr.open_zarr(
-    f"{params.data_path}/data/{params.iso}/triggers/triggers_{params.index}_{params.calibration_year}_{vulnerability}.zarr"
-)
 
 # Then, we keep the best pair for each lead time and the 4 best pairs of triggers per window of activation (in terms of Hit Rate first, and Failure Rate then).
 
 # The triggers dataframe has been saved here: `"data/{iso}/triggers/triggers.aa.python.{index}.{calibration_year}.{vulnerability}.csv"`
 
 triggers = pd.read_csv(
-    f"{params.data_path}/data/{params.iso}/triggers/triggers.{params.index}.{params.calibration_year}.{vulnerability }.csv",
+    f"{params.data_path}/data/{params.iso}/triggers/triggers.{params.index}.{params.calibration_year}.{params.vulnerability}.csv",
 )
 triggers
 
