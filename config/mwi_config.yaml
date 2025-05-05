@@ -1,6 +1,5 @@
 # Issue month: months corresponding to the forecasts used for monitoring
 issue_months:
-  - "05"
   - "06"
   - "07"
   - "08"
@@ -9,7 +8,6 @@ issue_months:
   - "11"
   - "12"
   - "01"
-  - "02"
 
 # First year of season to monitor operationally (e.g. 2024 for 2024/2025 season)
 monitoring_year: 2024
@@ -39,7 +37,7 @@ hist_anomaly_stop: "2018-12-31"
 save_zarr: true
 
 # Data path where to store intermediate and final outputs (should include data folder)
-data_path: "/s3/scratch/amine.barkaoui/aa" # "."
+data_path: "." # "/s3/scratch/amine.barkaoui/aa"
 
 # Thresholds defining different drought intensities used in probabilities computation
 intensity_thresholds:
@@ -51,20 +49,14 @@ intensity_thresholds:
 
 # Vulnerability class of triggers for each district: general or non-regret (GT or NRT)
 districts_vulnerability: 
-  Beitbridge: "NRT"
-  Bikita: "NRT"
-  Binga: "NRT"
-  Chiredzi: "NRT"
-  Gwande: "NRT"
-  Hwange: "NRT"
-  Kariba: "NRT"
-  Masvingo: "NRT"
-  Matobo: "NRT"
-  Mbire: "NRT"
-  Mount Darwin: "NRT"
-  Mudzi: "NRT"
-  Mwenezi: "NRT"
-  Rushinga: "NRT"
+  Kasungu: "TBD"
+  Machinga: "TBD"
+  Mangochi: "TBD"
+  Mulanje: "TBD"
+  Nsanje: "TBD"
+  Phalombe: "TBD"
+  Zomba: "TBD"
+  
 
 # Tolerance for thresholds for each category, used to compute false alarm with tolerance
 tolerance:
@@ -90,8 +82,8 @@ non_regret_t:
 # Window definitions for SPI and DRYSPELL indicators
 windows:
   spi:
-    window1: ["ON", "OND", "ND", "NDJ"]
-    window2: ["DJ", "DJF", "JF", "JFM", "FM", "FMA"]
+    window1: ["OND", "NDJ"]
+    window2: ["DJF", "JFM"]
   dryspell:
     window1: []
     window2: ["DJ", "JF", "FM"]

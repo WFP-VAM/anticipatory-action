@@ -12,19 +12,18 @@ warnings.simplefilter(action="ignore", category=FutureWarning)
 import numpy as np
 import pandas as pd
 import xarray as xr
-from hip.analysis.analyses.drought import (
-    compute_probabilities,
-    concat_obs_levels,
-    get_accumulation_periods,
-    run_accumulation_index,
-    run_bias_correction,
-    run_gamma_standardization,
-)
+from hip.analysis.analyses.drought import (compute_probabilities,
+                                           concat_obs_levels,
+                                           get_accumulation_periods,
+                                           run_accumulation_index,
+                                           run_bias_correction,
+                                           run_gamma_standardization)
 from hip.analysis.aoi.analysis_area import AnalysisArea
 from hip.analysis.compute.utils import start_dask
 from hip.analysis.ops._statistics import evaluate_roc_forecasts
 
-from AA.helper_fns import compute_district_average, read_forecasts, read_observations
+from AA.helper_fns import (compute_district_average, read_forecasts,
+                           read_observations)
 from config.params import Params
 
 
@@ -292,9 +291,7 @@ def calculate_forecast_probabilities(
             run_bias_correction(
                 anomaly_fc,
                 anomaly_obs,
-                start_monitoring=params.start_monitoring,
                 year=year,
-                issue=int(issue),
                 nearest_neighbours=8,
                 enso=True,
             )

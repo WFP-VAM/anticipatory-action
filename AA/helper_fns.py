@@ -46,21 +46,21 @@ def triggers_da_to_df(triggers_da, score_da):
     """
     # Convert triggers to DataFrame, clean and set index
     triggers_df = (
-        triggers_da.to_dataframe()
-        .drop(columns=["spatial_ref"], errors="ignore")
+        triggers_da.rename("trigger_value")
+        .to_dataframe()
+        .drop(columns=["spatial_ref", "return_period", "tolerance"], errors="ignore")
         .dropna()
         .reset_index()
         .set_index(["index", "category", "district", "issue"])
-        .rename(columns={"bool": "trigger_value"})
     )
 
     # Convert score to DataFrame, clean and set index
     score_df = (
-        score_da.to_dataframe()
+        score_da.rename("HR")
+        .to_dataframe()
         .reset_index()
-        .drop(columns=["lead_time"], errors="ignore")
+        .drop(columns=["lead_time", "return_period", "tolerance"], errors="ignore")
         .set_index(["district", "category", "issue", "index"])
-        .rename(columns={"bool": "HR"})
     )
 
     # Join triggers with score
