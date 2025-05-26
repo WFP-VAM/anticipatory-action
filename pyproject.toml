@@ -13,7 +13,7 @@ packages = ["AA"]
 
 [tool.pixi.workspace]
 channels = ["conda-forge", "wfp-ram"]
-platforms = ["linux-64"]
+platforms = ["linux-64", "osx-arm64", "osx-64", "win-64", "linux-aarch64"]
 
 [tool.pixi.pypi-dependencies]
 anticipatory_action = { path = ".", editable = true }
