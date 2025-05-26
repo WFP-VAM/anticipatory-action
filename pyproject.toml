@@ -8,6 +8,9 @@ version = "0.1.0"
 build-backend = "hatchling.build"
 requires = ["hatchling"]
 
+[tool.hatch.build.targets.wheel]
+packages = ["AA"]
+
 [tool.pixi.workspace]
 channels = ["conda-forge", "wfp-ram"]
 platforms = ["linux-64"]
