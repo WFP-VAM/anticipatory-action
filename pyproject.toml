@@ -21,7 +21,10 @@ anticipatory_action = { path = ".", editable = true }
 [tool.pixi.tasks]
 
 [tool.pixi.dependencies]
+python = "3.10.*"
 hip-analysis = ">=0.12.0,<0.13"
+numpy = "<2.0"
+xclim = "0.53.1"
 
 [tool.pixi.environments]
 test = { features = ["test"], solve-group = "prod" }
