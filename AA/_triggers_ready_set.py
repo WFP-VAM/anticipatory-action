@@ -99,7 +99,7 @@ def objective(
         - Designed for use with Numba `guvectorize` to allow fast parallel evaluation across a large grid of thresholds.
     """
     # Convert ready / set into single prediction
-    prediction = np.logical_and(prob_issue0 > t[0], prob_issue1 > t[1])
+    prediction = np.logical_and(prob_issue0 > t[0], prob_issue1 > t[1]).astype(np.int8)
 
     # Get confusion matrix
     compute_confusion_matrix(
@@ -341,7 +341,7 @@ def run_ready_set_brute_selection(obs, probs_ready, probs_set, probs, params):
     triggers, score = xr.apply_ufunc(
         find_optimal_triggers,
         obs.val,
-        obs.bool,
+        obs.bool.astype(np.int8),
         probs_ready.prob,
         probs_set.prob,
         obs.lead_time,
@@ -430,7 +430,7 @@ def evaluate_grid_metrics(
         objective,
         grid_da,
         obs.val,
-        obs.bool,
+        obs.bool.astype(np.int8),
         probs_ready.prob,
         probs_set.prob,
         obs.lead_time,
@@ -594,7 +594,7 @@ def evaluate_top_pairs(sub_df, obs, probs_ready, probs_set, params):
         stats = objective(
             t,
             _select_row(obs.val, district, ind, category).values,
-            _select_row(obs.bool, district, ind, category).values,
+            _select_row(obs.bool, district, ind, category).values.astype(np.int8),
             _select_row(probs_ready.prob, district, ind, category, issue).values,
             _select_row(probs_set.prob, district, ind, category, issue).values,
             _select_row(obs, district, ind, category).lead_time.values,
