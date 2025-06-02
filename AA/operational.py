@@ -228,9 +228,7 @@ def run_aa_probabilities(forecasts, observations, params, period_months):
     index_bc = run_bias_correction(
         anomaly_fc,
         anomaly_obs,
-        params.start_monitoring,
         params.monitoring_year,
-        int(params.issue),
         nearest_neighbours=8,
         enso=True,
     )
