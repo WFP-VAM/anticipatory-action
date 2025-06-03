@@ -4,27 +4,28 @@ import os
 import warnings
 
 import click
-
-logging.basicConfig(level="INFO", force=True)
-
-warnings.simplefilter(action="ignore", category=FutureWarning)
-
+import fsspec
 import numpy as np
 import pandas as pd
 import xarray as xr
-from hip.analysis.analyses.drought import (compute_probabilities,
-                                           concat_obs_levels,
-                                           get_accumulation_periods,
-                                           run_accumulation_index,
-                                           run_bias_correction,
-                                           run_gamma_standardization)
+from hip.analysis.analyses.drought import (
+    compute_probabilities,
+    concat_obs_levels,
+    get_accumulation_periods,
+    run_accumulation_index,
+    run_bias_correction,
+    run_gamma_standardization,
+)
 from hip.analysis.aoi.analysis_area import AnalysisArea
 from hip.analysis.compute.utils import start_dask
 from hip.analysis.ops._statistics import evaluate_roc_forecasts
 
-from AA.helper_fns import (compute_district_average, read_forecasts,
-                           read_observations)
+from AA.helper_fns import compute_district_average, read_forecasts, read_observations
 from config.params import Params
+
+logging.basicConfig(level="INFO", force=True)
+
+warnings.simplefilter(action="ignore", category=FutureWarning)
 
 
 @click.command()
@@ -48,6 +49,7 @@ def run(country, index):
     observations = read_observations(
         area,
         f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}/obs/observations.zarr",
+        storage_options=params.storage_options,
     )
     logging.info(
         f"Completed reading of observations for the whole {params.iso} country"
@@ -68,6 +70,7 @@ def run(country, index):
             area,
             issue,
             f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}/{issue}/forecasts.zarr",
+            storage_options=params.storage_options,
         )
         logging.info(f"Completed reading of forecasts for the issue month {issue}")
 
@@ -88,6 +91,7 @@ def run(country, index):
     fbf_roc.to_csv(
         f"{params.data_path}/data/{params.iso}/auc/fbf.districts.roc.{params.index}.{params.calibration_year}.csv",
         index=False,
+        storage_options=params.storage_options,
     )
 
     logging.info(f"FbF dataframe saved for {country}")
@@ -106,17 +110,14 @@ def run_issue_verification(forecasts, observations, issue, params, area):
         fbf_issue: pandas.DataFrame, dataframe with roc scores for all indexes, districts, categories and a specified issue month
     """
 
-    if os.path.exists(
-        f"{params.data_path}/data/{params.iso}/auc/split_by_issue/fbf.districts.roc.{params.index}.{params.calibration_year}.{issue}.csv"
-    ):
+    fbf_path = f"{params.data_path}/data/{params.iso}/auc/split_by_issue/fbf.districts.roc.{params.index}.{params.calibration_year}.{issue}.csv"
 
+    if fsspec.open(fbf_path).fs.exists(fbf_path):
         logging.info(
             f"FbF ROC verification by district for the issue month {issue} read from disk"
         )
 
-        return pd.read_csv(
-            f"{params.data_path}/data/{params.iso}/auc/split_by_issue/fbf.districts.roc.{params.index}.{params.calibration_year}.{issue}.csv"
-        )
+        return pd.read_csv(fbf_path, storage_options=params.storage_options)
 
     else:
 
@@ -146,8 +147,9 @@ def run_issue_verification(forecasts, observations, issue, params, area):
         fbf_issue["issue"] = int(issue)
 
         fbf_issue.to_csv(
-            f"{params.data_path}/data/{params.iso}/auc/split_by_issue/fbf.districts.roc.{params.index}.{params.calibration_year}.{issue}.csv",
+            fbf_path,
             index=False,
+            storage_options=params.storage_options,
         )
 
         logging.info(
@@ -397,9 +399,11 @@ def save_districts_results(
     probs_path = f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}/{issue}/{params.index} {period_name}/probabilities.zarr"
     probs_bc_path = f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}/{issue}/{params.index} {period_name}/probabilities_bc.zarr"
 
-    obs_district.to_zarr(obs_path, mode="w")
-    probs_district.to_zarr(probs_path, mode="w")
-    probs_bc_district.to_zarr(probs_bc_path, mode="w")
+    obs_district.to_zarr(obs_path, mode="w", storage_options=params.storage_options)
+    probs_district.to_zarr(probs_path, mode="w", storage_options=params.storage_options)
+    probs_bc_district.to_zarr(
+        probs_bc_path, mode="w", storage_options=params.storage_options
+    )
 
 
 if __name__ == "__main__":
