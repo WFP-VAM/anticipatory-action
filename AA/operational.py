@@ -1,22 +1,10 @@
-import sys
-
-sys.path.append("..")
-
+import datetime
 import logging
 import os
-
-import click
-
-logging.basicConfig(level="INFO", force=True)
-
 import warnings
 
-warnings.simplefilter(action="ignore", category=FutureWarning)
-
-import datetime
-import traceback
-
-import dask
+import click
+import fsspec
 import pandas as pd
 from hip.analysis.analyses.drought import (
     compute_probabilities,
@@ -36,15 +24,25 @@ from AA.helper_fns import (
 )
 from config.params import Params
 
+logging.basicConfig(level="INFO", force=True)
+
+warnings.simplefilter(action="ignore", category=FutureWarning)
+
 
 @click.command()
 @click.argument("country", required=True, type=str)
 @click.argument("issue", required=True, type=int)
 @click.argument("index", default="SPI")
-def run(country, issue, index):
+@click.option(
+    "--data-path",
+    required=True,
+    type=str,
+    help="Root directory for data files.",
+)
+def run(country, issue, index, data_path):
     # End to end workflow for a country using pre-stored ECMWF forecasts and CHIRPS
 
-    params = Params(iso=country, issue=issue, index=index)
+    params = Params(iso=country, issue=issue, index=index, data_path=data_path)
 
     area = AnalysisArea.from_admin_boundaries(
         iso3=country.upper(),
@@ -74,16 +72,13 @@ def run(country, issue, index):
         exist_ok=True,
     )
 
-    if os.path.exists(
-        f"{params.data_path}/data/{params.iso}/probs/aa_probabilities_triggers_pilots.csv"
-    ):
-        triggers_df = pd.read_csv(
-            f"{params.data_path}/data/{params.iso}/probs/aa_probabilities_triggers_pilots.csv",
-        )
+    triggers_path = f"{params.data_path}/data/{params.iso}/probs/aa_probabilities_triggers_pilots.csv"
+    fallback_triggers_path = f"{params.data_path}/data/{params.iso}/triggers/triggers.spi.dryspell.{params.calibration_year}.pilots.csv"
+
+    if fsspec.open(triggers_path).fs.exists(triggers_path):
+        triggers_df = pd.read_csv(triggers_path)
     else:
-        triggers_df = pd.read_csv(
-            f"{params.data_path}/data/{params.iso}/triggers/triggers.spi.dryspell.{params.calibration_year}.pilots.csv",
-        )
+        triggers_df = pd.read_csv(fallback_triggers_path)
 
     # Get accumulation periods (DJ, JF, FM, DJF, JFM...)
     accumulation_periods = get_accumulation_periods(
@@ -258,6 +253,6 @@ def run_aa_probabilities(forecasts, observations, params, period_months):
 
 if __name__ == "__main__":
     # From AA repository:
-    # $ python operational.py MOZ 10 SPI
+    # $ pixi run python -m AA.operational MOZ 10 SPI --data-path "C:/path/to/data"
 
     run()

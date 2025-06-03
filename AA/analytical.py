@@ -31,13 +31,19 @@ warnings.simplefilter(action="ignore", category=FutureWarning)
 @click.command()
 @click.argument("country", required=True, type=str)
 @click.argument("index", default="SPI")
-def run(country, index):
+@click.option(
+    "--data-path",
+    required=True,
+    type=str,
+    help="Root directory for data files.",
+)
+def run(country, index, data_path):
 
     client = start_dask(n_workers=1)
     logging.info(f"Dask dashboard: {client.dashboard_link}")
 
     # End to end workflow for a country using ECMWF forecasts and CHIRPS from HDC
-    params = Params(iso=country, index=index)
+    params = Params(iso=country, index=index, data_path=data_path)
 
     area = AnalysisArea.from_admin_boundaries(
         iso3=country.upper(),
@@ -402,6 +408,6 @@ def save_districts_results(
 
 if __name__ == "__main__":
     # From AA repository:
-    # $ python analytical.py MOZ SPI
+    # $ pixi run python -m AA.analytical MOZ SPI --data-path "C:/path/to/data"
 
     run()

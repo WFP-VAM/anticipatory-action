@@ -1,9 +1,8 @@
-import glob
 import logging
-import os
 import warnings
 
 import click
+import fsspec
 import numpy as np
 import pandas as pd
 import xarray as xr
@@ -32,14 +31,22 @@ warnings.simplefilter(action="ignore")
 @click.command()
 @click.argument("country", required=True, type=str)
 @click.argument("index", default="SPI")
-@click.argument("vulnerability", default="GT")
-def run(country, index, vulnerability):
+@click.argument("vulnerability", default="TBD")
+@click.option(
+    "--data-path",
+    required=True,
+    type=str,
+    help="Root directory for data files.",
+)
+def run(country, index, vulnerability, data_path):
     client = start_dask(n_workers=1)
     logging.info("+++++++++++++")
     logging.info(f"Dask dashboard: {client.dashboard_link}")
     logging.info("+++++++++++++")
 
-    params = Params(iso=country, index=index, vulnerability=vulnerability)
+    params = Params(
+        iso=country, index=index, vulnerability=vulnerability, data_path=data_path
+    )
 
     run_triggers_selection(params)
 
@@ -199,9 +206,10 @@ def run_triggers_selection(params):
 
 
 def read_aggregated_obs(path_to_zarr, params):
-    list_index_paths = glob.glob(f"{path_to_zarr}/{params.index} *")
+    fs, _, _ = fsspec.get_fs_token_paths(f"{path_to_zarr}/{params.index} *")
+    list_index_paths = fs.glob(f"{path_to_zarr}/{params.index} *")
     list_val_paths = [
-        os.path.join(ind_path, "observations.zarr") for ind_path in list_index_paths
+        fs.sep.join([ind_path, "observations.zarr"]) for ind_path in list_index_paths
     ]
 
     obs_val = xr.open_mfdataset(
@@ -215,26 +223,26 @@ def read_aggregated_obs(path_to_zarr, params):
 
     obs = xr.Dataset({"bool": obs_bool, "val": obs_val})
     obs["time"] = [pd.to_datetime(t).year for t in obs.time.values]
-    obs["index"] = [os.path.split(os.path.dirname(i))[-1] for i in list_val_paths]
+    obs["index"] = [ind_path.split(fs.sep)[-1] for ind_path in list_index_paths]
     return obs
 
 
 def read_aggregated_probs(path_to_zarr, params):
-    list_issue_paths = sorted(glob.glob(f"{path_to_zarr}/*"))[
+    fs, _, _ = fsspec.get_fs_token_paths(f"{path_to_zarr}/*")
+    list_issue_paths = sorted(fs.glob(f"{path_to_zarr}/*"))[
         :-1
     ]  # Last one is the `obs` folder.
     list_index = {}
 
     for iss_path in list_issue_paths:
+        list_index_paths = fs.glob(f"{iss_path}/{params.index} *")
         list_index_raw = [
-            os.path.join(i, "probabilities.zarr")
-            for i in sorted(glob.glob(f"{iss_path}/{params.index} *"))
+            fs.sep.join([i, "probabilities.zarr"]) for i in sorted(list_index_paths)
         ]
         list_index_bc = [
-            os.path.join(i, "probabilities_bc.zarr")
-            for i in sorted(glob.glob(f"{iss_path}/{params.index} *"))
+            fs.sep.join([i, "probabilities_bc.zarr"]) for i in sorted(list_index_paths)
         ]
-        index_names = [os.path.split(os.path.dirname(i))[-1] for i in list_index_raw]
+        index_names = [i.split(fs.sep)[-1] for i in sorted(list_index_paths)]
 
         index_raw = xr.open_mfdataset(
             list_index_raw,
@@ -253,13 +261,13 @@ def read_aggregated_probs(path_to_zarr, params):
 
         ds_index = xr.Dataset({"raw": index_raw, "bc": index_bc})
         ds_index["index"] = index_names
-        list_index[int(os.path.split(iss_path)[-1])] = ds_index
+        list_index[int(iss_path.split(fs.sep)[-1])] = ds_index
 
     return xr.concat(list_index.values(), dim=pd.Index(list_index.keys(), name="issue"))
 
 
 if __name__ == "__main__":
     # From AA repository:
-    # $ python triggers.py MOZ SPI NRT
+    # $ pixi run python -m AA.triggers MOZ SPI TBD --data-path "C:/path/to/data"
 
     run()
