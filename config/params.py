@@ -1,4 +1,5 @@
 import datetime
+import fsspec
 import os
 from dataclasses import dataclass, field
 
@@ -8,6 +9,7 @@ import pandas as pd
 import yaml
 from numba import types
 from numba.typed import Dict
+from typing import Dict as TypingDict
 
 from AA.helper_fns import read_fbf_districts
 
@@ -69,10 +71,6 @@ class Params:
         start date of historical time series used in anomaly computation
     hist_anomaly_stop : datetime.datetime
         end date of historical time series used in anomaly computation
-    save_zarr : bool
-        save (and overwrite if exists) ds (obs or probs) for future trigger choice
-    data_path : str
-        output path where to store intermediate and final outputs (should include data folder)
     districts: list
         list of districts for which we want to compute triggers
     indicators: list
@@ -89,6 +87,14 @@ class Params:
         skill requirements for GT or NRT, should include Hit Rate, Success Rate, Failure Rate, Return Period
     windows: dict
         dictionary containing two dictionaries (window1, window2) containing indicators for each window (by province or not)
+    save_zarr : bool
+        save (and overwrite if exists) ds (obs or probs) for future trigger choice
+    data_path : str
+        output path where to store intermediate and final outputs (should include data folder)
+    aws_profile : str
+        AWS CLI profile to use for S3 access; defaults to "wfp-ops-userdata" if not specified in environment
+    storage_options : dict
+        dictionary of storage options for fsspec-based file access (e.g. S3); includes AWS profile
     """
 
     iso: str
@@ -106,8 +112,6 @@ class Params:
     end_season: int = 6
     hist_anomaly_start: datetime.datetime = None
     hist_anomaly_stop: datetime.datetime = datetime.datetime(2018, 12, 31)
-    save_zarr: bool = True
-    data_path: str = "."
     districts: list = field(init=None)
     indicators: list = field(init=None)
     fbf_districts_df: pd.DataFrame = field(init=False, default_factory=pd.DataFrame)
@@ -116,6 +120,10 @@ class Params:
     tolerance: dict = field(init=False)
     requirements: dict = field(init=None)
     windows: dict = field(init=False)
+    save_zarr: bool = True
+    data_path: str = "."
+    aws_profile: str = None
+    storage_options: TypingDict[str, str] = field(init=None, default_factory=dict)
 
     def __post_init__(self):
         self.iso = self.iso.lower()
@@ -161,6 +169,9 @@ class Params:
         else:
             periods = np.unique(list((set().union(*self.windows.values()))))
         self.indicators = [self.index + " " + ind for ind in periods]
+
+        self.aws_profile = os.getenv("AWS_PROFILE")
+        self.storage_options = {"profile": self.aws_profile}
 
     def get_windows(self, window_type):
         return self.windows.get(window_type, {})
