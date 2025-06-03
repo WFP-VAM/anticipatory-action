@@ -38,14 +38,25 @@ warnings.simplefilter(action="ignore")
     type=str,
     help="Root directory for data files.",
 )
-def run(country, index, vulnerability, data_path):
+@click.option(
+    "--output-path",
+    required=False,
+    type=str,
+    default=None,
+    help="Root directory for output files. Defaults to data-path if not provided.",
+)
+def run(country, index, vulnerability, data_path, output_path):
     client = start_dask(n_workers=1)
     logging.info("+++++++++++++")
     logging.info(f"Dask dashboard: {client.dashboard_link}")
     logging.info("+++++++++++++")
 
     params = Params(
-        iso=country, index=index, vulnerability=vulnerability, data_path=data_path
+        iso=country,
+        index=index,
+        vulnerability=vulnerability,
+        data_path=data_path,
+        output_path=output_path,
     )
 
     run_triggers_selection(params)
@@ -196,7 +207,7 @@ def run_triggers_selection(params):
     triggers = format_triggers_df_for_dashboard(df_window, params)
 
     triggers.to_csv(
-        f"{params.data_path}/data/{params.iso}/triggers/triggers.{params.index}.{params.calibration_year}.{params.vulnerability}.csv",
+        f"{params.output_path}/data/{params.iso}/triggers/triggers.{params.index}.{params.calibration_year}.{params.vulnerability}.csv",
         index=False,
     )
 

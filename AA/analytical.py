@@ -37,13 +37,22 @@ warnings.simplefilter(action="ignore", category=FutureWarning)
     type=str,
     help="Root directory for data files.",
 )
-def run(country, index, data_path):
+@click.option(
+    "--output-path",
+    required=False,
+    type=str,
+    default=None,
+    help="Root directory for output files. Defaults to data-path if not provided.",
+)
+def run(country, index, data_path, output_path):
 
     client = start_dask(n_workers=1)
     logging.info(f"Dask dashboard: {client.dashboard_link}")
 
     # End to end workflow for a country using ECMWF forecasts and CHIRPS from HDC
-    params = Params(iso=country, index=index, data_path=data_path)
+    params = Params(
+        iso=country, index=index, data_path=data_path, output_path=output_path
+    )
 
     area = AnalysisArea.from_admin_boundaries(
         iso3=country.upper(),
@@ -62,7 +71,7 @@ def run(country, index, data_path):
 
     # Create directory for ROC scores df per issue month in case it doesn't exist
     os.makedirs(
-        f"{params.data_path}/data/{params.iso}/auc/split_by_issue",
+        f"{params.output_path}/data/{params.iso}/auc/split_by_issue",
         exist_ok=True,
     )
 
@@ -93,7 +102,7 @@ def run(country, index, data_path):
 
     fbf_roc = pd.concat(fbf_roc_issues)
     fbf_roc.to_csv(
-        f"{params.data_path}/data/{params.iso}/auc/fbf.districts.roc.{params.index}.{params.calibration_year}.csv",
+        f"{params.output_path}/data/{params.iso}/auc/fbf.districts.roc.{params.index}.{params.calibration_year}.csv",
         index=False,
     )
 
@@ -113,7 +122,7 @@ def run_issue_verification(forecasts, observations, issue, params, area):
         fbf_issue: pandas.DataFrame, dataframe with roc scores for all indexes, districts, categories and a specified issue month
     """
 
-    fbf_path = f"{params.data_path}/data/{params.iso}/auc/split_by_issue/fbf.districts.roc.{params.index}.{params.calibration_year}.{issue}.csv"
+    fbf_path = f"{params.output_path}/data/{params.iso}/auc/split_by_issue/fbf.districts.roc.{params.index}.{params.calibration_year}.{issue}.csv"
 
     if fsspec.open(fbf_path).fs.exists(fbf_path):
         logging.info(
@@ -397,9 +406,9 @@ def save_districts_results(
     probs_bc_district["category"] = probs_bc_district["category"].astype(str)
 
     # Define file paths
-    obs_path = f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}/obs/{params.index} {period_name}/observations.zarr"
-    probs_path = f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}/{issue}/{params.index} {period_name}/probabilities.zarr"
-    probs_bc_path = f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}/{issue}/{params.index} {period_name}/probabilities_bc.zarr"
+    obs_path = f"{params.output_path}/data/{params.iso}/zarr/{params.calibration_year}/obs/{params.index} {period_name}/observations.zarr"
+    probs_path = f"{params.output_path}/data/{params.iso}/zarr/{params.calibration_year}/{issue}/{params.index} {period_name}/probabilities.zarr"
+    probs_bc_path = f"{params.output_path}/data/{params.iso}/zarr/{params.calibration_year}/{issue}/{params.index} {period_name}/probabilities_bc.zarr"
 
     obs_district.to_zarr(obs_path, mode="w")
     probs_district.to_zarr(probs_path, mode="w")

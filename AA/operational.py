@@ -39,10 +39,23 @@ warnings.simplefilter(action="ignore", category=FutureWarning)
     type=str,
     help="Root directory for data files.",
 )
-def run(country, issue, index, data_path):
+@click.option(
+    "--output-path",
+    required=False,
+    type=str,
+    default=None,
+    help="Root directory for output files. Defaults to data-path if not provided.",
+)
+def run(country, issue, index, data_path, output_path):
     # End to end workflow for a country using pre-stored ECMWF forecasts and CHIRPS
 
-    params = Params(iso=country, issue=issue, index=index, data_path=data_path)
+    params = Params(
+        iso=country,
+        issue=issue,
+        index=index,
+        data_path=data_path,
+        output_path=output_path,
+    )
 
     area = AnalysisArea.from_admin_boundaries(
         iso3=country.upper(),
@@ -68,7 +81,7 @@ def run(country, issue, index, data_path):
     )
 
     os.makedirs(
-        f"{params.data_path}/data/{params.iso}/probs",
+        f"{params.output_path}/data/{params.iso}/probs",
         exist_ok=True,
     )
 
@@ -108,7 +121,7 @@ def run(country, issue, index, data_path):
 
     probs_dashboard = pd.concat(probs_df).drop_duplicates()
     probs_dashboard.to_csv(
-        f"{params.data_path}/data/{params.iso}/probs/aa_probabilities_{params.index}_{params.issue}.csv",
+        f"{params.output_path}/data/{params.iso}/probs/aa_probabilities_{params.index}_{params.issue}.csv",
         index=False,
     )
 
@@ -117,7 +130,7 @@ def run(country, issue, index, data_path):
         merged_db.columns.difference(["prob_ready", "prob_set"]), keep="first"
     )
     merged_db.sort_values(["district", "index", "category"]).to_csv(
-        f"{params.data_path}/data/{params.iso}/probs/aa_probabilities_triggers_pilots.csv",
+        f"{params.output_path}/data/{params.iso}/probs/aa_probabilities_triggers_pilots.csv",
         index=False,
     )
 

@@ -88,6 +88,8 @@ class Params:
     save_zarr : bool
         save (and overwrite if exists) ds (obs or probs) for future trigger choice
     data_path : str
+        data path where to read input data from (should include data folder)
+    output_path : str
         output path where to store intermediate and final outputs (should include data folder)
     """
 
@@ -116,10 +118,14 @@ class Params:
     windows: dict = field(init=False)
     save_zarr: bool = True
     data_path: str = "."
+    output_path: str = None
 
     def __post_init__(self):
         self.iso = self.iso.lower()
         self.index = self.index.lower()
+
+        if self.output_path is None:
+            self.output_path = self.data_path
 
         config = load_config(self.iso)
 
