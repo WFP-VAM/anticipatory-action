@@ -31,6 +31,7 @@ COPY --from=build --chmod=0755 /app/entrypoint.sh /app/entrypoint.sh
 # Copy project code
 COPY pyproject.toml pixi.lock ./
 COPY AA ./AA
+COPY config ./config
 
 # Set runtime environment
 ENV PYTHONPATH="/app"
