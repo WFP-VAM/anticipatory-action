@@ -280,11 +280,11 @@ def read_fbf_districts(path_fbf, params):
     return fbf_districts
 
 
-def read_forecasts(area, issue, local_path, storage_options={}, update=False):
+def read_forecasts(area, issue, local_path, update=False):
     fs = fsspec.open(local_path).fs
     if fs.exists(os.path.join(local_path, ".zmetadata")) and not update:
         logging.info("Reading of forecasts from precomputed zarr...")
-        ds = xr.open_zarr(local_path, storage_options=storage_options).tp
+        ds = xr.open_zarr(local_path).tp
         end_date = datetime.datetime.strptime(
             area.datetime_range.split("/")[1], "%Y-%m-%d"
         )
@@ -296,18 +296,17 @@ def read_forecasts(area, issue, local_path, storage_options={}, update=False):
             load_config={"gridded_load_kwargs": {"resampling": "bilinear"}},
         )
         forecasts.attrs["nodata"] = np.nan
-        forecasts.chunk({"time": -1}).to_zarr(
-            local_path, mode="w", consolidated=True, storage_options=storage_options
-        )
+        forecasts.chunk({"time": -1}).to_zarr(local_path, mode="w", consolidated=True)
     return persist_with_progress_bar(forecasts)
 
 
-def read_observations(area, local_path, storage_options={}):
+def read_observations(area, local_path):
     fs = fsspec.open(local_path).fs
     if fs.exists(os.path.join(local_path, ".zmetadata")):
         logging.info("Reading of observations from precomputed zarr...")
         observations = xr.open_zarr(
-            local_path, consolidated=True, storage_options=storage_options
+            local_path,
+            consolidated=True,
         ).band
     else:
         logging.info("Reading of observations from HDC STAC...")
@@ -316,7 +315,9 @@ def read_observations(area, local_path, storage_options={}):
             load_config={"gridded_load_kwargs": {"resampling": "bilinear"}},
         )
         observations.to_zarr(
-            local_path, mode="w", consolidated=True, storage_options=storage_options
+            local_path,
+            mode="w",
+            consolidated=True,
         )
 
     return persist_with_progress_bar(observations)
