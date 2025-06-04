@@ -99,12 +99,16 @@ def compute_district_average(da, area):
         da_grouped = da.groupby(*groupby_dim).map(
             lambda da: area.zonal_stats(
                 da.squeeze(groupby_dim), stats=["mean"], zone_ids=None, zones=None
-            ).to_xarray()["mean"]
+            )
+            .query("zone != 'Administrative unit not available'")
+            .to_xarray()["mean"]
         )
     else:
-        da_grouped = area.zonal_stats(
-            da, stats=["mean"], zone_ids=None, zones=None
-        ).to_xarray()["mean"]
+        da_grouped = (
+            area.zonal_stats(da, stats=["mean"], zone_ids=None, zones=None)
+            .query("zone != 'Administrative unit not available'")
+            .to_xarray()["mean"]
+        )
 
     # Rename 'zone' to 'district' for consistency
     da_grouped = da_grouped.rename({"zone": "district"})
