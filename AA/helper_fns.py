@@ -276,9 +276,7 @@ def merge_probabilities_triggers_dashboard(probs, triggers, params, period):
 
 
 def read_fbf_districts(path_fbf, params):
-    fbf_districts = pd.read_csv(
-        path_fbf, sep=",", storage_options=params.storage_options
-    )
+    fbf_districts = pd.read_csv(path_fbf, sep=",")
     if params.issue:
         fbf_districts = fbf_districts.loc[fbf_districts.issue == params.issue]
     return fbf_districts
