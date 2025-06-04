@@ -47,7 +47,9 @@ warnings.simplefilter(action="ignore", category=FutureWarning)
 def run(country, index, data_path, output_path):
 
     client = start_dask(n_workers=1)
+    logging.info("+++++++++++++")
     logging.info(f"Dask dashboard: {client.dashboard_link}")
+    logging.info("+++++++++++++")
 
     # End to end workflow for a country using ECMWF forecasts and CHIRPS from HDC
     params = Params(

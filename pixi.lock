@@ -5714,7 +5714,7 @@ packages:
 - pypi: .
   name: anticipatory-action
   version: 0.1.0
-  sha256: 9e3babd2239b6f4e58c0525896306446c7cf393b377337e335cb390a32ea4ff4
+  sha256: 2d2078d3e171b77edea3b60fc111193f6733de0301e021bc9f8852f2dd6d59b0
   requires_python: '>=3.10'
   editable: true
 - conda: https://conda.anaconda.org/conda-forge/noarch/anyio-4.9.0-pyh29332c3_0.conda

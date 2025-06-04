@@ -80,6 +80,9 @@ def run_triggers_selection(params):
         params,
     )
 
+    # Filter obs on indicators of interest
+    obs = obs.sel(index=params.indicators)
+
     # Assign `lead_time`, `tolerance` and `return_period` as coordinates to enable
     # straightforward broadcasting and efficient use in vectorized functions via
     # `apply_ufunc` with `guvectorize`. These variables depend on others, but passing
@@ -126,9 +129,16 @@ def run_triggers_selection(params):
     # Filter year dimension: temporary before harmonization with analytical script
     obs = obs.sel(time=probs.time.values).load()
 
-    # Filter on indicators of interest
-    obs = obs.sel(index=params.indicators)
+    # Filter probs on indicators of interest
     probs = probs.sel(index=params.indicators)
+
+    # Filter on specific categories to facilitate computation
+    obs = obs.where(
+        obs.category.isin(list(params.intensity_thresholds.keys())), drop=True
+    )
+    probs = probs.where(
+        probs.category.isin(list(params.intensity_thresholds.keys())), drop=True
+    )
 
     # Align couples of issue months inside apply_ufunc
     probs_ready = probs.sel(issue=np.uint8(params.issue_months)[:-1]).load()
@@ -233,8 +243,10 @@ def read_aggregated_obs(path_to_zarr, params):
     obs_bool = concat_obs_levels(obs_val, levels=params.intensity_thresholds)
 
     obs = xr.Dataset({"bool": obs_bool, "val": obs_val})
+
+    # Reformat time and index coords
     obs["time"] = [pd.to_datetime(t).year for t in obs.time.values]
-    obs["index"] = [ind_path.split(fs.sep)[-1] for ind_path in list_index_paths]
+    obs["index"] = [val_path.split(fs.sep)[-1] for val_path in list_val_paths]
     return obs
 
 
