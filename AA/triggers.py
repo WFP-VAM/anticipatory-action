@@ -3,6 +3,7 @@ import warnings
 
 import click
 import fsspec
+import s3fs
 import numpy as np
 import pandas as pd
 import xarray as xr
@@ -227,8 +228,15 @@ def run_triggers_selection(params):
 
 
 def read_aggregated_obs(path_to_zarr, params):
-    fs, _, _ = fsspec.get_fs_token_paths(f"{path_to_zarr}/{params.index} *")
+    fs, _, _ = fsspec.get_fs_token_paths(path_to_zarr)
     list_index_paths = fs.glob(f"{path_to_zarr}/{params.index} *")
+
+    # Restore full S3 paths if needed
+    if isinstance(fs, s3fs.core.S3FileSystem):
+        list_index_paths = [
+            f"s3://{fs._strip_protocol(path)}" for path in list_index_paths
+        ]
+
     list_val_paths = [
         fs.sep.join([ind_path, "observations.zarr"]) for ind_path in list_index_paths
     ]
@@ -246,12 +254,12 @@ def read_aggregated_obs(path_to_zarr, params):
 
     # Reformat time and index coords
     obs["time"] = [pd.to_datetime(t).year for t in obs.time.values]
-    obs["index"] = [val_path.split(fs.sep)[-1] for val_path in list_val_paths]
+    obs["index"] = [val_path.split(fs.sep)[-1] for val_path in list_index_paths]
     return obs
 
 
 def read_aggregated_probs(path_to_zarr, params):
-    fs, _, _ = fsspec.get_fs_token_paths(f"{path_to_zarr}/*")
+    fs, _, _ = fsspec.get_fs_token_paths(path_to_zarr)
     list_issue_paths = sorted(fs.glob(f"{path_to_zarr}/*"))[
         :-1
     ]  # Last one is the `obs` folder.
@@ -266,6 +274,15 @@ def read_aggregated_probs(path_to_zarr, params):
             fs.sep.join([i, "probabilities_bc.zarr"]) for i in sorted(list_index_paths)
         ]
         index_names = [i.split(fs.sep)[-1] for i in sorted(list_index_paths)]
+
+        # Restore full S3 paths if needed
+        if isinstance(fs, s3fs.core.S3FileSystem):
+            list_index_raw = [
+                f"s3://{fs._strip_protocol(path)}" for path in list_index_raw
+            ]
+            list_index_bc = [
+                f"s3://{fs._strip_protocol(path)}" for path in list_index_bc
+            ]
 
         index_raw = xr.open_mfdataset(
             list_index_raw,
