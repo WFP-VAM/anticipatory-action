@@ -1,4 +1,5 @@
 import datetime
+import fsspec
 import os
 from dataclasses import dataclass, field
 
@@ -145,7 +146,7 @@ class Params:
 
         # Read fbf roc dataframe if exists for triggers selection
         fbf_districts_path = f"{self.data_path}/data/{self.iso}/auc/fbf.districts.roc.{self.index}.2022.csv"
-        if os.path.exists(fbf_districts_path):
+        if fsspec.open(fbf_districts_path).fs.exists(fbf_districts_path):
             self.fbf_districts_df = read_fbf_districts(fbf_districts_path, self)
 
         # Read the tolerance thresholds and store them as a dict
