@@ -21,7 +21,7 @@ AGGREGATES = {
     .hdc.algo.lroo(),
 }
 
-S3_OPS_DATA_PATH = "s3://wfp-ops-user-data/amine.barkaoui/aa"
+S3_OPS_DATA_PATH = "s3://wfp-ops-userdata/amine.barkaoui/aa"
 
 def load_config(iso):
     config_file = f"./config/{iso}_config.yaml"
