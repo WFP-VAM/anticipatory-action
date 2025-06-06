@@ -87,7 +87,7 @@ def run(country, issue, index, data_path, output_path):
     )
 
     triggers_path = f"{params.data_path}/data/{params.iso}/probs/aa_probabilities_triggers_pilots.csv"
-    fallback_triggers_path = f"{params.data_path}/data/{params.iso}/triggers/triggers.spi.dryspell.{params.calibration_year}.pilots.csv"
+    fallback_triggers_path = f"{params.data_path}/data/{params.iso}/triggers/triggers.final.{params.monitoring_year}.pilots.csv"
 
     if fsspec.open(triggers_path).fs.exists(triggers_path):
         triggers_df = pd.read_csv(triggers_path)
