@@ -21,6 +21,7 @@ AGGREGATES = {
     .hdc.algo.lroo(),
 }
 
+S3_OPS_DATA_PATH = "s3://wfp-ops-user-data/amine.barkaoui/aa"
 
 def load_config(iso):
     config_file = f"./config/{iso}_config.yaml"
@@ -118,15 +119,12 @@ class Params:
     requirements: dict = field(init=None)
     windows: dict = field(init=False)
     save_zarr: bool = True
-    data_path: str = "."
-    output_path: str = None
+    data_path: str = S3_OPS_DATA_PATH
+    output_path: str = S3_OPS_DATA_PATH
 
     def __post_init__(self):
         self.iso = self.iso.lower()
         self.index = self.index.lower()
-
-        if self.output_path is None:
-            self.output_path = self.data_path
 
         config = load_config(self.iso)
 

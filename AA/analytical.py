@@ -21,7 +21,7 @@ from hip.analysis.compute.utils import start_dask
 from hip.analysis.ops._statistics import evaluate_roc_forecasts
 
 from AA.helper_fns import compute_district_average, read_forecasts, read_observations
-from config.params import Params
+from config.params import S3_OPS_DATA_PATH, Params
 
 logging.basicConfig(level="INFO", force=True)
 
@@ -35,13 +35,14 @@ warnings.simplefilter(action="ignore", category=FutureWarning)
     "--data-path",
     required=True,
     type=str,
+    default=S3_OPS_DATA_PATH,
     help="Root directory for data files.",
 )
 @click.option(
     "--output-path",
     required=False,
     type=str,
-    default=None,
+    default=S3_OPS_DATA_PATH,
     help="Root directory for output files. Defaults to data-path if not provided.",
 )
 def run(country, index, data_path, output_path):

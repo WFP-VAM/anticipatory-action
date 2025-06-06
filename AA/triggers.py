@@ -3,9 +3,9 @@ import warnings
 
 import click
 import fsspec
-import s3fs
 import numpy as np
 import pandas as pd
+import s3fs
 import xarray as xr
 from hip.analysis.analyses.drought import concat_obs_levels, get_accumulation_periods
 from hip.analysis.aoi.analysis_area import AnalysisArea
@@ -23,7 +23,7 @@ from AA.helper_fns import (
     merge_un_biased_probs,
     triggers_da_to_df,
 )
-from config.params import Params
+from config.params import S3_OPS_DATA_PATH, Params
 
 logging.basicConfig(level="INFO", force=True)
 warnings.simplefilter(action="ignore")
@@ -37,13 +37,14 @@ warnings.simplefilter(action="ignore")
     "--data-path",
     required=True,
     type=str,
+    default=S3_OPS_DATA_PATH,
     help="Root directory for data files.",
 )
 @click.option(
     "--output-path",
     required=False,
     type=str,
-    default=None,
+    default=S3_OPS_DATA_PATH,
     help="Root directory for output files. Defaults to data-path if not provided.",
 )
 def run(country, index, vulnerability, data_path, output_path):

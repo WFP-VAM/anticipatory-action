@@ -22,7 +22,7 @@ from AA.helper_fns import (
     read_forecasts,
     read_observations,
 )
-from config.params import Params
+from config.params import S3_OPS_DATA_PATH, Params
 
 logging.basicConfig(level="INFO", force=True)
 
@@ -37,13 +37,14 @@ warnings.simplefilter(action="ignore", category=FutureWarning)
     "--data-path",
     required=True,
     type=str,
+    default=S3_OPS_DATA_PATH,
     help="Root directory for data files.",
 )
 @click.option(
     "--output-path",
     required=False,
     type=str,
-    default=None,
+    default=S3_OPS_DATA_PATH,
     help="Root directory for output files. Defaults to data-path if not provided.",
 )
 def run(country, issue, index, data_path, output_path):
