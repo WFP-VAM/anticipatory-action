@@ -1,64 +1,156 @@
 # anticipatory-action
 
+This repository provides a set of scripts and Jupytext notebooks to run analytical, trigger, and operational workflows for anticipatory action. You can run them either:
+
+- in a local Pixi-managed environment, or
+
+- inside a Docker container, using environment variables to pass parameters.
+
 
 ## Running
 
 - If new features have been released on GitHub, you will have to pull the changes, run: `git pull origin main` in a shell or use the GitHub Desktop.
-
-- Make sure your environment is active:
-
-```commandline
-$ conda activate aa-env
-```
 
 - Make sure your parameters are well defined in `config/{iso}_config.yml`.
 
 - Make sure you are in the anticipatory-action folder: use the `cd` command to move to the anticipatory-action folder.
 
 
-### How to run jupytext files 
+### ⚙️ Running in a local Pixi environment
 
-In the different folders of this repository, you will find different notebooks with the extension `.py`. These are jupytext files that can be run as notebooks. They facilitate version control and have a much smaller memory size. They are simple to use, after activating the environment: 
+To install [Pixi](https://pixi.sh/latest/getting_started/), follow the official instructions. Once installed, you can create the environment:
 
-1. Open jupyter lab by executing the command `jupyter lab` in the terminal. 
-2. Find the file you need to work on in the file explorer.
-3. Right-click on it and select `Open with -> Notebook`. You can now execute your notebook cell by cell.
+```bash
+pixi install --locked
+```
+You can now run any of the scripts:
 
-An `.ipynb` file will immediately be created, storing the cell outputs. As these two files are paired, any changes you make to one will immediately be reflected in the other, and vice versa. You can also work directly on the `.ipynb` file when you return to your workspace. Be careful, however, not to modify both files at the same time, as this may create conflicts and errors when you save or reopen them. 
+#### 1. Analytical script
 
-
-### Full workflow through the script
-
-You can now run the workflow for a given country.
-
-**Analytical script**
-
-```commandline
-$ python analytical.py <ISO> <SPI/DRYSPELL>
+```bash
+pixi run python -m AA.analytical <ISO> <SPI/DRYSPELL>
 ```
 
-**Triggers script**
+#### 2. Triggers script
 
-Please choose a vulnerability level when you need to run the triggers script. You can either set it to:
-
-- *GT*: General Triggers, requirements defined in the config file
-
-- *NRT*: Non-Regret Triggers, requirements defined in the config file
-
-- *TBD*: vulnerability To Be Defined, the complete list of triggers will be saved and the calibration will be skipped
-
-```commandline
-$ python triggers.py <ISO> <SPI/DRYSPELL> <VULNERABILITY>
+```bash
+pixi run python -m AA.triggers <ISO> <SPI/DRYSPELL> <VULNERABILITY>
 ```
 
-After running this script for SPI / DRYSPELL and General / Non-Regret Triggers you can use the `merge-spi-dryspell-gt-nrt-triggers.py` notebook to filter the triggers for each district regarding the selected vulnerability and merge spi and dryspell. It actually provides the very final output. 
+Where `<VULNERABILITY>` is one of:
 
-**Operational script**
+- GT – General Triggers
 
-```commandline
-$ python operational.py <ISO> <issue-month> <SPI/DRYSPELL>
+- NRT – Non-Regret Triggers
+
+- TBD – To Be Defined (for saving full list of triggers without filtering)
+
+After running both SPI and Dryspell triggers, use the notebook `merge-spi-dryspell-gt-nrt-triggers.py` to filter and merge results.
+
+#### 3. Operational script
+
+```bash
+pixi run python -m AA.operational <ISO> <ISSUE_MONTH> <SPI/DRYSPELL>
 ```
 
+### 📓 Working with Jupytext Notebooks
+
+This project uses [Jupytext](https://jupytext.readthedocs.io/en/latest/) to version notebooks as .py files. To open and run these:
+
+1. Launch Jupyter Lab:
+
+```bash
+pixi run jupyter lab
+```
+
+2. Right-click on any .py notebook file and select "Open with → Notebook".
+
+In the different folders of this repository, you will find different notebooks with the extension `.py`. These are jupytext files that can be run as notebooks. They facilitate version control and have a much smaller memory size.
+
+3. Outputs will be saved in a paired .ipynb file. Be careful not to edit both simultaneously to avoid merge issues.
+
+### 🛠️ Development Tips
+
+To add a dependency:
+
+```bash
+pixi add package_name
+```
+
+To remove a dependency:
+
+```bash
+pixi remove package_name
+```
+
+To run a script:
+
+```bash
+pixi run python -m path/to/script.py
+```
+
+
+### 🐳 Running with Docker (locally)
+
+Docker can be used to run workflows in a fully reproducible containerized environment.
+
+#### 1. Build the Docker image
+
+```bash
+docker build -t aa-runner .
+```
+#### 2. Set up your AWS credentials
+
+Before running the container, export the necessary environment variables:
+```bash
+export AWS_ACCESS_KEY_ID="XXX"
+export AWS_SECRET_ACCESS_KEY="XXX"
+export AWS_SESSION_TOKEN="XXX"
+```
+
+If you're using [Granted](https://docs.commonfate.io/granted/getting-started), you can assume your AWS profile using:
+```bash
+assume <your-profile>
+```
+This will export the necessary credentials as environment variables:
+
+- AWS_ACCESS_KEY_ID
+- AWS_SECRET_ACCESS_KEY
+- AWS_SESSION_TOKEN
+
+#### 3. Run the workflow in Docker
+
+You can run any module via `docker run`, passing command-line arguments:
+
+**Analytical**
+```bash
+docker run --rm \
+  -e AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} \
+  -e AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} \
+  -e AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN} \
+  aa-runner:latest \
+  python -m AA.analytical <ISO> <SPI/DRYSPELL> --data-path <DATA_PATH> --output-path <OUTPUT_PATH>
+```
+
+**Triggers**
+```bash
+docker run --rm \
+  -e AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} \
+  -e AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} \
+  -e AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN} \
+  aa-runner:latest \
+  python -m AA.triggers <ISO> <SPI/DRYSPELL> <VULNERABILITY> --data-path <DATA_PATH> --output-path <OUTPUT_PATH>
+```
+
+**Operational**
+```bash
+docker run --rm \
+  -e AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} \
+  -e AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} \
+  -e AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN} \
+  aa-runner:latest \
+  python -m AA.analytical <ISO> <ISSUE_MONTH> <SPI/DRYSPELL> --data-path <DATA_PATH> --output-path <OUTPUT_PATH>
+```
 
 ## Set-up
 
@@ -94,19 +186,7 @@ Get back in the Terminal and run the commands below:
 
 Once it's done, you should see the anticipatory-action folder and all its files in in your system. 
 
-4. Create conda environment specific to the workflows
-
-Before using `anticipatory-action`, you have to create the anaconda environment specific to the workflow containing all the python libraries needed. To do so, run the commands below:
-- use the `cd` command to go in the anticipatory-action folder (ex: `cd anticipatory-action`)
-- `conda env create -f aa_env.yml` to create the AA environment (`conda env create -p /envs/user/aa-env -f aa-env.yml` if you are in JupyterHub)
-- `conda activate aa-env`
-- `python -m ipykernel install --user --name aa-env`
-
-You can now activate your environment: `conda activate aa-env`
-
-Make sure it is active before running any workflow.
-
-5. Add your HDC credentials
+4. Add your HDC credentials
 
 You will need to set-up credentials for the WFP HDC STAC API.
 
