@@ -1,4 +1,5 @@
 import datetime
+import fsspec
 import os
 from dataclasses import dataclass, field
 
@@ -20,6 +21,7 @@ AGGREGATES = {
     .hdc.algo.lroo(),
 }
 
+S3_OPS_DATA_PATH = "s3://wfp-ops-userdata/amine.barkaoui/aa"
 
 def load_config(iso):
     config_file = f"./config/{iso}_config.yaml"
@@ -69,10 +71,6 @@ class Params:
         start date of historical time series used in anomaly computation
     hist_anomaly_stop : datetime.datetime
         end date of historical time series used in anomaly computation
-    save_zarr : bool
-        save (and overwrite if exists) ds (obs or probs) for future trigger choice
-    data_path : str
-        output path where to store intermediate and final outputs (should include data folder)
     districts: list
         list of districts for which we want to compute triggers
     indicators: list
@@ -89,6 +87,12 @@ class Params:
         skill requirements for GT or NRT, should include Hit Rate, Success Rate, Failure Rate, Return Period
     windows: dict
         dictionary containing two dictionaries (window1, window2) containing indicators for each window (by province or not)
+    save_zarr : bool
+        save (and overwrite if exists) ds (obs or probs) for future trigger choice
+    data_path : str
+        data path where to read input data from (should include data folder)
+    output_path : str
+        output path where to store intermediate and final outputs (should include data folder)
     """
 
     iso: str
@@ -106,8 +110,6 @@ class Params:
     end_season: int = 6
     hist_anomaly_start: datetime.datetime = None
     hist_anomaly_stop: datetime.datetime = datetime.datetime(2018, 12, 31)
-    save_zarr: bool = True
-    data_path: str = "."
     districts: list = field(init=None)
     indicators: list = field(init=None)
     fbf_districts_df: pd.DataFrame = field(init=False, default_factory=pd.DataFrame)
@@ -116,6 +118,9 @@ class Params:
     tolerance: dict = field(init=False)
     requirements: dict = field(init=None)
     windows: dict = field(init=False)
+    save_zarr: bool = True
+    data_path: str = S3_OPS_DATA_PATH
+    output_path: str = S3_OPS_DATA_PATH
 
     def __post_init__(self):
         self.iso = self.iso.lower()
@@ -139,7 +144,7 @@ class Params:
 
         # Read fbf roc dataframe if exists for triggers selection
         fbf_districts_path = f"{self.data_path}/data/{self.iso}/auc/fbf.districts.roc.{self.index}.2022.csv"
-        if os.path.exists(fbf_districts_path):
+        if fsspec.open(fbf_districts_path).fs.exists(fbf_districts_path):
             self.fbf_districts_df = read_fbf_districts(fbf_districts_path, self)
 
         # Read the tolerance thresholds and store them as a dict

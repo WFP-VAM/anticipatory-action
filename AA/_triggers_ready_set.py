@@ -554,7 +554,7 @@ def run_pilot_districts_metrics(obs, probs_ready, probs_set, params):
         f"Starting computation of metrics for {params.iso.upper()} pilot districts..."
     )
 
-    folder_path = f"{params.data_path}/data/{params.iso}/triggers/triggers_metrics"
+    folder_path = f"{params.output_path}/data/{params.iso}/triggers/triggers_metrics"
     os.makedirs(folder_path, exist_ok=True)
 
     districts = params.districts if params.districts else obs.district.values

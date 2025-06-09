@@ -1,4 +1,5 @@
 import datetime
+import fsspec
 import glob
 import logging
 import os
@@ -282,52 +283,46 @@ def read_fbf_districts(path_fbf, params):
 
 
 def read_forecasts(area, issue, local_path, update=False):
-    if os.path.exists(local_path) and not update:
-        forecasts = xr.open_zarr(local_path).tp
-        forecasts = forecasts.sel(
-            time=slice(
-                None,
-                datetime.datetime.strptime(
-                    area.datetime_range.split("/")[1], "%Y-%m-%d"
-                ),
-            )
-        )
+    fs = fsspec.open(local_path).fs
+    if fs.exists(os.path.join(local_path, ".zmetadata")) and not update:
         logging.info("Reading of forecasts from precomputed zarr...")
-        forecasts = persist_with_progress_bar(forecasts)
+        ds = xr.open_zarr(local_path).tp
+        end_date = datetime.datetime.strptime(
+            area.datetime_range.split("/")[1], "%Y-%m-%d"
+        )
+        forecasts = ds.sel(time=slice(None, end_date))
     else:
+        logging.info("Reading of forecasts from source...")
         forecasts = area.get_dataset(
             ["ECMWF", f"RFH_FORECASTS_SEAS5_ISSUE{int(issue)}_DAILY"],
-            load_config={
-                "gridded_load_kwargs": {
-                    "resampling": "bilinear",
-                }
-            },
+            load_config={"gridded_load_kwargs": {"resampling": "bilinear"}},
         )
-        logging.info("Reading of forecasts from source...")
-        forecasts = persist_with_progress_bar(forecasts)
         forecasts.attrs["nodata"] = np.nan
-        forecasts.chunk(dict(time=-1)).to_zarr(local_path, mode="w", consolidated=True)
-    return forecasts
+        forecasts.chunk({"time": -1}).to_zarr(local_path, mode="w", consolidated=True)
+    return persist_with_progress_bar(forecasts)
 
 
 def read_observations(area, local_path):
-    if os.path.exists(local_path):
-        observations = xr.open_zarr(local_path, consolidated=True).band
+    fs = fsspec.open(local_path).fs
+    if fs.exists(os.path.join(local_path, ".zmetadata")):
         logging.info("Reading of observations from precomputed zarr...")
-        observations = persist_with_progress_bar(observations)
+        observations = xr.open_zarr(
+            local_path,
+            consolidated=True,
+        ).band
     else:
+        logging.info("Reading of observations from HDC STAC...")
         observations = area.get_dataset(
             ["CHIRPS", "RFH_DAILY"],
-            load_config={
-                "gridded_load_kwargs": {
-                    "resampling": "bilinear",
-                }
-            },
+            load_config={"gridded_load_kwargs": {"resampling": "bilinear"}},
         )
-        logging.info("Reading of observations from HDC STAC...")
-        observations = persist_with_progress_bar(observations)
-        observations.to_zarr(local_path, mode="w", consolidated=True)
-    return observations
+        observations.to_zarr(
+            local_path,
+            mode="w",
+            consolidated=True,
+        )
+
+    return persist_with_progress_bar(observations)
 
 
 ## Get SPI/probabilities of reference produced with R script from Gabriela Nobre for validation ##

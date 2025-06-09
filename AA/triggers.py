@@ -1,11 +1,11 @@
-import glob
 import logging
-import os
 import warnings
 
 import click
+import fsspec
 import numpy as np
 import pandas as pd
+import s3fs
 import xarray as xr
 from hip.analysis.analyses.drought import concat_obs_levels, get_accumulation_periods
 from hip.analysis.aoi.analysis_area import AnalysisArea
@@ -23,7 +23,7 @@ from AA.helper_fns import (
     merge_un_biased_probs,
     triggers_da_to_df,
 )
-from config.params import Params
+from config.params import S3_OPS_DATA_PATH, Params
 
 logging.basicConfig(level="INFO", force=True)
 warnings.simplefilter(action="ignore")
@@ -32,14 +32,34 @@ warnings.simplefilter(action="ignore")
 @click.command()
 @click.argument("country", required=True, type=str)
 @click.argument("index", default="SPI")
-@click.argument("vulnerability", default="GT")
-def run(country, index, vulnerability):
+@click.argument("vulnerability", default="TBD")
+@click.option(
+    "--data-path",
+    required=True,
+    type=str,
+    default=S3_OPS_DATA_PATH,
+    help="Root directory for data files.",
+)
+@click.option(
+    "--output-path",
+    required=False,
+    type=str,
+    default=S3_OPS_DATA_PATH,
+    help="Root directory for output files. Defaults to data-path if not provided.",
+)
+def run(country, index, vulnerability, data_path, output_path):
     client = start_dask(n_workers=1)
     logging.info("+++++++++++++")
     logging.info(f"Dask dashboard: {client.dashboard_link}")
     logging.info("+++++++++++++")
 
-    params = Params(iso=country, index=index, vulnerability=vulnerability)
+    params = Params(
+        iso=country,
+        index=index,
+        vulnerability=vulnerability,
+        data_path=data_path,
+        output_path=output_path,
+    )
 
     run_triggers_selection(params)
 
@@ -199,7 +219,7 @@ def run_triggers_selection(params):
     triggers = format_triggers_df_for_dashboard(df_window, params)
 
     triggers.to_csv(
-        f"{params.data_path}/data/{params.iso}/triggers/triggers.{params.index}.{params.calibration_year}.{params.vulnerability}.csv",
+        f"{params.output_path}/data/{params.iso}/triggers/triggers.{params.index}.{params.calibration_year}.{params.vulnerability}.csv",
         index=False,
     )
 
@@ -209,9 +229,17 @@ def run_triggers_selection(params):
 
 
 def read_aggregated_obs(path_to_zarr, params):
-    list_index_paths = glob.glob(f"{path_to_zarr}/{params.index} *")
+    fs, _, _ = fsspec.get_fs_token_paths(path_to_zarr)
+    list_index_paths = fs.glob(f"{path_to_zarr}/{params.index} *")
+
+    # Restore full S3 paths if needed
+    if isinstance(fs, s3fs.core.S3FileSystem):
+        list_index_paths = [
+            f"s3://{fs._strip_protocol(path)}" for path in list_index_paths
+        ]
+
     list_val_paths = [
-        os.path.join(ind_path, "observations.zarr") for ind_path in list_index_paths
+        fs.sep.join([ind_path, "observations.zarr"]) for ind_path in list_index_paths
     ]
 
     obs_val = xr.open_mfdataset(
@@ -227,27 +255,35 @@ def read_aggregated_obs(path_to_zarr, params):
 
     # Reformat time and index coords
     obs["time"] = [pd.to_datetime(t).year for t in obs.time.values]
-    obs["index"] = [os.path.split(os.path.dirname(i))[-1] for i in list_val_paths]
-
+    obs["index"] = [val_path.split(fs.sep)[-1] for val_path in list_index_paths]
     return obs
 
 
 def read_aggregated_probs(path_to_zarr, params):
-    list_issue_paths = sorted(glob.glob(f"{path_to_zarr}/*"))[
+    fs, _, _ = fsspec.get_fs_token_paths(path_to_zarr)
+    list_issue_paths = sorted(fs.glob(f"{path_to_zarr}/*"))[
         :-1
     ]  # Last one is the `obs` folder.
     list_index = {}
 
     for iss_path in list_issue_paths:
+        list_index_paths = fs.glob(f"{iss_path}/{params.index} *")
         list_index_raw = [
-            os.path.join(i, "probabilities.zarr")
-            for i in sorted(glob.glob(f"{iss_path}/{params.index} *"))
+            fs.sep.join([i, "probabilities.zarr"]) for i in sorted(list_index_paths)
         ]
         list_index_bc = [
-            os.path.join(i, "probabilities_bc.zarr")
-            for i in sorted(glob.glob(f"{iss_path}/{params.index} *"))
+            fs.sep.join([i, "probabilities_bc.zarr"]) for i in sorted(list_index_paths)
         ]
-        index_names = [os.path.split(os.path.dirname(i))[-1] for i in list_index_raw]
+        index_names = [i.split(fs.sep)[-1] for i in sorted(list_index_paths)]
+
+        # Restore full S3 paths if needed
+        if isinstance(fs, s3fs.core.S3FileSystem):
+            list_index_raw = [
+                f"s3://{fs._strip_protocol(path)}" for path in list_index_raw
+            ]
+            list_index_bc = [
+                f"s3://{fs._strip_protocol(path)}" for path in list_index_bc
+            ]
 
         index_raw = xr.open_mfdataset(
             list_index_raw,
@@ -266,13 +302,13 @@ def read_aggregated_probs(path_to_zarr, params):
 
         ds_index = xr.Dataset({"raw": index_raw, "bc": index_bc})
         ds_index["index"] = index_names
-        list_index[int(os.path.split(iss_path)[-1])] = ds_index
+        list_index[int(iss_path.split(fs.sep)[-1])] = ds_index
 
     return xr.concat(list_index.values(), dim=pd.Index(list_index.keys(), name="issue"))
 
 
 if __name__ == "__main__":
     # From AA repository:
-    # $ python triggers.py MOZ SPI NRT
+    # $ pixi run python -m AA.triggers MOZ SPI TBD --data-path "C:/path/to/data"
 
     run()
