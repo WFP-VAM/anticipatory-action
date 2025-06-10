@@ -13,27 +13,25 @@
 #     name: python3
 # ---
 
-# This notebook can be used to evaluate the forecast skill (ROC score) for a specific forecast dataset. It currently works for a specific index and a specific issue month as it has a research / exploratory / analytical purpose. In order to run a proper comparison, check the `compare_analytical` notebook. 
+# This notebook can be used to evaluate the forecast skill (ROC score) for a specific forecast dataset. It currently works for a specific index and a specific issue month as it has a research / exploratory / analytical purpose. In order to run a proper comparison, check the `compare_analytical` notebook.
 
 # +
 import numpy as np
+from hip.analysis.ops._statistics import evaluate_roc_forecasts
 
-from config.params import Params
-
-from helper_fns import (
+from AA.analytical import calculate_forecast_probabilities
+from AA.helper_fns import (
     read_forecasts_locally,
     read_observations_locally,
 )
-from analytical import calculate_forecast_probabilities
-
-from hip.analysis.ops._statistics import evaluate_roc_forecasts
+from config.params import Params
 
 # %cd ../
 
 # +
 issue = "09"
 
-params = Params(iso='MOZ', index='SPI')
+params = Params(iso="MOZ", index="SPI")
 
 # TODO replace by downscaled forecasts (climax / bil. interp. / weighted mask) issued in 9 (1993 - 2022)
 forecasts = read_forecasts_locally(
@@ -46,7 +44,9 @@ forecasts = forecasts.where(
 )
 
 # TODO replace by `rfh_daily`
-observations = read_observations_locally(f"data/{params.iso}/chirps").isel(latitude=slice(0, 32), longitude=slice(0, 32))
+observations = read_observations_locally(f"data/{params.iso}/chirps").isel(
+    latitude=slice(0, 32), longitude=slice(0, 32)
+)
 # -
 
 forecasts
@@ -54,7 +54,7 @@ forecasts
 observations
 
 # +
-period_months = (12, 1, 2) # Dec Jan Feb
+period_months = (12, 1, 2)  # Dec Jan Feb
 
 probs, probs_bc, obs_values, obs_bool = calculate_forecast_probabilities(
     forecasts,
@@ -75,10 +75,10 @@ auc, auc_bc = evaluate_roc_forecasts(
 # Without bias correction
 
 print(f"Average AUC score: {auc.sel(category='Severo').mean().values}")
-auc.sel(category='Severo').plot.imshow()
+auc.sel(category="Severo").plot.imshow()
 
 # +
 # With bias correction
 
 print(f"Average AUC score: {auc_bc.sel(category='Severo').mean().values}")
-auc_bc.sel(category='Severo').plot.imshow()
+auc_bc.sel(category="Severo").plot.imshow()

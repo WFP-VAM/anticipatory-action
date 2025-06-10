@@ -18,47 +18,52 @@
 # ### Imports
 
 # +
+import warnings
+
 import numpy as np
 import pandas as pd
 import xarray as xr
 
-import warnings
-warnings.simplefilter('ignore')
+warnings.simplefilter("ignore")
 # -
 
 # ### Read cyclones data
 
-cyclones = pd.read_csv('MOZ_overland_ibtracs.since1980.list.v04r00.txt')
+cyclones = pd.read_csv("MOZ_overland_ibtracs.since1980.list.v04r00.txt")
 
 cyclones
 
-# ### Read blended data 
+# ### Read blended data
 
-blended = xr.open_zarr('/s3/scratch/public-share/long_term_blending/MOZ/chirp_daily_blended_corrected_dek.zarr')
+blended = xr.open_zarr(
+    "/s3/scratch/public-share/long_term_blending/MOZ/chirp_daily_blended_corrected_dek.zarr"
+)
 
 # Mask no data
 blended = blended.where(blended != blended.daily_blended.nodata, np.nan)
 
 blended
 
-# ### Add blended data into cyclones dataframe 
+# ### Add blended data into cyclones dataframe
 
 # +
 for i, row in cyclones.iterrows():
-    
     t = pd.to_datetime(row.ISO_TIME[:10])
     lon = row.LON
     lat = row.LAT
-    
-    try: 
-        cyclones.loc[i, 'BLENDED_CHIRP'] = blended.sel(time=t).sel(longitude=lon, latitude=lat, method='nearest').daily_blended.values
-    except:
-        cyclones.loc[i, 'BLENDED_CHIRP'] = np.nan 
+
+    try:
+        cyclones.loc[i, "BLENDED_CHIRP"] = (
+            blended.sel(time=t)
+            .sel(longitude=lon, latitude=lat, method="nearest")
+            .daily_blended.values
+        )
+    except IndexError:
+        cyclones.loc[i, "BLENDED_CHIRP"] = np.nan
 # -
 
 cyclones
 
-# ### Save updated dataframe 
+# ### Save updated dataframe
 
-cyclones.to_csv('MOZ_overland_ibtracs.since1980.list.v04r00.blended.txt')
-
+cyclones.to_csv("MOZ_overland_ibtracs.since1980.list.v04r00.blended.txt")

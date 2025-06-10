@@ -19,21 +19,28 @@
 # %cd ..
 
 import datetime
+
 # +
 import os
 
 import pandas as pd
-from AA.helper_fns import (compute_district_average,
-                           merge_probabilities_triggers_dashboard,
-                           merge_un_biased_probs, read_forecasts,
-                           read_observations)
-from config.params import Params
-from hip.analysis.analyses.drought import (compute_probabilities,
-                                           get_accumulation_periods,
-                                           run_accumulation_index,
-                                           run_bias_correction,
-                                           run_gamma_standardization)
+from hip.analysis.analyses.drought import (
+    compute_probabilities,
+    get_accumulation_periods,
+    run_accumulation_index,
+    run_bias_correction,
+    run_gamma_standardization,
+)
 from hip.analysis.aoi.analysis_area import AnalysisArea
+
+from AA.helper_fns import (
+    compute_district_average,
+    merge_probabilities_triggers_dashboard,
+    merge_un_biased_probs,
+    read_forecasts,
+    read_observations,
+)
+from config.params import Params
 
 # -
 
@@ -180,13 +187,13 @@ probabilities = compute_probabilities(
     anomaly_fc.where(anomaly_fc.time.dt.year == params.monitoring_year, drop=True),
     levels=params.intensity_thresholds,
 ).round(2)
-display(probabilities)
+print(probabilities)
 
 # Probabilities after Bias Correction
 probabilities_bc = compute_probabilities(
     index_bc, levels=params.intensity_thresholds
 ).round(2)
-display(probabilities_bc)
+print(probabilities_bc)
 
 # **Admin-2 level aggregation**
 

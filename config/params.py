@@ -1,8 +1,8 @@
 import datetime
-import fsspec
 import os
 from dataclasses import dataclass, field
 
+import fsspec
 import hdc.algo  # noqa: F401
 import numpy as np
 import pandas as pd
@@ -22,6 +22,7 @@ AGGREGATES = {
 }
 
 S3_OPS_DATA_PATH = "s3://wfp-ops-userdata/amine.barkaoui/aa"
+
 
 def load_config(iso):
     config_file = f"./config/{iso}_config.yaml"

@@ -132,7 +132,6 @@ os.makedirs(
 fbf_roc_issues = []
 
 for issue in ["05", "06"]:  # params.issue_months:
-
     forecasts = read_forecasts(
         area,
         issue,
