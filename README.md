@@ -1,7 +1,7 @@
 # anticipatory-action
 
-[![Tests](https://github.com/WFP-VAM/AIMS/actions/workflows/ci.yml/badge.svg)](https://github.com/WFP-VAM/AIMS/actions/workflows/ci.yml)
-[![Coverage](https://raw.githubusercontent.com/WFP-VAM/AIMS/main/.github/badges/coverage.svg)](https://github.com/WFP-VAM/AIMS/actions/workflows/ci.yml)
+[![Tests](https://github.com/WFP-VAM/anticipatory-action/actions/workflows/ci.yml/badge.svg)](https://github.com/WFP-VAM/anticipatory-action/actions/workflows/ci.yml)
+[![Coverage](https://raw.githubusercontent.com/WFP-VAM/anticipatory-action/main/.github/badges/coverage.svg)](https://github.com/WFP-VAM/anticipatory-action/actions/workflows/ci.yml)
 
 
 This repository provides a set of scripts and Jupytext notebooks to run analytical, trigger, and operational workflows for anticipatory action. You can run them either:
