@@ -37,6 +37,32 @@ jupytext = "*"
 
 [tool.pixi.feature.test.dependencies]
 pytest = ">=8.3.5,<9"
+ruff = ">=0.11.3,<0.12"
 
 [dependency-groups]
 test = ["pytest"]
+
+[tool.ruff]
+line-length = 88
+
+[tool.ruff.lint]
+# Use default rule set to start with https://docs.astral.sh/ruff/configuration/
+
+[tool.ruff.format]
+# Use default rule set to start with https://docs.astral.sh/ruff/configuration/
+
+[tool.pixi.tasks.lint-check]
+description = "Checks linting and formatting"
+cmd = """
+pixi run ruff check . &&
+pixi run ruff check --select I --fix &&
+pixi run ruff format
+"""
+
+[tool.pixi.tasks.lint]
+description = "Checks and fixes linting and formatting"
+cmd = """
+pixi run ruff check . --fix &&
+pixi run ruff check --select I --fix &&
+pixi run ruff format
+"""
