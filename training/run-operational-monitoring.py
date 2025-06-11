@@ -66,7 +66,7 @@ params = Params(
 
 # Let's start by getting the shapefile.
 
-# + jupyter={"outputs_hidden": true}
+# +
 area = AnalysisArea.from_admin_boundaries(
     iso3=params.iso.upper(),
     admin_level=2,
@@ -109,11 +109,9 @@ forecasts = read_forecasts(
 )
 forecasts
 
-# + jupyter={"outputs_hidden": true}
 forecasts.isel(ensemble=0).mean("time").hip.viz.map(
     title=f"Rainfall forecasts (issue {issue}) average over time for control member"
 )
-# -
 
 
 # Now that we got all the data we need, let's read the triggers file so we can merge the probabilities with it once we have them. This triggers file corresponds to the output of the `run-full-verification` notebook if we're in the first monitoring month. Then, we read the merged dataframe that already contains the probabilities from the previous months so we add the new probabilities to the existing merged dataframe.
