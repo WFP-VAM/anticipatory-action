@@ -46,7 +46,6 @@ warnings.simplefilter(action="ignore", category=FutureWarning)
     help="Root directory for output files. Defaults to data-path if not provided.",
 )
 def run(country, index, data_path, output_path):
-
     client = start_dask(n_workers=1)
     logging.info("+++++++++++++")
     logging.info(f"Dask dashboard: {client.dashboard_link}")
@@ -82,7 +81,6 @@ def run(country, index, data_path, output_path):
     fbf_roc_issues = []
 
     for issue in params.issue_months:
-
         forecasts = read_forecasts(
             area,
             issue,
@@ -135,7 +133,6 @@ def run_issue_verification(forecasts, observations, issue, params, area):
         return pd.read_csv(fbf_path)
 
     else:
-
         # Get accumulation periods (DJ, JF, FM, DJF, JFM...)
         accumulation_periods = get_accumulation_periods(
             forecasts,

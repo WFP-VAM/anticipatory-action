@@ -20,14 +20,12 @@
 import warnings
 
 # +
-import numpy as np
-import pandas as pd
-
-warnings.filterwarnings("ignore")
-
 from AA.helper_fns import get_coverage, load_trigger_with_reference
+
 # +
 from config.params import Params
+
+warnings.filterwarnings("ignore")
 
 # -
 

@@ -18,13 +18,13 @@
 
 # +
 import xarray as xr
-from AA.analytical import calculate_forecast_probabilities
-from AA.helper_fns import (aggregate_by_district, read_forecasts,
-                           read_observations)
-from config.params import Params
 from hip.analysis.analyses.drought import get_accumulation_periods
 from hip.analysis.aoi.analysis_area import AnalysisArea
 from hip.analysis.compute.utils import start_dask
+
+from AA.analytical import calculate_forecast_probabilities
+from AA.helper_fns import aggregate_by_district, read_forecasts, read_observations
+from config.params import Params
 
 # -
 
@@ -80,7 +80,6 @@ accumulation_periods = get_accumulation_periods(
 probabilities, probabilities_bc, anomaly_obs = {}, {}, {}
 
 for period_name, period_months in accumulation_periods.items():
-
     probs, probs_bc, obs_values, _ = calculate_forecast_probabilities(
         forecasts,
         observations,
