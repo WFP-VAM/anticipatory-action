@@ -24,13 +24,6 @@
 # **Import required libraries and functions**
 
 # +
-import os
-
-if os.getcwd().split('\\')[-1] != "anticipatory-action":
-    os.chdir("..")
-os.getcwd()
-
-# +
 import logging
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -43,6 +36,14 @@ from AA.analytical import run_issue_verification
 from AA.helper_fns import get_coverage, read_forecasts, read_observations
 from AA.triggers import run_triggers_selection
 from config.params import Params
+# -
+
+# +
+import os
+
+if os.getcwd().split('\\')[-1] != "anticipatory-action":
+    os.chdir("..")
+os.getcwd()
 # -
 
 # **First, please define the country ISO code and the index of interest**

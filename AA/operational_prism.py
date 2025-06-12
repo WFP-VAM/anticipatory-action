@@ -27,15 +27,16 @@
 
 # +
 import os
-import pandas as pd
 
+import numpy as np
+import pandas as pd
+from hip.analysis.analyses.drought import get_accumulation_periods
+from hip.analysis.aoi.analysis_area import AnalysisArea
+
+from AA.helper_fns import read_forecasts, read_observations
+from AA.operational import run_full_index_pipeline
 from config.params import Params
 
-from AA.helper_fns import read_observations, read_forecasts
-from AA.operational import run_full_index_pipeline
-
-from hip.analysis.aoi.analysis_area import AnalysisArea
-from hip.analysis.analyses.drought import get_accumulation_periods
 # -
 
 # **First, please define the country ISO code, the issue month and the index of interest**
@@ -107,7 +108,9 @@ forecasts
 
 
 # Read triggers file
-if os.path.exists(f"{params.data_path}/data/{params.iso}/probs/aa_probabilities_triggers_pilots.csv"):
+if os.path.exists(
+    f"{params.data_path}/data/{params.iso}/probs/aa_probabilities_triggers_pilots.csv"
+):
     triggers_df = pd.read_csv(
         f"{params.data_path}/data/{params.iso}/probs/aa_probabilities_triggers_pilots.csv",
     )
@@ -195,7 +198,9 @@ merged_pilots = pd.read_csv(
 all_seasons = pd.concat([merged_pilots, last_year])
 all_seasons
 
-all_seasons.to_csv(f'/s3/scratch/public-share/aa/aa_probabilities_triggers_{params.iso}.csv')
+all_seasons.to_csv(
+    f"/s3/scratch/public-share/aa/aa_probabilities_triggers_{params.iso}.csv"
+)
 
 # ### For ZWE: merge GT with probabilities
 
@@ -210,9 +215,8 @@ dryspell_9 = pd.read_csv(
     f"{params.data_path}/data/{params.iso}/probs/aa_probabilities_dryspell_9.csv",
 )
 
-# +
-import numpy as np
 
+# +
 def merge_probabilities_triggers_dashboard(probs_df, issue, triggers):
     triggers_merged = triggers.copy()
 
@@ -220,26 +224,27 @@ def merge_probabilities_triggers_dashboard(probs_df, issue, triggers):
     if "prob_ready" not in triggers_merged.columns:
         triggers_merged["prob_ready"] = np.nan
         triggers_merged["prob_set"] = np.nan
-    
+
     # Fill in probabilities columns matching with triggers
-    for l, row in triggers_merged.iterrows():
+    for idx, row in triggers_merged.iterrows():
         try:
-            if (row.issue_ready == issue):
-                triggers_merged.loc[l, "prob_ready"] = probs_df.loc[
+            if row.issue_ready == issue:
+                triggers_merged.loc[idx, "prob_ready"] = probs_df.loc[
                     (probs_df["index"] == row["index"])
                     & (probs_df["category"] == row.category)
                     & (probs_df["district"] == row.district)
                 ].prob.values[0]
-            elif (row.issue_set == issue):
-                triggers_merged.loc[l, "prob_set"] = probs_df.loc[
+            elif row.issue_set == issue:
+                triggers_merged.loc[idx, "prob_set"] = probs_df.loc[
                     (probs_df["index"] == row["index"])
                     & (probs_df["category"] == row.category)
                     & (probs_df["district"] == row.district)
                 ].prob.values[0]
-        except:
+        except IndexError:
             continue
 
     return triggers_merged
+
 
 merged = merge_probabilities_triggers_dashboard(spi_9, 9, triggers_df)
 merged = merge_probabilities_triggers_dashboard(dryspell_9, 9, merged)
@@ -249,5 +254,3 @@ merged.sort_values(["district", "index", "category"]).to_csv(
     f"{params.data_path}/data/{params.iso}/probs/aa_probabilities_triggers_pilots_GT_september.csv",
     index=False,
 )
-
-

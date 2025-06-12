@@ -1,9 +1,9 @@
 import datetime
-import fsspec
 import glob
 import logging
 import os
 
+import fsspec
 import numpy as np
 import pandas as pd
 import xarray as xr
@@ -152,9 +152,18 @@ def format_triggers_df_for_dashboard(triggers, params):
 
     triggers["prob"] = np.nan
     triggers["HR"] = triggers["HR"].abs()
-    # triggers["season"] = f"{params.monitoring_year}-{str(params.monitoring_year+1)[-2:]}"
-    # triggers['date'] = [params.monitoring_year if r.issue >= 5 else params.monitoring_year+1 for _, r in triggers.iterrows()]
-    # triggers['date'] = [pd.to_datetime(f"{r.issue}-1-{r.date}") for _, r in triggers.iterrows()]
+
+    if "season" not in triggers.columns:
+        triggers["season"] = (
+            f"{params.monitoring_year}-{str(params.monitoring_year + 1)[-2:]}"
+        )
+        triggers["date"] = [
+            params.monitoring_year if r.issue >= 5 else params.monitoring_year + 1
+            for _, r in triggers.iterrows()
+        ]
+        triggers["date"] = [
+            pd.to_datetime(f"{r.issue}-1-{r.date}") for _, r in triggers.iterrows()
+        ]
 
     def substract(issue):
         return 2 if issue == 1 else 1
@@ -190,7 +199,7 @@ def get_coverage(triggers_df, districts: list, columns: list):
         columns=columns,
         index=districts,
     )
-    for d, r in cov.iterrows():
+    for d, _ in cov.iterrows():
         val = []
         for w in triggers_df["window"].unique():
             for c in triggers_df["category"].unique():
@@ -254,11 +263,11 @@ def merge_probabilities_triggers_dashboard(probs, triggers, params, period):
         triggers_merged["prob_set"] = np.nan
 
     # Fill in probabilities columns matching with triggers
-    for l, row in triggers_merged.iterrows():
+    for idx, row in triggers_merged.iterrows():
         if (row.issue_ready == params.issue) and (
             row["index"] == f"{params.index.upper()} {period}"
         ):
-            triggers_merged.loc[l, "prob_ready"] = probs_df.loc[
+            triggers_merged.loc[idx, "prob_ready"] = probs_df.loc[
                 (probs_df["index"] == row["index"])
                 & (probs_df["category"] == row.category)
                 & (probs_df["district"] == row.district)
@@ -266,7 +275,7 @@ def merge_probabilities_triggers_dashboard(probs, triggers, params, period):
         elif (row.issue_set == params.issue) and (
             row["index"] == f"{params.index.upper()} {period}"
         ):
-            triggers_merged.loc[l, "prob_set"] = probs_df.loc[
+            triggers_merged.loc[idx, "prob_set"] = probs_df.loc[
                 (probs_df["index"] == row["index"])
                 & (probs_df["category"] == row.category)
                 & (probs_df["district"] == row.district)

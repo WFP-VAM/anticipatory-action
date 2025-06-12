@@ -89,6 +89,15 @@ To run a script:
 pixi run python -m path/to/script.py
 ```
 
+Linting and formatting checks can be run by:
+
+```pixi run lint-check```
+
+
+To run checks and automatically fix issues (if they can be fixed automatically):
+
+```pixi run lint```
+
 
 ### 🐳 Running with Docker (locally)
 

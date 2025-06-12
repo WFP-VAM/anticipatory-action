@@ -570,7 +570,6 @@ def run_pilot_districts_metrics(obs, probs_ready, probs_set, params):
 
 
 def evaluate_top_pairs(sub_df, obs, probs_ready, probs_set, params):
-
     def _select_row(da, district, index, category=None, issue=None):
         sel = da.sel(district=district, index=index)
         if "issue" in da.dims and issue is not None:

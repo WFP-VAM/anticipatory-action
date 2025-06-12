@@ -22,6 +22,10 @@ import numpy as np
 import pandas as pd
 import s3fs
 import xarray as xr
+from hip.analysis.analyses.drought import get_accumulation_periods
+from hip.analysis.aoi.analysis_area import AnalysisArea
+from odc.geo.xr import xr_reproject
+
 from AA._triggers_ready_set import run_ready_set_brute_selection
 from AA.analytical import run_issue_verification
 from AA.helper_fns import (
@@ -37,9 +41,6 @@ from AA.triggers import (
     read_aggregated_probs,
 )
 from config.params import Params
-from hip.analysis.analyses.drought import get_accumulation_periods
-from hip.analysis.aoi.analysis_area import AnalysisArea
-from odc.geo.xr import xr_reproject
 
 AWS_PROFILE = os.getenv("AWS_PROFILE", None)
 
@@ -79,7 +80,6 @@ observations.attrs["nodata"] = np.nan
 fbf_roc_issues = []
 
 for issue in ["06", "07"]:
-
     forecasts = ds_forecasts[f"ECMWF-RFH_FORECASTS_SEAS5_ISSUE{int(issue)}_DAILY"]
     forecasts.attrs["nodata"] = np.nan
     forecasts = forecasts.dropna(dim="time", how="all")
