@@ -4,7 +4,6 @@ import os
 import warnings
 
 import click
-import fsspec
 import pandas as pd
 from hip.analysis.analyses.drought import (
     compute_probabilities,
@@ -21,6 +20,7 @@ from AA.helper_fns import (
     merge_un_biased_probs,
     read_forecasts,
     read_observations,
+    read_triggers,
 )
 from config.params import S3_OPS_DATA_PATH, Params
 
@@ -71,14 +71,14 @@ def run(country, issue, index, data_path, output_path):
         f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}/{str(issue).zfill(2)}/forecasts.zarr",
         update=False,  # True,
     )
-    logging.info(f"Completed reading of forecasts for the whole {params.iso} country")
+    logging.info("Completed reading of forecasts for the whole %s country", params.iso)
 
     observations = read_observations(
         area,
         f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}/obs/observations.zarr",
     )
     logging.info(
-        f"Completed reading of observations for the whole {params.iso} country"
+        "Completed reading of observations for the whole %s country", params.iso
     )
 
     os.makedirs(
@@ -86,13 +86,7 @@ def run(country, issue, index, data_path, output_path):
         exist_ok=True,
     )
 
-    triggers_path = f"{params.data_path}/data/{params.iso}/probs/aa_probabilities_triggers_pilots.csv"
-    fallback_triggers_path = f"{params.data_path}/data/{params.iso}/triggers/triggers.final.{params.monitoring_year}.pilots.csv"
-
-    if fsspec.open(triggers_path).fs.exists(triggers_path):
-        triggers_df = pd.read_csv(triggers_path)
-    else:
-        triggers_df = pd.read_csv(fallback_triggers_path)
+    triggers_df = read_triggers(params)
 
     # Get accumulation periods (DJ, JF, FM, DJF, JFM...)
     accumulation_periods = get_accumulation_periods(
@@ -116,7 +110,7 @@ def run(country, issue, index, data_path, output_path):
         )
         for period_name, period_months in accumulation_periods.items()
     ]
-    logging.info(f"Completed analysis for the required indexes over {country} country")
+    logging.info("Completed analysis for the required indexes over %s country", country)
 
     probs_df, merged_df = zip(*probs_merged_dataframes)
 
@@ -135,7 +129,7 @@ def run(country, issue, index, data_path, output_path):
         index=False,
     )
 
-    logging.info(f"Dashboard-formatted dataframe saved for {country}")
+    logging.info("Dashboard-formatted dataframe saved for %s", country)
 
 
 def run_full_index_pipeline(
@@ -175,7 +169,9 @@ def run_full_index_pipeline(
     )
 
     logging.info(
-        f"Completed probabilities computation by district for the {params.index.upper()} {period_name} index"
+        "Completed probabilities computation by district for the %s %s index",
+        params.index.upper(),
+        period_name,
     )
 
     return probs_df, merged_df
