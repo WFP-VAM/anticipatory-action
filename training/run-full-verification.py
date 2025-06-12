@@ -6,11 +6,11 @@
 #       extension: .py
 #       format_name: light
 #       format_version: '1.5'
-#       jupytext_version: 1.16.1
+#       jupytext_version: 1.17.1
 #   kernelspec:
-#     display_name: hdc
+#     display_name: Python (Pixi)
 #     language: python
-#     name: conda-env-hdc-py
+#     name: pixi-kernel-python3
 # ---
 
 # ## Run full AA drought verification
@@ -19,17 +19,12 @@
 #
 # This notebook is intended to be self-sufficient for executing the entire workflow operationally ahead of the season and get the triggers using specific parameters and specific datasets. It is designed to be interactive, and does not require any direct interaction with another file, except for the configuration file. This will therefore be the main front-end for Anticipatory Action analysts.
 
-# If you have not downloaded the data yet, please go to that link:
-#
-# https://data.earthobservation.vam.wfp.org/public-share/aa/mozambique/moz.zip
+# If you have not downloaded the data yet, please download it from the link you should have received by email.
 
 # **Import required libraries and functions**
 
-# %cd ..
-
-import logging
-
 # +
+import logging
 import os
 
 import matplotlib.pyplot as plt
@@ -44,6 +39,9 @@ from AA.helper_fns import get_coverage, read_forecasts, read_observations
 from AA.triggers import run_triggers_selection
 from config.params import Params
 
+if os.getcwd().split("\\")[-1] != "anticipatory-action":
+    os.chdir("..")
+os.getcwd()
 # -
 
 # **First, please define the country ISO code and the index of interest**
@@ -51,6 +49,8 @@ from config.params import Params
 
 country = "MWI"
 index = "SPI"  # 'SPI' or 'DRYSPELL'
+data_path = "."  # current directory (anticipatory-action)
+output_path = "."
 
 
 # Now, we will configure some parameters. Please feel free to edit the year of the last season considered. By default, it is equal to 2022. This means that for the purposes of evaluating and selecting triggers, the time series studied will end with the 2021-2022 season. This is the configuration chosen for monitoring the 2023-2024 season.
@@ -60,12 +60,10 @@ index = "SPI"  # 'SPI' or 'DRYSPELL'
 # *Note: if you change a parameter or a dataset, please make sure to manage correctly the different output paths so you don't overwrite previous results.*
 
 
-params = Params(iso=country, index=index)
+params = Params(iso=country, index=index, data_path=data_path, output_path=output_path)
 
 
-# + [markdown] jp-MarkdownHeadingCollapsed=true
 # ### Read data
-# -
 
 # Let's start by getting the Zimbabwe shapefile.
 
@@ -131,7 +129,7 @@ os.makedirs(
 # Define empty list for each issue month's ROC score dataframe
 fbf_roc_issues = []
 
-for issue in ["05", "06"]:  # params.issue_months:
+for issue in ["07", "08"]:  # params.issue_months:
     forecasts = read_forecasts(
         area,
         issue,
@@ -158,11 +156,11 @@ display(fbf_roc)  # noqa: F821
 
 # Let's have a look at how the computed probabilities data looks like.
 
-xr.open_zarr(f"{forecasts_folder_path}/05/{params.index} ON/probabilities.zarr")
+xr.open_zarr(f"{forecasts_folder_path}/07/{params.index} OND/probabilities.zarr")
 
 # We can also check how the CHIRPS-based anomalies that have been saved look like. They have been used to calculate the roc scores and will be used to select the triggers.
 
-xr.open_zarr(f"{forecasts_folder_path}/obs/{params.index} ON/observations.zarr")
+xr.open_zarr(f"{forecasts_folder_path}/obs/{params.index} OND/observations.zarr")
 
 # By running the next cell, you can save the dataframe containing the ROC scores. We commented it here so we don't overwrite the file with all the issue months with a file that only contains a few issue months.
 
@@ -207,7 +205,7 @@ plt.show()
 # Let's first define the vulnerability. We will run (if needed for at least one district) the triggers selection for two vulnerability levels: General Triggers & Non-Regret (or Emergency) Triggers.
 
 
-params.load_vulnerability_requirements("GT")  # "NRT"
+params.load_vulnerability_requirements("GT")  # "NRT", "TBD"
 
 
 run_triggers_selection(params)
@@ -322,7 +320,7 @@ for d, v in params.districts_vulnerability.items():
 
 # Save final triggers file
 triggers_full.to_csv(
-    f"{params.data_path}/data/{params.iso}/triggers/triggers.spi.dryspell.{params.calibration_year}.pilots.csv",
+    f"{params.data_path}/data/{params.iso}/triggers/triggers.final.{params.monitoring_year}.pilots.csv",
     index=False,
 )
 
@@ -331,8 +329,8 @@ triggers_full  # .loc[triggers_full.issue_ready == 6]
 
 # ### Visualize coverage
 
-
-columns = ["W1-Mild", "W1-Moderate", "W1-Severe", "W2-Mild", "W2-Moderate", "W2-Severe"]
+columns = None
+# columns = ["W1-Mild", "W1-Moderate", "W1-Severe", "W2-Mild", "W2-Moderate", "W2-Severe"]
 # columns = ["W1-Normal", "W2-Normal"]
 get_coverage(triggers_full, triggers_full["district"].sort_values().unique(), columns)
 
@@ -341,4 +339,4 @@ get_coverage(triggers_full, triggers_full["district"].sort_values().unique(), co
 
 # Please find the final dataframe here!
 #
-# `data/{iso}/triggers/triggers.spi.dryspell.{params.year}.csv`
+# `data/{iso}/triggers/triggers.final.{monitoring_year}.pilots.csv`

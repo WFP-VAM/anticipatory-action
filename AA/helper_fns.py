@@ -334,6 +334,17 @@ def read_observations(area, local_path):
     return persist_with_progress_bar(observations)
 
 
+def read_triggers(params):
+    triggers_path = f"{params.data_path}/data/{params.iso}/probs/aa_probabilities_triggers_pilots.csv"
+    fallback_triggers_path = f"{params.data_path}/data/{params.iso}/triggers/triggers.final.{params.monitoring_year}.pilots.csv"
+
+    if fsspec.open(triggers_path).fs.exists(triggers_path):
+        triggers_df = pd.read_csv(triggers_path)
+    else:
+        triggers_df = pd.read_csv(fallback_triggers_path)
+    return triggers_df
+
+
 ## Get SPI/probabilities of reference produced with R script from Gabriela Nobre for validation ##
 
 
