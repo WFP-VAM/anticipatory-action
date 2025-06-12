@@ -25,6 +25,8 @@
 
 # +
 import logging
+import os
+
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
@@ -36,12 +38,8 @@ from AA.analytical import run_issue_verification
 from AA.helper_fns import get_coverage, read_forecasts, read_observations
 from AA.triggers import run_triggers_selection
 from config.params import Params
-# -
 
-# +
-import os
-
-if os.getcwd().split('\\')[-1] != "anticipatory-action":
+if os.getcwd().split("\\")[-1] != "anticipatory-action":
     os.chdir("..")
 os.getcwd()
 # -
@@ -51,7 +49,7 @@ os.getcwd()
 
 country = "MWI"
 index = "SPI"  # 'SPI' or 'DRYSPELL'
-data_path = "." # current directory (anticipatory-action)
+data_path = "."  # current directory (anticipatory-action)
 output_path = "."
 
 
@@ -62,9 +60,7 @@ output_path = "."
 # *Note: if you change a parameter or a dataset, please make sure to manage correctly the different output paths so you don't overwrite previous results.*
 
 
-params = Params(
-    iso=country, index=index, data_path=data_path, output_path=output_path
-)
+params = Params(iso=country, index=index, data_path=data_path, output_path=output_path)
 
 
 # ### Read data
@@ -134,7 +130,6 @@ os.makedirs(
 fbf_roc_issues = []
 
 for issue in ["07", "08"]:  # params.issue_months:
-
     forecasts = read_forecasts(
         area,
         issue,
@@ -325,7 +320,7 @@ for d, v in params.districts_vulnerability.items():
 
 # Save final triggers file
 triggers_full.to_csv(
-    f"{params.data_path}/data/{params.iso}/triggers/triggers.final.{monitoring_year}.pilots.csv",
+    f"{params.data_path}/data/{params.iso}/triggers/triggers.final.{params.monitoring_year}.pilots.csv",
     index=False,
 )
 
@@ -334,7 +329,7 @@ triggers_full  # .loc[triggers_full.issue_ready == 6]
 
 # ### Visualize coverage
 
-
+columns = None
 # columns = ["W1-Mild", "W1-Moderate", "W1-Severe", "W2-Mild", "W2-Moderate", "W2-Severe"]
 # columns = ["W1-Normal", "W2-Normal"]
 get_coverage(triggers_full, triggers_full["district"].sort_values().unique(), columns)
