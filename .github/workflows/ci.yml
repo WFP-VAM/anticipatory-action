@@ -25,7 +25,7 @@ jobs:
     - name: Install environment with pixi
       uses: prefix-dev/setup-pixi@v0.8.3
       with:
-        pixi-version: v0.43.0
+        pixi-version: v0.47.0
         # Automatically detects changes in pixi.lock and, if so, updates environment
         cache: true
         environments: >-
