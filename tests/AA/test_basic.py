@@ -1,4 +1,4 @@
-"""Basic tests for AIMS."""
+"""Basic tests for AA."""
 
 
 def calculate_average(numbers):
