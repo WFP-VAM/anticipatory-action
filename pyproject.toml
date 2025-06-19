@@ -84,7 +84,6 @@ description = "Run tests with coverage and update badge"
 cmd = """
 mkdir -p coverage .github/badges &&
 pixi run pytest --cov=AA --cov-report=term &&
-pixi run pytest --cov=AA --cov-report=xml:coverage/coverage.xml &&
 coverage-badge -o .github/badges/coverage.svg -f
 """
 
