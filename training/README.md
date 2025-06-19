@@ -4,7 +4,7 @@
 ### Table of contents
 
 * [1. Clone the repository from GitHub](#chapter1)
-* [2. Create an environment with Anaconda](#chapter2)
+* [2. Create an environment with Pixi](#chapter2)
 * [3. Download the data](#chapter3)
 * [4. Run the Anticipatory Action workflow](#chapter4)
 
