@@ -36,7 +36,9 @@ ipykernel = "*"
 jupytext = "*"
 
 [tool.pixi.feature.test.dependencies]
-pytest = ">=8.3.5,<9"
+pytest = "*"
+pytest-cov = "*"
+coverage-badge = "*"
 ruff = ">=0.11.3,<0.12"
 
 [dependency-groups]
@@ -50,6 +52,16 @@ line-length = 88
 
 [tool.ruff.format]
 # Use default rule set to start with https://docs.astral.sh/ruff/configuration/
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::UserWarning",
+]
 
 [tool.pixi.tasks.lint-check]
 description = "Checks linting and formatting"
@@ -66,3 +78,25 @@ pixi run ruff check . --fix &&
 pixi run ruff check --select I --fix &&
 pixi run ruff format
 """
+
+[tool.pixi.tasks.test-coverage]
+description = "Run tests with coverage and update badge"
+cmd = """
+mkdir -p coverage .github/badges &&
+pixi run pytest --cov=AA --cov-report=term &&
+coverage-badge -o .github/badges/coverage.svg -f
+"""
+
+[tool.coverage.run]
+source = ["AA"]
+omit = ["tests/*", "*/__init__.py"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "pass",
+    "raise ImportError",
+]

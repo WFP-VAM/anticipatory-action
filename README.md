@@ -1,5 +1,9 @@
 # anticipatory-action
 
+[![Tests](https://github.com/WFP-VAM/anticipatory-action/actions/workflows/ci.yml/badge.svg)](https://github.com/WFP-VAM/anticipatory-action/actions/workflows/ci.yml)
+[![Coverage](.github/badges/coverage.svg)](https://github.com/WFP-VAM/anticipatory-action/actions/workflows/ci.yml)
+
+
 This repository provides a set of scripts and Jupytext notebooks to run analytical, trigger, and operational workflows for anticipatory action. You can run them either:
 
 - in a local Pixi-managed environment, or
@@ -71,6 +75,8 @@ In the different folders of this repository, you will find different notebooks w
 
 ### 🛠️ Development Tips
 
+#### Dependencies
+
 To add a dependency:
 
 ```bash
@@ -83,20 +89,39 @@ To remove a dependency:
 pixi remove package_name
 ```
 
+#### Running
+
 To run a script:
 
 ```bash
 pixi run python -m path/to/script.py
 ```
 
+#### Linting and formatting
+
 Linting and formatting checks can be run by:
 
 ```pixi run lint-check```
 
-
 To run checks and automatically fix issues (if they can be fixed automatically):
 
 ```pixi run lint```
+
+
+#### Tests
+
+Run the tests:
+
+```pixi run test```
+
+Run tests with coverage report and update the coverage badge:
+
+```pixi run test-coverage```
+
+This will:
+- Run all tests
+- Generate a coverage report in the terminal
+- Update the coverage badge in `.github/badges/coverage.svg`
 
 
 ### 🐳 Running with Docker (locally)
