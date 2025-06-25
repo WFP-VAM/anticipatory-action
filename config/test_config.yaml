@@ -33,6 +33,12 @@ hist_anomaly_stop: "2018-12-31"
 # Save (and overwrite if exists) ds (obs or probs) for future trigger choice
 save_zarr: true
 
+<<<<<<< Updated upstream
+=======
+# Data path where to store intermediate and final outputs (should include data folder)
+data_path: "/s3/scratch/amine.barkaoui/aa" # /s3/scratch/amine.barkaoui/aa
+
+>>>>>>> Stashed changes
 # Thresholds defining different drought intensities used in probabilities computation
 intensity_thresholds:
   Severe: -1
