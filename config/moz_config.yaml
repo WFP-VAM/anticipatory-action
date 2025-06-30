@@ -49,28 +49,38 @@ intensity_thresholds:
 
 # Vulnerability class of triggers for each district: general or non-regret (GT or NRT)
 districts_vulnerability: 
-  Caia: "NRT"
-  Changara: "NRT"
-  Chemba: "NRT"
-  Chibuto: "NRT"
-  Chigubo: "NRT"
-  Chicualacuala: "NRT"
-  Chiure: "NRT"
-  Funhalouro: "NRT"
-  Guija: "NRT"
-  Mabalane: "NRT"
-  Mabote: "NRT"
-  Machanga: "NRT"
-  Magoe: "NRT"
-  Mapai: "NRT"
-  Magude: "NRT"
-  Massangena: "NRT"
-  Massingir: "NRT"
-  Moamba: "NRT"
-  Marara: "NRT"
-  Cahora_Bassa: "NRT"
-  Magoe: "NRT"
-  Machanga: "NRT"
+  Cahora_Bassa: "TBD"
+  Caia: "TBD"
+  Changara: "TBD"
+  Chemba: "TBD"
+  Chibabava: "TBD"
+  Chibuto: "TBD"
+  Chigubo: "TBD"
+  Chicualacuala: "TBD"
+  Chiure: "TBD"
+  Cidade_Da_Beira: "TBD"
+  Doa: "TBD"
+  Funhalouro: "TBD"
+  Govuro: "TBD"
+  Guija: "TBD"
+  Guro: "TBD"
+  Homoine: "TBD"
+  Jangamo: "TBD"
+  Mabalane: "TBD"
+  Mabote: "TBD"
+  Machanga: "TBD"
+  Machaze: "TBD"
+  Magoe: "TBD"
+  Mapai: "TBD"
+  Magude: "TBD"
+  Massangena: "TBD"
+  Massinga: "TBD"
+  Massingir: "TBD"
+  Marara: "TBD"
+  Moamba: "TBD"
+  Mutarara: "TBD"
+  Panda: "TBD"
+  Tambara: "TBD"
 
 # Tolerance for thresholds for each category, used to compute false alarm with tolerance
 tolerance:
@@ -96,52 +106,8 @@ non_regret_t:
 # Window definitions for SPI and DRYSPELL indicators
 windows:
   spi:
-    window1:
-      Cabo_Delgado: ["DJ", "JF", "FM"]
-      Gaza: ["ON", "ND", "DJ"]
-      Inhambane: ["ON", "ND", "DJ"]
-      Manica: ["ND", "DJ", "JF"]
-      Maputo: ["ON", "ND", "DJ"]
-      Maputo City: ["ON", "ND", "DJ"]
-      Nampula: ["DJ", "JF", "FM"]
-      Niassa: ["DJ", "JF", "FM"]
-      Sofala: ["ND", "DJ", "DJF", "JF"]
-      Tete: ["ND", "DJ", "DJF", "JF"]
-      Zambezia: ["ND", "DJ", "JF"]
-    window2:
-      Cabo_Delgado: ["MA", "AM", "MJ"]
-      Gaza: ["JF", "FM", "MA"]
-      Inhambane: ["JF", "FM", "MA"]
-      Manica: ["FM", "MA", "AM"]
-      Maputo: ["JF", "FM", "MA"]
-      Maputo City: ["JF", "FM", "MA"]
-      Nampula: ["MA", "AM", "MJ"]
-      Niassa: ["MA", "AM", "MJ"]
-      Sofala: ["FM", "MA", "AM"]
-      Tete: ["FM", "MA", "AM"]
-      Zambezia: ["FM", "MA", "AM"]
+    window1: ["ON", "ND", "DJ", "JF", "FM", "OND", "NDJ", "DJF", "JFM"]
+    window2: ["MA", "AM", "MAM"]
   dryspell:
-    window1:
-      Cabo_Delgado: ["DJ", "JF", "FM"]
-      Gaza: []
-      Inhambane: []
-      Manica: ["DJ", "JF"]
-      Maputo: []
-      Maputo City: []
-      Nampula: ["DJ", "JF", "FM"]
-      Niassa: ["DJ", "JF", "FM"]
-      Sofala: ["DJ", "JF"]
-      Tete: ["DJ", "JF"]
-      Zambezia: ["DJ", "JF"]
-    window2:
-      Cabo_Delgado: ["MA", "AM", "MJ"]
-      Gaza: ["DJ", "JF", "FM", "MA"]
-      Inhambane: ["DJ", "JF", "FM", "MA"]
-      Manica: ["FM", "MA", "AM"]
-      Maputo: ["DJ", "JF", "FM", "MA"]
-      Maputo City: ["DJ", "JF", "FM", "MA"]
-      Nampula: ["MA", "AM", "MJ"]
-      Niassa: ["MA", "AM", "MJ"]
-      Sofala: ["FM", "MA", "AM"]
-      Tete: ["FM", "MA", "AM"]
-      Zambezia: ["FM", "MA", "AM"]
+    window1: ["DJ", "JF", "FM"]
+    window2: []
