@@ -12,7 +12,7 @@ issue_months:
   - "02"
 
 # First year of season to monitor operationally (e.g. 2024 for 2024/2025 season)
-monitoring_year: 2024
+monitoring_year: 2025
 
 # Last year of calibration period used for triggers selection (e.g. 2022 for 1981-2022)
 calibration_year: 2022
@@ -48,20 +48,21 @@ intensity_thresholds:
 
 # Vulnerability class of triggers for each district: general or non-regret (GT or NRT)
 districts_vulnerability: 
-  Beitbridge: "NRT"
-  Bikita: "NRT"
-  Binga: "NRT"
-  Chiredzi: "NRT"
-  Gwande: "NRT"
-  Hwange: "NRT"
-  Kariba: "NRT"
-  Masvingo: "NRT"
-  Matobo: "NRT"
-  Mbire: "NRT"
-  Mount Darwin: "NRT"
-  Mudzi: "NRT"
-  Mwenezi: "NRT"
-  Rushinga: "NRT"
+  Beitbridge: "TBD"
+  Bikita: "TBD"
+  Binga: "TBD"
+  Chiredzi: "TBD"
+  Gwanda: "TBD"
+  Hwange: "TBD"
+  Kariba: "TBD"
+  Masvingo: "TBD"
+  Matobo: "TBD"
+  Mbire: "TBD"
+  Mount Darwin: "TBD"
+  Mudzi: "TBD"
+  Mwenezi: "TBD"
+  Nkayi: "TBD"
+  Rushinga: "TBD"
 
 # Tolerance for thresholds for each category, used to compute false alarm with tolerance
 tolerance:
@@ -72,14 +73,14 @@ tolerance:
 
 # Skill requirements for General Triggers
 general_t:
-  HR: 0.5  # W/out exceptions: HR=0.55
+  HR: 0.55 # 0.5  # W/out exceptions: HR=0.55
   SR: 0.55
   FR: 0.45
   RP: 4.0
 
 # Skill requirements for Non Regret Triggers
 non_regret_t:
-  HR: 0.5  # W/out exceptions: HR=0.70
+  HR: 0.7 # 0.5  # W/out exceptions: HR=0.70
   SR: 0.55
   FR: 0.45
   RP: 3.0
@@ -87,8 +88,9 @@ non_regret_t:
 # Window definitions for SPI and DRYSPELL indicators
 windows:
   spi:
-    window1: ["ON", "OND", "ND", "NDJ"]
-    window2: ["DJ", "DJF", "JF", "JFM", "FM", "FMA"]
+    window1: ["ON", "ND", "OND", "NDJ"]
+    window2: ["DJ", "JF", "FM", "DJF", "JFM", "FMA"]
   dryspell:
-    window1: []
-    window2: ["DJ", "JF", "FM"]
+    window1: ["ON", "ND", "OND", "NDJ"]
+    window2: ["DJ", "JF", "FM", "DJF", "JFM", "FMA"]
+
