@@ -42,8 +42,8 @@ os.getcwd()
 # **First, please define the country ISO code, the issue month and the index of interest**
 
 
-country = "MWI"
-issue = 8
+country = "ISO" # Replace with the ISO code of the country you want to run the monitoring for
+issue = 6
 index = "SPI"  # 'SPI' or 'DRYSPELL'
 data_path = "."  # anticipatory-action directory
 output_path = "."
