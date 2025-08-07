@@ -4,6 +4,7 @@ import os
 import warnings
 
 import click
+import numpy as np
 import pandas as pd
 from hip.analysis.analyses.drought import (
     compute_probabilities,
@@ -69,8 +70,17 @@ def run(country, issue, index, data_path, output_path):
         area,
         issue,
         f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}/{str(issue).zfill(2)}/forecasts.zarr",
-        update=False,  # True,
     )
+
+    # Check if the forecast date is in the time coordinate
+    forecast_date = np.datetime64(
+        datetime.datetime(params.monitoring_year, params.issue, 1), "ns"
+    )
+    if forecast_date not in forecasts.time.values:
+        raise ValueError(
+            "Forecast missing from dataset — it might not have been released yet. Try again later."
+        )
+
     logging.info("Completed reading of forecasts for the whole %s country", params.iso)
 
     observations = read_observations(
