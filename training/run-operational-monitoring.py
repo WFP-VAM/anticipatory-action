@@ -104,7 +104,6 @@ forecasts = read_forecasts(
     area,
     issue,
     f"{params.data_path}/data/{params.iso}/zarr/2022/{str(issue).zfill(2)}/forecasts.zarr",
-    update=False,  # True,
 )
 forecasts
 
