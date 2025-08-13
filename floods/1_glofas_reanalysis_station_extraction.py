@@ -19,12 +19,13 @@
 import s3fs
 import dask
 import xarray as xr
+import numpy as np
 import pandas as pd
 import os
 from tqdm import tqdm
 
 # %%
-country = 'zimbabwe'  # define country of interest
+country = 'mozambique'  # define country of interest
 directory = '/s3/scratch/jamie.towner/flood_aa'  # define main working directory
 
 # %%
@@ -73,8 +74,11 @@ with dask.config.set(**{"array.slicing.split_large_chunks": True}):
     # Loop over each station in the station_info CSV
     for index, row in station_info.iterrows():
         point_name = row['station name']
-        latitude = row['latitude']
-        longitude = row['longitude']
+        latitude = row['lisflood_y']
+        longitude = row['lisflood_x']
+        if np.isnan(latitude) or np.isnan(longitude):
+            latitude = row['latitude']
+            longitude = row['longitude']
 
         # Replace 'lat' and 'lon' with 'latitude' and 'longitude'
         lat_index = ds['latitude'].sel(latitude=latitude, method='nearest').values
@@ -106,5 +110,38 @@ pbar.close()
 for station, data in station_data.items():
     csv_file_name = os.path.join(out_dir, f"{station}.csv")
     data.to_csv(csv_file_name, index=False)
+
+# %%
+all_dfs = []
+for station, data in station_data.items():
+    name = "".join(c for c in station if c.isalnum() or c in (' ', '_')).replace(' ', '_')
+    data = data.rename(columns={'river discharge':name})
+    data = data.set_index('date')
+    all_dfs.append(data)
+pd.concat(all_dfs,axis=1)
+
+# %%
+csv_file_name = os.path.join(out_dir, f"all_stations/glofas_reanalysis_complete_series.csv")
+pd.concat(all_dfs,axis=1).to_csv(csv_file_name)
+
+# %%
+csv_file_name = os.path.join(out_dir, f"all_stations/glofas_reanalysis.csv")
+
+df_all = pd.concat(all_dfs,axis=1)
+df_all.index = pd.to_datetime(df_all.index,format='%d/%m/%Y')
+df_all[df_all.index>='01/01/2003'].to_csv(csv_file_name)
+
+# %% [markdown]
+# ### get correlation of observed data with glofas
+
+# %%
+df_obs = pd.read_csv('/s3/scratch/jamie.towner/flood_aa/mozambique/data/observations/gauging_stations/all_stations/observations_newstations.csv')
+df_obs = df_obs.rename(columns={'Unnamed: 0':'date'})
+df_obs["date"] = pd.to_datetime(df_obs["date"], format='mixed')
+df_obs = df_obs.set_index('date')
+df_obs
+
+# %%
+df_all[df_all.index>='01/01/2003'].corrwith(df_obs)
 
 # %%

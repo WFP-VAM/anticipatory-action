@@ -18,7 +18,7 @@ import numpy as np
 # In this section we begin by defining our country of interest, our main working directory and whether we are using observed or reanalysis data. We then define the paths to load the data and perform visual checks to ensure the data is what we are expecting. 
 
 # %%
-country = 'zimbabwe'  # define country of interest
+country = 'mozambique'  # define country of interest
 directory = '/s3/scratch/jamie.towner/flood_aa'  # define main working directory
 benchmark = 'observations'  # choose 'observations' or 'glofas_reanalysis' as the benchmark
 
@@ -48,6 +48,8 @@ station_info_path = os.path.join(metadata_directory, station_info_file)
 
 observed_data = pd.read_csv(observed_data_path)
 station_info = pd.read_csv(station_info_path)
+# format station name
+station_info['station name'] = ["".join(c for c in name if c.isalnum() or c in (' ', '_')).replace(' ', '_') for name in station_info['station name']]
 
 # %%
 # check the observed data 
@@ -106,10 +108,11 @@ for forecast_file in tqdm(forecast_files, desc="processing forecast files"):
     ds = xr.open_dataset(forecast_file, decode_timedelta=True)
     
     # extract the station name from the filename
-    station_name = os.path.basename(forecast_file).split("_")[0].lower()
+    station_name = os.path.basename(forecast_file)[:-14] #os.path.basename(forecast_file).split("_")[0].lower()
 
     # process only the station that matches the current forecast file
-    station_row = filtered_station_info[filtered_station_info["station name"].str.lower() == station_name]
+    #station_row = filtered_station_info[filtered_station_info["station name"].str.lower() == station_name]
+    station_row = station_info[station_info["station name"] == station_name]
 
     if station_row.empty:
         print(f"Skipping {station_name}: no matching station info found.")
@@ -141,7 +144,7 @@ for forecast_file in tqdm(forecast_files, desc="processing forecast files"):
             forecast_end_date = forecast_issue_date + pd.DateOffset(days=lead_time + 1)
             
             # filter observed data for the matching period
-            observed_period = observed_data[observed_data["date"] == forecast_end_date]
+            observed_period = observed_data[observed_data["date"] == str(forecast_end_date)[:10]]
             
             # skip if no observation data is available for this period
             if observed_period.empty:
@@ -188,6 +191,9 @@ print("processing complete.")
 # %%
 # print events_df to check output is as expected 
 events_df.head()
+
+# %%
+events_df.to_csv('events_df.csv')
 
 
 # %% [markdown]
@@ -247,8 +253,10 @@ def calculate_metrics(df):
 
 # %%
 # pivot the events_df to list ensemble members as columns
-events_df = events_df.pivot_table(index=["forecast file", "lead time", "station name", "forecasted date","threshold", "observed event"],
-                                        columns="ensemble member",)
+events_df = events_df.pivot_table(
+    index=["forecast file", "lead time", "station name", "forecasted date","threshold", "observed event"],
+    columns="ensemble member",
+)
 
 # reset index to convert the pivoted dataframe to a flat table structure
 events_df.reset_index(inplace=True)
@@ -257,7 +265,7 @@ events_df.reset_index(inplace=True)
 ensemble_member_columns = [col for col in events_df.columns if col[0] == "forecast event"]
 
 # calculate the percentage of ensemble members with events (i.e., 1's) for each row
-events_df["probability"] = events_df[ensemble_member_columns].sum(axis=1) / len(ensemble_members)
+events_df["probability"] = events_df[ensemble_member_columns].sum(axis=1) / len(ensemble_member_columns)
 
 # check if the columns of events_df have a multi index
 if isinstance(events_df.columns, pd.MultiIndex):
@@ -285,60 +293,70 @@ print(f"number of unique forecasts removed: {removed_forecasts_unique_count}")
 # assign back to the original variable
 events_df = filtered_events_df
 
-# filter the dataframe to include specific lead times
-events_df = events_df[(events_df['lead time'] >=2) & (events_df['lead time'] <=4)]
+all_dfs = []
+# test multiple lead times
+for lead_start, lead_stop in [[3,5],[3,6],[3,7],[2,5],[2,6],[2,7]]:
+    # filter the dataframe to include specific lead times
+    events_df_lead = events_df[(events_df['lead time'] >=lead_start) & (events_df['lead time'] <=lead_stop)]
+    events_df_lead['lead'] = f'{lead_start}-{lead_stop} days'
+    
+    # group by station name, lead time category, and threshold
+    grouped = events_df_lead.groupby(['forecast file','station name','threshold','lead'], observed=False)
 
-# group by station name, lead time category, and threshold
-grouped = events_df.groupby(['forecast file','station name','threshold'], observed=False)
+    # create a dictionary to store each group's dataframe
+    grouped_dfs = {name: group for name, group in grouped}
 
-# create a dictionary to store each group's dataframe
-grouped_dfs = {name: group for name, group in grouped}
+    # dictionary to store processed data
+    new_grouped_dfs = {}
 
-# dictionary to store processed data
-new_grouped_dfs = {}
+    # calculate events and non-events in the lead time period (i.e., flood event if any observed value in period is a 1, take the mean probability for the forecast data)
+    for name, df in grouped_dfs.items():
+        first_row = df.iloc[0]
 
-# calculate events and non-events in the lead time period (i.e., flood event if any observed value in period is a 1, take the mean probability for the forecast data)
-for name, df in grouped_dfs.items():
-    first_row = df.iloc[0]
+        new_grouped_dfs[name] = pd.DataFrame({
+            'forecast file': [first_row['forecast file']],
+            'station name': [first_row['station name']],
+            'threshold': [first_row['threshold']],
+            'lead time': [first_row['lead']],
+            'observed event': [(df['observed event'] == 1).any()],
+            'probability': [df['probability'].mean()],
+        })
 
-    new_grouped_dfs[name] = pd.DataFrame({
-        'forecast file': [first_row['forecast file']],
-        'station name': [first_row['station name']],
-        'threshold': [first_row['threshold']],
-        'observed event': [(df['observed event'] == 1).any()],
-        'probability': [df['probability'].mean()]
-    })
+    # combine all resulting dataframe into one 
+    final_df = pd.concat(new_grouped_dfs.values(), ignore_index=True)
 
-# combine all resulting dataframe into one 
-final_df = pd.concat(new_grouped_dfs.values(), ignore_index=True)
+    # add trigger thresholds ranging from 1-100% 
+    trigger_columns = {}
 
-# add trigger thresholds ranging from 1-100% 
-trigger_columns = {}
+    for trigger in np.arange(0.01, 1.01, 0.01): 
+        event_occurrence = (final_df['probability'] >= trigger).astype(int)
+        trigger_columns[f'trigger{trigger:.2f}'] = event_occurrence
 
-for trigger in np.arange(0.01, 1.01, 0.01): 
-    event_occurrence = (final_df['probability'] >= trigger).astype(int)
-    trigger_columns[f'trigger{trigger:.2f}'] = event_occurrence
+    # concatanate the new trigger columns to the dataframe
+    final_df = pd.concat([final_df, pd.DataFrame(trigger_columns, index=final_df.index)], axis=1)
 
-# concatanate the new trigger columns to the dataframe
-final_df = pd.concat([final_df, pd.DataFrame(trigger_columns, index=final_df.index)], axis=1)
+    # group by station name, lead time category, and threshold
+    grouped = final_df.groupby(['station name','threshold','lead time'], observed=False)
 
-# group by station name, lead time category, and threshold
-grouped = final_df.groupby(['station name','threshold'], observed=False)
+    # create a dictionary to store each group's dataframe
+    grouped_dfs = {name: group for name, group in grouped}
 
-# create a dictionary to store each group's dataframe
-grouped_dfs = {name: group for name, group in grouped}
+    # iterate through each dataframe in grouped_dfs, apply calculate_metrics, and store the results back into grouped_dfs
+    for key, df in grouped_dfs.items():
+        grouped_dfs[key] = calculate_metrics(df)
+        
+    all_dfs.append(grouped_dfs)
 
-# iterate through each dataframe in grouped_dfs, apply calculate_metrics, and store the results back into grouped_dfs
-for key, df in grouped_dfs.items():
-    grouped_dfs[key] = calculate_metrics(df)
+# %%
+all_dfs_combine = [pd.concat(dfs, ignore_index=False) for dfs in all_dfs]
 
 # %%
 # Concatenate all DataFrames in the list
-combined_df = pd.concat(grouped_dfs, ignore_index=False)
+combined_df = pd.concat(all_dfs_combine, ignore_index=False)
 combined_df
 
 # %%
-combined_df.to_csv('combined_output.csv', index=True)
+combined_df.to_csv(f'{country}_combined_output.csv', index=True)
 
 # %%
 # display an example of one of the grouped_dfs
@@ -357,58 +375,61 @@ example
 best_triggers = {}
 
 # iterate through each dataframe in grouped_dfs
-for key, df in grouped_dfs.items():
-    # find the column names corresponding to trigger thresholds (i.e., the percentages)
-    threshold_columns = [col for col in df.columns if col.startswith('trigger')]
+for grouped_dfs in all_dfs:
+    for key, df in grouped_dfs.items():
+        # find the column names corresponding to trigger thresholds (i.e., the percentages)
+        threshold_columns = [col for col in df.columns if col.startswith('trigger')]
 
-    # filter triggers based on the f1 score
-    filtered_columns = [
-        col for col in threshold_columns
-        if df.loc['f1_score', col] >= 0.45
-    ]
-    
-    # if there are any columns left after filtering, identify the maximum f1 score for each threshold (i.e., bankfull, moderate, severe)
-    if filtered_columns:
-        max_f1 = df.loc['f1_score', filtered_columns].max()
-        
-        # find all thresholds with the maximum f1 score 
-        best_f1_thresholds = df.loc['f1_score', filtered_columns][df.loc['f1_score', filtered_columns] == max_f1].index.tolist()
-        
-        # if there are multiple thresholds with the same f1 score, proceed to resolve ties
-        if len(best_f1_thresholds) > 1:
-            # resolve ties by choosing the highest hit rate
-            hit_rates = df.loc['hit_rate', best_f1_thresholds]
-            max_hit_rate = hit_rates.max()
-            best_f1_thresholds = hit_rates[hit_rates == max_hit_rate].index.tolist()
+        # filter triggers based on the f1 score
+        filtered_columns = [
+            col for col in threshold_columns
+            if df.loc['f1_score', col] >= 0.45
+            # if no triggers fit the criteria, you can get the max f score by uncommenting the next line
+            #if df.loc['f1_score', col] >= df.loc['f1_score'].max()
+        ]
 
-            # if there are still ties, resolve by choosing the lowest false alarm rate
+        # if there are any columns left after filtering, identify the maximum f1 score for each threshold (i.e., bankfull, moderate, severe)
+        if filtered_columns:
+            max_f1 = df.loc['f1_score', filtered_columns].max()
+
+            # find all thresholds with the maximum f1 score 
+            best_f1_thresholds = df.loc['f1_score', filtered_columns][df.loc['f1_score', filtered_columns] == max_f1].index.tolist()
+
+            # if there are multiple thresholds with the same f1 score, proceed to resolve ties
             if len(best_f1_thresholds) > 1:
-                false_alarm_rates = df.loc['false_alarm_rate', best_f1_thresholds]
-                min_false_alarm_rate = false_alarm_rates.min()
-                best_f1_thresholds = false_alarm_rates[false_alarm_rates == min_false_alarm_rate].index.tolist()
+                # resolve ties by choosing the highest hit rate
+                hit_rates = df.loc['hit_rate', best_f1_thresholds]
+                max_hit_rate = hit_rates.max()
+                best_f1_thresholds = hit_rates[hit_rates == max_hit_rate].index.tolist()
 
-                # if there are still ties, choose the lowest trigger (threshold)
+                # if there are still ties, resolve by choosing the lowest false alarm rate
                 if len(best_f1_thresholds) > 1:
-                    best_threshold = min(best_f1_thresholds, key=lambda x: float(x.split('trigger')[1]))  # Sorting by numeric threshold
+                    false_alarm_rates = df.loc['false_alarm_rate', best_f1_thresholds]
+                    min_false_alarm_rate = false_alarm_rates.min()
+                    best_f1_thresholds = false_alarm_rates[false_alarm_rates == min_false_alarm_rate].index.tolist()
+
+                    # if there are still ties, choose the lowest trigger (threshold)
+                    if len(best_f1_thresholds) > 1:
+                        best_threshold = min(best_f1_thresholds, key=lambda x: float(x.split('trigger')[1].split('_')[0]))  # Sorting by numeric threshold
+                    else:
+                        best_threshold = best_f1_thresholds[0]
                 else:
                     best_threshold = best_f1_thresholds[0]
             else:
                 best_threshold = best_f1_thresholds[0]
-        else:
-            best_threshold = best_f1_thresholds[0]
-        
-        # split key into station and threshold type (if it's a tuple)
-        station, threshold = key if isinstance(key, tuple) else (key, 'unknown')
 
-        # store the best threshold information
-        best_triggers[(station, threshold)] = {
-            'station': station,
-            'threshold': threshold,
-            'best_trigger': best_threshold,
-            'f1_score': df.loc['f1_score', best_threshold],
-            'hit_rate': df.loc['hit_rate', best_threshold],
-            'false_alarm_rate': df.loc['false_alarm_rate', best_threshold]
-        }
+            # split key into station and threshold type (if it's a tuple)
+            station, threshold, lead = key if isinstance(key, tuple) else (key, 'unknown')
+            # store the best threshold information
+            best_triggers[(station, threshold, lead)] = {
+                'station': station,
+                'threshold': threshold,
+                'lead time': lead,
+                'best_trigger': best_threshold,
+                'f1_score': df.loc['f1_score', best_threshold],
+                'hit_rate': df.loc['hit_rate', best_threshold],
+                'false_alarm_rate': df.loc['false_alarm_rate', best_threshold]
+            }
 
 best_triggers_df = pd.DataFrame(best_triggers.values())
 
@@ -416,7 +437,38 @@ best_triggers_df = pd.DataFrame(best_triggers.values())
 print(best_triggers_df)
 
 # Save output as a CSV using country name
-#filename = f"{country.lower()}_triggers_2025_2026.csv"
-#best_triggers_df.to_csv(os.path.join(output_directory, filename), index=False)
+filename = f"{country.lower()}_triggers_2025_2026.csv"
+best_triggers_df.to_csv(os.path.join(output_directory, filename), index=False)
+
+# %%
+best_triggers_df.loc[best_triggers_df.groupby(['station','threshold'])['f1_score'].idxmax()]
+
+# %%
+best_triggers_df_lead= best_triggers_df.loc[best_triggers_df.groupby(['station','threshold'])['f1_score'].idxmax()]
+best_triggers_df_lead.to_csv(f'{country}_best_triggers.csv')
+
+# %% [markdown]
+# ## calculate # of exceedances of each threshold
+
+# %%
+exc = []
+for c in observed_data.columns:
+    if c=='date':
+        continue
+    info = station_info[station_info['station name']==c]
+    bank = info['obs_bankfull'].item()
+    mod = info['obs_moderate'].item()
+    sev = info['obs_severe'].item()
+    count_b = (observed_data[c]>bank).sum()
+    count_m = (observed_data[c]>mod).sum()
+    count_s = (observed_data[c]>sev).sum()
+    exc.append({
+            'station': c,
+            'bankfull_exceedance': count_b,
+            'moderate_exceedance': count_m,
+            'severe_exceedance': count_s,
+        })
+exc_df = pd.DataFrame(exc)
+exc_df
 
 # %%

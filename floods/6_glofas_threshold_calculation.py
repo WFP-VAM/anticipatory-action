@@ -24,7 +24,7 @@ import os
 
 # %%
 # define country and directory
-country = 'zimbabwe'
+country = 'mozambique'
 directory = '/s3/scratch/jamie.towner/flood_aa'
 
 output_directory = os.path.join(directory, country, "outputs/thresholds")
@@ -59,7 +59,7 @@ station_info['obs_severe'] = pd.to_numeric(station_info['obs_severe'], errors='c
 
 # %%
 # Remove leading/trailing whitespace from metadata station names
-station_info['station name'] = station_info['station name'].str.strip()
+station_info['station name'] = ["".join(c for c in name if c.isalnum() or c in (' ', '_')).replace(' ', '_') for name in station_info['station name']]
 
 # Remove whitespace from observed and reanalysis data columns
 observed_data.columns = observed_data.columns.str.strip()
@@ -73,7 +73,7 @@ results = []
 for index, row in station_info.iterrows():
     station = row['station name']
     
-        # skip station if any threshold is missing (NaN)
+    # skip station if any threshold is missing (NaN)
     if pd.isna(row['obs_bankfull']) or pd.isna(row['obs_moderate']) or pd.isna(row['obs_severe']):
         continue
     
@@ -129,5 +129,8 @@ results_df
 # %%
 # save output as a csv 
 results_df.to_csv(os.path.join(output_directory, "glofas_return_periods_complete_series.csv"), index=True)
+
+# %%
+results_df.pivot_table(index='station',columns='threshold_name',values='value_reanalysis')
 
 # %%

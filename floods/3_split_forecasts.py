@@ -17,10 +17,15 @@ import xarray as xr
 import os
 from tqdm import tqdm
 
-input_dir = "/s3/scratch/jamie.towner/flood_aa/zimbabwe/data/forecasts/glofas_reforecasts/stations"
-output_dir = "/s3/scratch/jamie.towner/flood_aa/zimbabwe/data/forecasts/glofas_reforecasts"
+# %%
+country = 'mozambique'  # define country of interest
+
+# %%
+input_dir = f"/s3/scratch/jamie.towner/flood_aa/{country}/data/forecasts/glofas_reforecasts/stations"
+output_dir = f"/s3/scratch/jamie.towner/flood_aa/{country}/data/forecasts/glofas_reforecasts"
 os.makedirs(output_dir, exist_ok=True)
 
+# %%
 for filename in tqdm(os.listdir(input_dir)):
     if not filename.endswith(".nc"):
         continue

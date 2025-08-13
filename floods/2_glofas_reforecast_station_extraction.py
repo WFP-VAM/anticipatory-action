@@ -22,9 +22,10 @@ import xarray as xr
 import pandas as pd
 import os
 from tqdm import tqdm
+from hip.analysis.compute.utils import persist_with_progress_bar
 
 # %%
-country = 'zimbabwe'  # define country of interest
+country = 'mozambique'  # define country of interest
 directory = '/s3/scratch/jamie.towner/flood_aa'  # define main working directory
 
 # %%
@@ -51,19 +52,25 @@ station_info_path = os.path.join(metadata_directory, station_info_file)
 station_info = pd.read_csv(station_info_path)
 
 # Define the output directory
-out_dir = os.path.join(directory, country, "data/forecasts/glofas_reforecasts")
+out_dir = os.path.join(directory, country, "data/forecasts/glofas_reforecasts/stations")
 if not os.path.exists(out_dir):
     os.makedirs(out_dir)
 
+# %%
 # Initialize tqdm progress bar
 pbar = tqdm(total=len(station_info), desc="Extracting Data")
 
 # Loop over each station in the metadata file
 for index, row in station_info.iterrows():
-    point_name = row['station name']
-    latitude = row['latitude']
-    longitude = row['longitude']
 
+    point_name = row['station name']
+    latitude = row['lisflood_y']
+    longitude = row['lisflood_x']
+    
+    if np.isnan(latitude) or np.isnan(longitude):
+        latitude = row['latitude']
+        longitude = row['longitude']
+    
     # Sanitize the station name for use in a file path (e.g., remove spaces, special characters)
     station_name = "".join(c for c in point_name if c.isalnum() or c in (' ', '_')).replace(' ', '_')
     
@@ -81,7 +88,7 @@ for index, row in station_info.iterrows():
     lon_index = ds['longitude'].sel(longitude=longitude, method='nearest')
 
     # Extract river discharge data for the nearest point and for all ensemble members
-    data_at_point = ds['dis24'].sel(latitude=lat_index, longitude=lon_index)
+    data_at_point = persist_with_progress_bar(ds['dis24'].sel(latitude=lat_index, longitude=lon_index))
 
     # Print the actual dimensions for diagnostics
     print("Data at point dimensions:", data_at_point.dims)
