@@ -452,13 +452,19 @@ best_triggers_df_lead.to_csv(f'{country}_best_triggers.csv')
 
 # %%
 exc = []
+
+if benchmark == 'observations':
+    prefix = 'obs_'
+else:
+    prefix = 'glofas_'
+
 for c in observed_data.columns:
     if c=='date':
         continue
     info = station_info[station_info['station name']==c]
-    bank = info['obs_bankfull'].item()
-    mod = info['obs_moderate'].item()
-    sev = info['obs_severe'].item()
+    bank = info[f'{prefix}bankfull'].item()
+    mod = info[f'{prefix}moderate'].item()
+    sev = info[f'{prefix}severe'].item()
     count_b = (observed_data[c]>bank).sum()
     count_m = (observed_data[c]>mod).sum()
     count_s = (observed_data[c]>sev).sum()
