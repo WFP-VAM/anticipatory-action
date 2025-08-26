@@ -295,7 +295,11 @@ def read_forecasts(area, issue, local_path):
     fs = fsspec.open(local_path).fs
     zmetadata_path = os.path.join(local_path, ".zmetadata")
     data_exists = fs.exists(zmetadata_path)
-
+    
+    # Determine the forecast period:
+    # - `last_date` is the end of the target time range, extracted from area.datetime_range (e.g., "2024-01-01/2024-12-31")
+    # - `forecast_date` is the start of the forecast, set to the 1st of the issue month of the year before `last_date`, as last_date.year = monitoring_year + 1
+    #   For example, if issue=6 (June) and last_date is 2024-12-31, then forecast_date becomes 2023-06-01
     last_date = datetime.datetime.strptime(
         area.datetime_range.split("/")[1], "%Y-%m-%d"
     )
