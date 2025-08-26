@@ -98,8 +98,8 @@ Check the staging version of the Prism dashboard to confirm everything looks cor
 Once the staging dashboard is verified, promote the final CSV file to the operational folder.
 
 ```bash
-cp /s3/scratch/public-share/aa/staging/aa_probabilities_triggers_<iso>.csv \
-   /s3/scratch/public-share/aa/aa_probabilities_triggers_<iso>.csv
+aws s3 cp s3://wfp-ops-userdata/public-share/aa/staging/aa_probabilities_triggers_<iso>.csv \
+s3://wfp-ops-userdata/public-share/aa/aa_probabilities_triggers_<iso>.csv
 ```
 
 ***Notes:***
