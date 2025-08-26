@@ -345,6 +345,78 @@ def read_triggers(params):
     return triggers_df
 
 
+def validate_prism_dataframe(df: pd.DataFrame):
+    # Expected columns and types
+    expected_columns = {
+        "district": str,
+        "index": str,
+        "category": str,
+        "window": str,
+        "issue_ready": float | int,
+        "issue_set": float | int,
+        "trigger_ready": float,
+        "trigger_set": float,
+        "vulnerability": str,
+        "prob_ready": float,
+        "prob_set": float,
+        "season": str,
+        "date_ready": str,
+        "date_set": str,
+    }
+
+    # Check columns
+    missing = set(expected_columns) - set(df.columns)
+    extra = set(df.columns) - set(expected_columns)
+    if missing:
+        raise ValueError(f"Missing columns: {missing}")
+    if extra:
+        raise ValueError(f"Unexpected columns: {extra}")
+
+    # Check column types
+    for col, expected_type in expected_columns.items():
+        if not df[col].map(lambda x: isinstance(x, expected_type)).all():
+            raise TypeError(
+                f"Column '{col}' has incorrect type. Expected {expected_type.__name__}"
+            )
+
+    # Check index column is uppercase
+    if not df["index"].map(lambda x: x.isupper()).all():
+        raise ValueError("All values in 'index' column must be uppercase")
+
+    # Check category values
+    valid_categories = {"Normal", "Mild", "Moderate", "Severe"}
+    if not df["category"].isin(valid_categories).all():
+        raise ValueError(
+            f"'category' column contains invalid values. Allowed: {valid_categories}"
+        )
+
+    # Check window values
+    valid_windows = {"Window 1", "Window 2"}
+    if not df["window"].isin(valid_windows).all():
+        raise ValueError(
+            f"'window' column contains invalid values. Allowed: {valid_windows}"
+        )
+
+    # Check vulnerability values
+    valid_vulnerability = {"General Triggers", "Emergency Triggers"}
+    if not df["vulnerability"].isin(valid_vulnerability).all():
+        raise ValueError(
+            f"'vulnerability' column contains invalid values. Allowed: {valid_vulnerability}"
+        )
+
+    # Check date formats
+    for col in ["date_ready", "date_set"]:
+        try:
+            parsed_dates = pd.to_datetime(df[col], format="%Y-%m-%d", errors="raise")
+        except Exception:
+            raise ValueError(f"Column '{col}' must use format YYYY-MM-DD")
+
+        if not all(parsed_dates.dt.day == 1):
+            raise ValueError(f"All dates in '{col}' must have day = 01")
+
+    return True
+
+
 ## Get SPI/probabilities of reference produced with R script from Gabriela Nobre for validation ##
 
 
