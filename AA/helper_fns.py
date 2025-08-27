@@ -291,23 +291,38 @@ def read_fbf_districts(path_fbf, params):
     return fbf_districts
 
 
-def read_forecasts(area, issue, local_path, update=False):
+def read_forecasts(area, issue, local_path):
     fs = fsspec.open(local_path).fs
-    if fs.exists(os.path.join(local_path, ".zmetadata")) and not update:
-        logging.info("Reading of forecasts from precomputed zarr...")
+    zmetadata_path = os.path.join(local_path, ".zmetadata")
+    data_exists = fs.exists(zmetadata_path)
+    
+    # Determine the forecast period:
+    # - `last_date` is the end of the target time range, extracted from area.datetime_range (e.g., "2024-01-01/2024-12-31")
+    # - `forecast_date` is the start of the forecast, set to the 1st of the issue month of the year before `last_date`, as last_date.year = monitoring_year + 1
+    #   For example, if issue=6 (June) and last_date is 2024-12-31, then forecast_date becomes 2023-06-01
+    last_date = datetime.datetime.strptime(
+        area.datetime_range.split("/")[1], "%Y-%m-%d"
+    )
+    forecast_date = datetime.datetime(last_date.year - 1, int(issue), 1)
+
+    if data_exists:
+        logging.info("Reading forecasts from precomputed zarr...")
         ds = xr.open_zarr(local_path).tp
-        end_date = datetime.datetime.strptime(
-            area.datetime_range.split("/")[1], "%Y-%m-%d"
-        )
-        forecasts = ds.sel(time=slice(None, end_date))
+        if np.datetime64(forecast_date) in ds.time.values:
+            return persist_with_progress_bar(ds.sel(time=slice(None, last_date)))
+        else:
+            logging.info("Forecast date missing in zarr, reading from source...")
     else:
-        logging.info("Reading of forecasts from source...")
-        forecasts = area.get_dataset(
-            ["ECMWF", f"RFH_FORECASTS_SEAS5_ISSUE{int(issue)}_DAILY"],
-            load_config={"gridded_load_kwargs": {"resampling": "bilinear"}},
-        )
-        forecasts.attrs["nodata"] = np.nan
-        forecasts.chunk({"time": -1}).to_zarr(local_path, mode="w", consolidated=True)
+        logging.info("Zarr file not found, reading from source...")
+
+    # Read from source
+    forecasts = area.get_dataset(
+        ["ECMWF", f"RFH_FORECASTS_SEAS5_ISSUE{int(issue)}_DAILY"],
+        load_config={"gridded_load_kwargs": {"resampling": "bilinear"}},
+    )
+    forecasts.attrs["nodata"] = np.nan
+    forecasts.chunk({"time": -1}).to_zarr(local_path, mode="w", consolidated=True)
+
     return persist_with_progress_bar(forecasts)
 
 
