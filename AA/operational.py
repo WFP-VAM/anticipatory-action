@@ -175,26 +175,51 @@ def run(country, issue, index, data_path, output_path):
     logger.debug("Total rows before concatenation: %d", total_rows_before)
     
     merged_db = pd.concat(merged_df)
-    logger.debug("After pd.concat() - merged_db shape: %s", merged_db.shape)
-    log_array_info(logger, "After_Concat_merged_db", merged_db)
-    
     merged_db = merged_db.sort_values(["prob_ready", "prob_set"])
-    logger.debug("After sort_values() - merged_db shape: %s", merged_db.shape)
-    
-    # Log deduplication details
+
+    # Check for duplicates and raise error if found
     duplicate_cols = merged_db.columns.difference(["prob_ready", "prob_set"])
-    logger.debug("Dropping duplicates on columns: %s", list(duplicate_cols))
-    duplicates_before = merged_db.duplicated(subset=duplicate_cols).sum()
-    logger.debug("Number of duplicate rows (excluding prob columns): %d", duplicates_before)
+    duplicates_count = merged_db.duplicated(subset=duplicate_cols).sum()
+    if duplicates_count > 0:
+        logger.error("CRITICAL: %d duplicate rows found in merged_db!", duplicates_count)
+        raise ValueError(f"Data integrity error: {duplicates_count} duplicate rows found in merged trigger data. "
+                        f"This indicates a problem with the trigger merging process.")
     
-    merged_db = merged_db.drop_duplicates(
-        merged_db.columns.difference(["prob_ready", "prob_set"]), keep="first"
+    logger.debug("Duplicate check passed: No duplicate rows found in merged_db")
+    
+    # Use merge to append rows from triggers_df that don't exist in merged_db
+    logger.debug("=== Appending missing triggers from triggers_df using merge ===")
+    logger.debug("merged_db shape before append: %s", merged_db.shape)
+    logger.debug("triggers_df shape: %s", triggers_df.shape)
+
+    # Perform left merge to find rows in triggers_df that don't exist in merged_db
+    merge_result = triggers_df.merge(
+        merged_db[duplicate_cols], 
+        on=duplicate_cols, 
+        how='left', 
+        indicator=True
     )
-    logger.debug("After drop_duplicates() - merged_db final shape: %s", merged_db.shape)
-    logger.debug("Rows removed by deduplication: %d", total_rows_before - merged_db.shape[0])
+
+    # Get only rows that exist in triggers_df but not in merged_db
+    new_rows_from_triggers = triggers_df[merge_result['_merge'] == 'left_only']
+
+    # Append the new rows to merged_db
+    if not new_rows_from_triggers.empty:
+        merged_db = pd.concat([merged_db, new_rows_from_triggers], ignore_index=True)
+        logger.debug("Added %d new rows from triggers_df", len(new_rows_from_triggers))
+    else:
+        logger.debug("No new rows to add from triggers_df - all triggers already present")
+
+    logger.debug("merged_db final shape after append: %s", merged_db.shape)
     
-    log_array_info(logger, "Final_Merged_Triggers", merged_db)
-    
+    # Assert that final merged_db has same number of rows as original triggers_df
+    assert len(merged_db) == len(triggers_df), (
+        f"Data integrity error: Final merged_db has {len(merged_db)} rows but original "
+        f"triggers_df has {len(triggers_df)} rows. Expected them to be equal."
+    )
+    logger.debug("Assertion passed: merged_db length (%d) equals triggers_df length (%d)", 
+                len(merged_db), len(triggers_df))
+
     merged_db.sort_values(["district", "index", "category"]).to_csv(
         f"{params.output_path}/data/{params.iso}/probs/aa_probabilities_triggers_pilots.csv",
         index=False,
