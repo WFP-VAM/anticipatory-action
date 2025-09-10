@@ -22,23 +22,26 @@ def main(iso3: str, issue_month: int):
 
     print(f"📥 Reading PRISM data from: {prism_path}")
     prism_df = pd.read_csv(prism_path)
+    print(f"prism_df: {prism_df.columns}")
+    if "Unnamed: 0" in prism_df.columns:
+        prism_df = prism_df.drop("Unnamed: 0", axis=1)
 
     print(f"📥 Reading probs pilot data from: {pilot_path}")
     df = pd.read_csv(pilot_path)
-
+    print(f"probs pilot data: {df.columns}")
+    
     print("🔗 Concatenating filtered PRISM and pilot data...")
     df_concat = (
         pd.concat(
             [
-                prism_df.loc[prism_df.season.isin(["2024-25", "2023-24"])].drop(
-                    "Unnamed: 0", axis=1
-                ),
+                prism_df.loc[prism_df.season.isin(["2024-25", "2023-24"])],
                 df,
             ]
         )
         .reset_index()
         .drop("level_0", axis=1)
     )
+    print(df_concat.head())
 
     if iso3 == "moz":
         print("🗺️ Applying district name corrections for Mozambique...")
