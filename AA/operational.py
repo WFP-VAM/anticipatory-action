@@ -178,7 +178,7 @@ def run(country, issue, index, data_path, output_path):
     merged_db = merged_db.sort_values(["prob_ready", "prob_set"])
 
     # Check for duplicates and raise error if found
-    duplicate_cols = merged_db.columns.difference(["prob_ready", "prob_set"])
+    duplicate_cols = list(merged_db.columns.difference(["prob_ready", "prob_set"]))
     duplicates_count = merged_db.duplicated(subset=duplicate_cols).sum()
     if duplicates_count > 0:
         logger.error("CRITICAL: %d duplicate rows found in merged_db!", duplicates_count)
