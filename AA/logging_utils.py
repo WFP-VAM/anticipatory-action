@@ -105,14 +105,6 @@ def log_array_info(logger, array_name, data, sample_values=True):
                     logger.debug(f"{array_name} - Valid values: {valid_data.size}/{data.size} "
                                f"({100*valid_data.size/data.size:.1f}%)")
                     
-                    # Sample values from different parts of the array
-                    if sample_values and valid_data.size > 10:
-                        sample_size = min(25, valid_data.size)
-                        # Sample along the first dimension
-                        first_dim = valid_data.dims[0]
-                        indices = np.linspace(0, valid_data.sizes[first_dim]-1, sample_size, dtype=int)
-                        samples = valid_data.isel({first_dim: indices})
-                        logger.debug(f"{array_name} - Sample values: {samples.values}")
                 else:
                     logger.warning(f"{array_name} - All values are NaN!")
         else:
@@ -135,12 +127,6 @@ def log_array_info(logger, array_name, data, sample_values=True):
             if valid_data.size > 0:
                 logger.debug(f"{array_name} - Stats: min={np.min(valid_data):.4f}, "
                            f"max={np.max(valid_data):.4f}, mean={np.mean(valid_data):.4f}")
-                
-                if sample_values and valid_data.size > 10:
-                    sample_size = min(25, valid_data.size)
-                    indices = np.linspace(0, valid_data.size-1, sample_size, dtype=int)
-                    samples = valid_data[indices]
-                    logger.debug(f"{array_name} - Sample values: {samples}")
             else:
                 logger.warning(f"{array_name} - No valid values!")
     
