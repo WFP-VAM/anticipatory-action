@@ -263,23 +263,33 @@ def merge_probabilities_triggers_dashboard(probs, triggers, params, period):
         triggers_merged["prob_set"] = np.nan
 
     # Fill in probabilities columns matching with triggers
+    target_index = f"{params.index.upper()} {period}"
+
+    # Drop all rows that do not related to the target_index
+    triggers_merged = triggers_merged[triggers_merged['index']==target_index]
+    
     for idx, row in triggers_merged.iterrows():
-        if (row.issue_ready == params.issue) and (
-            row["index"] == f"{params.index.upper()} {period}"
-        ):
-            triggers_merged.loc[idx, "prob_ready"] = probs_df.loc[
-                (probs_df["index"] == row["index"])
+        if (row.issue_ready == params.issue):
+            match_filter = (
+                (probs_df["index"] == target_index)
                 & (probs_df["category"] == row.category)
                 & (probs_df["district"] == row.district)
-            ].prob.values[0]
-        elif (row.issue_set == params.issue) and (
-            row["index"] == f"{params.index.upper()} {period}"
-        ):
-            triggers_merged.loc[idx, "prob_set"] = probs_df.loc[
-                (probs_df["index"] == row["index"])
+            )
+            matching_probs = probs_df.loc[match_filter]
+            if len(matching_probs) > 0:
+                prob_value = matching_probs.prob.values[0]
+                triggers_merged.loc[idx, "prob_ready"] = prob_value
+                
+        elif (row.issue_set == params.issue):
+            match_filter = (
+                (probs_df["index"] == target_index)
                 & (probs_df["category"] == row.category)
                 & (probs_df["district"] == row.district)
-            ].prob.values[0]
+            )
+            matching_probs = probs_df.loc[match_filter]
+            if len(matching_probs) > 0:
+                prob_value = matching_probs.prob.values[0]
+                triggers_merged.loc[idx, "prob_set"] = prob_value
 
     return probs_df, triggers_merged
 
