@@ -15,16 +15,40 @@ import xarray as xr
 def setup_aa_logging():
     """Setup AA logging with environment-controlled debug level"""
     # Set level based on environment variable
-    debug_level = logging.DEBUG if os.getenv('AA_DEBUG') == '1' else logging.INFO
+    debug_enabled = os.getenv('AA_DEBUG') == '1'
     
-    # Configure the root logger - this affects all loggers
+    # Configure the root logger at INFO level to suppress third-party debug messages
     logging.basicConfig(
-        level=debug_level,
+        level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - [%(funcName)s:%(lineno)d] - %(message)s',
         force=True
     )
     
-    # Return the AA-specific logger (inherits from root level)
+    # Set DEBUG level only for AA modules if debug is enabled
+    if debug_enabled:
+        # Set debug level for all AA modules
+        aa_logger = logging.getLogger('aa_operational')
+        aa_logger.setLevel(logging.DEBUG)
+        
+        # Also set debug for any other AA-related loggers you might use
+        logging.getLogger('AA').setLevel(logging.DEBUG)
+        
+        # Explicitly suppress debug messages from common third-party libraries
+        logging.getLogger('urllib3').setLevel(logging.WARNING)
+        logging.getLogger('requests').setLevel(logging.WARNING)
+        logging.getLogger('fsspec').setLevel(logging.WARNING)
+        logging.getLogger('s3fs').setLevel(logging.WARNING)
+        logging.getLogger('dask').setLevel(logging.WARNING)
+        logging.getLogger('xarray').setLevel(logging.WARNING)
+        logging.getLogger('pandas').setLevel(logging.WARNING)
+        logging.getLogger('matplotlib').setLevel(logging.WARNING)
+        logging.getLogger('PIL').setLevel(logging.WARNING)
+        logging.getLogger('rasterio').setLevel(logging.WARNING)
+        logging.getLogger('fiona').setLevel(logging.WARNING)
+        logging.getLogger('boto3').setLevel(logging.WARNING)
+        logging.getLogger('botocore').setLevel(logging.WARNING)
+        
+    # Return the AA-specific logger
     return logging.getLogger('aa_operational')
 
 
