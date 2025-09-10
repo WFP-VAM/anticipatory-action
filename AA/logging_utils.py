@@ -94,7 +94,6 @@ def log_array_info(logger, array_name, data, sample_values=True):
             if hasattr(data.data, 'chunks'):
                 # This is a Dask array - don't compute statistics to avoid triggering computation
                 logger.debug(f"{array_name} - Dask array detected - skipping statistical computation")
-                logger.debug(f"{array_name} - Chunks: {data.chunks}")
             else:
                 # This is a materialized array - safe to compute statistics
                 valid_data = data.where(~np.isnan(data), drop=True)
@@ -108,7 +107,7 @@ def log_array_info(logger, array_name, data, sample_values=True):
                     
                     # Sample values from different parts of the array
                     if sample_values and valid_data.size > 10:
-                        sample_size = min(5, valid_data.size)
+                        sample_size = min(25, valid_data.size)
                         # Sample along the first dimension
                         first_dim = valid_data.dims[0]
                         indices = np.linspace(0, valid_data.sizes[first_dim]-1, sample_size, dtype=int)
@@ -138,7 +137,7 @@ def log_array_info(logger, array_name, data, sample_values=True):
                            f"max={np.max(valid_data):.4f}, mean={np.mean(valid_data):.4f}")
                 
                 if sample_values and valid_data.size > 10:
-                    sample_size = min(5, valid_data.size)
+                    sample_size = min(25, valid_data.size)
                     indices = np.linspace(0, valid_data.size-1, sample_size, dtype=int)
                     samples = valid_data[indices]
                     logger.debug(f"{array_name} - Sample values: {samples}")

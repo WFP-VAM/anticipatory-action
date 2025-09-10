@@ -82,7 +82,6 @@ def run(country, issue, index, data_path, output_path):
     # Log area information
     logger.debug("Analysis area: datetime_range=%s, resolution=%.2f, admin_level=2", 
                 area.datetime_range, area.resolution)
-    logger.debug("Area bounds: %s", area.bounds)
 
     forecasts = read_forecasts(
         area,
