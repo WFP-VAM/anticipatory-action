@@ -88,27 +88,34 @@ def log_array_info(logger, array_name, data, sample_values=True):
                 elif np.issubdtype(coord_data.dtype, np.number):
                     logger.debug(f"{array_name} - {coord_name} range: {float(coord_data.min()):.4f} to {float(coord_data.max()):.4f}")
         
-        # Statistical summary
+        # Statistical summary - only compute for materialized arrays (not Dask arrays)
         if data.size > 0:
-            valid_data = data.where(~np.isnan(data), drop=True)
-            if valid_data.size > 0:
-                logger.debug(f"{array_name} - Stats: min={float(valid_data.min()):.4f}, "
-                           f"max={float(valid_data.max()):.4f}, "
-                           f"mean={float(valid_data.mean()):.4f}, "
-                           f"std={float(valid_data.std()):.4f}")
-                logger.debug(f"{array_name} - Valid values: {valid_data.size}/{data.size} "
-                           f"({100*valid_data.size/data.size:.1f}%)")
-                
-                # Sample values from different parts of the array
-                if sample_values and valid_data.size > 10:
-                    sample_size = min(5, valid_data.size)
-                    # Sample along the first dimension
-                    first_dim = valid_data.dims[0]
-                    indices = np.linspace(0, valid_data.sizes[first_dim]-1, sample_size, dtype=int)
-                    samples = valid_data.isel({first_dim: indices})
-                    logger.debug(f"{array_name} - Sample values: {samples.values}")
+            # Check if data is a Dask array (lazy) or materialized
+            if hasattr(data.data, 'chunks'):
+                # This is a Dask array - don't compute statistics to avoid triggering computation
+                logger.debug(f"{array_name} - Dask array detected - skipping statistical computation")
+                logger.debug(f"{array_name} - Chunks: {data.chunks}")
             else:
-                logger.warning(f"{array_name} - All values are NaN!")
+                # This is a materialized array - safe to compute statistics
+                valid_data = data.where(~np.isnan(data), drop=True)
+                if valid_data.size > 0:
+                    logger.debug(f"{array_name} - Stats: min={float(valid_data.min()):.4f}, "
+                               f"max={float(valid_data.max()):.4f}, "
+                               f"mean={float(valid_data.mean()):.4f}, "
+                               f"std={float(valid_data.std()):.4f}")
+                    logger.debug(f"{array_name} - Valid values: {valid_data.size}/{data.size} "
+                               f"({100*valid_data.size/data.size:.1f}%)")
+                    
+                    # Sample values from different parts of the array
+                    if sample_values and valid_data.size > 10:
+                        sample_size = min(5, valid_data.size)
+                        # Sample along the first dimension
+                        first_dim = valid_data.dims[0]
+                        indices = np.linspace(0, valid_data.sizes[first_dim]-1, sample_size, dtype=int)
+                        samples = valid_data.isel({first_dim: indices})
+                        logger.debug(f"{array_name} - Sample values: {samples.values}")
+                else:
+                    logger.warning(f"{array_name} - All values are NaN!")
         else:
             logger.warning(f"{array_name} - Array is empty!")
     
