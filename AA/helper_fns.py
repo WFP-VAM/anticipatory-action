@@ -336,12 +336,13 @@ def merge_probabilities_triggers_dashboard(probs, triggers, params, period):
     matched_ready = 0
     matched_set = 0
     
+    # Drop all rows that do not related to the target_index
+    triggers_merged = triggers_merged[triggers_merged['index']==target_index]
+    
     for idx, row in triggers_merged.iterrows():
-        if (row.issue_ready == params.issue) and (
-            row["index"] == target_index
-        ):
+        if (row.issue_ready == params.issue):
             match_filter = (
-                (probs_df["index"] == row["index"])
+                (probs_df["index"] == target_index)
                 & (probs_df["category"] == row.category)
                 & (probs_df["district"] == row.district)
             )
@@ -349,16 +350,14 @@ def merge_probabilities_triggers_dashboard(probs, triggers, params, period):
             if len(matching_probs) > 0:
                 prob_value = matching_probs.prob.values[0]
                 triggers_merged.loc[idx, "prob_ready"] = prob_value
-                logger.debug("Updated %s %s %s %s %s (READY): value: %.3f", 
+                logger.debug("Updated %s %s %s %s (READY): value: %.3f", 
                            row.issue_ready, row.district, row.category, 
-                           params.index.upper(), period, prob_value)
+                           target_index, prob_value)
                 matched_ready += 1
                 
-        elif (row.issue_set == params.issue) and (
-            row["index"] == target_index
-        ):
+        elif (row.issue_set == params.issue):
             match_filter = (
-                (probs_df["index"] == row["index"])
+                (probs_df["index"] == target_index)
                 & (probs_df["category"] == row.category)
                 & (probs_df["district"] == row.district)
             )
@@ -366,9 +365,9 @@ def merge_probabilities_triggers_dashboard(probs, triggers, params, period):
             if len(matching_probs) > 0:
                 prob_value = matching_probs.prob.values[0]
                 triggers_merged.loc[idx, "prob_set"] = prob_value
-                logger.debug("Updated %s %s %s %s %s (SET): value: %.3f", 
+                logger.debug("Updated %s %s %s %s (SET): value: %.3f", 
                            row.issue_set, row.district, row.category, 
-                           params.index.upper(), period, prob_value)
+                           target_index, prob_value)
                 matched_set += 1
 
     logger.debug("Probability matching complete:")
