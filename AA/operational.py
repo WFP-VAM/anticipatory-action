@@ -23,9 +23,8 @@ from AA.helper_fns import (
     read_observations,
     read_triggers,
 )
+from AA.logging_utils import setup_aa_logging, log_array_info, log_processing_step
 from config.params import S3_OPS_DATA_PATH, Params
-
-logging.basicConfig(level="INFO", force=True)
 
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
@@ -50,6 +49,12 @@ warnings.simplefilter(action="ignore", category=FutureWarning)
 )
 def run(country, issue, index, data_path, output_path):
     # End to end workflow for a country using pre-stored ECMWF forecasts and CHIRPS
+    
+    # Setup logging with conditional debug level
+    logger = setup_aa_logging()
+    logger.info("=== Starting AA operational run for %s, issue %d, index %s ===", 
+                country, issue, index)
+    logger.debug("Debug mode enabled - comprehensive array logging active")
 
     params = Params(
         iso=country,
@@ -58,6 +63,14 @@ def run(country, issue, index, data_path, output_path):
         data_path=data_path,
         output_path=output_path,
     )
+    
+    # Log key parameters
+    logger.debug("Parameters: monitoring_year=%d, calibration_year=%d", 
+                params.monitoring_year, params.calibration_year)
+    logger.debug("Season: start_month=%d, end_month=%d", 
+                params.start_season, params.end_season)
+    logger.debug("Index periods: min=%d, max=%d", 
+                params.min_index_period, params.max_index_period)
 
     area = AnalysisArea.from_admin_boundaries(
         iso3=country.upper(),
@@ -65,6 +78,11 @@ def run(country, issue, index, data_path, output_path):
         resolution=0.25,
         datetime_range=f"1981-01-01/{params.monitoring_year + 1}-06-30",
     )
+    
+    # Log area information
+    logger.debug("Analysis area: datetime_range=%s, resolution=%.2f, admin_level=2", 
+                area.datetime_range, area.resolution)
+    logger.debug("Area bounds: %s", area.bounds)
 
     forecasts = read_forecasts(
         area,
@@ -81,15 +99,15 @@ def run(country, issue, index, data_path, output_path):
             "Forecast missing from dataset — it might not have been released yet. Try again later."
         )
 
-    logging.info("Completed reading of forecasts for the whole %s country", params.iso)
+    logger.info("Completed reading of forecasts for the whole %s country", params.iso)
+    log_array_info(logger, "Loaded_Forecasts", forecasts)
 
     observations = read_observations(
         area,
         f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}/obs/observations.zarr",
     )
-    logging.info(
-        "Completed reading of observations for the whole %s country", params.iso
-    )
+    logger.info("Completed reading of observations for the whole %s country", params.iso)
+    log_array_info(logger, "Loaded_Observations", observations)
 
     os.makedirs(
         f"{params.output_path}/data/{params.iso}/probs",
@@ -97,6 +115,7 @@ def run(country, issue, index, data_path, output_path):
     )
 
     triggers_df = read_triggers(params)
+    log_array_info(logger, "Loaded_Triggers", triggers_df)
 
     # Get accumulation periods (DJ, JF, FM, DJF, JFM...)
     accumulation_periods = get_accumulation_periods(
@@ -106,6 +125,9 @@ def run(country, issue, index, data_path, output_path):
         params.min_index_period,
         params.max_index_period,
     )
+    logger.debug("Accumulation periods to process: %s", list(accumulation_periods.keys()))
+    for period_name, period_months in accumulation_periods.items():
+        logger.debug("Period %s: months %s", period_name, period_months)
 
     # Compute probabilities for each accumulation period
     probs_merged_dataframes = [
@@ -120,26 +142,66 @@ def run(country, issue, index, data_path, output_path):
         )
         for period_name, period_months in accumulation_periods.items()
     ]
-    logging.info("Completed analysis for the required indexes over %s country", country)
+    logger.info("Completed analysis for the required indexes over %s country", country)
 
     probs_df, merged_df = zip(*probs_merged_dataframes)
 
+    # Log detailed information about merged_df before processing
+    logger.debug("=== Analysis of merged_df collection ===")
+    logger.debug("Number of merged_df elements: %d", len(merged_df))
+    for i, df in enumerate(merged_df):
+        logger.debug("merged_df[%d] shape: %s", i, df.shape)
+        log_array_info(logger, f"merged_df[{i}]", df)
+        # Log unique periods/indexes for each dataframe
+        if hasattr(df, 'index') and 'index' in df.columns:
+            unique_indexes = df['index'].unique() if 'index' in df.columns else []
+            logger.debug("merged_df[%d] unique indexes: %s", i, list(unique_indexes))
+
+    # Log final aggregation step
+    logger.debug("Concatenating %d probability dataframes", len(probs_df))
     probs_dashboard = pd.concat(probs_df).drop_duplicates()
+    log_array_info(logger, "Final_Probabilities_Dashboard", probs_dashboard)
+    
     probs_dashboard.to_csv(
         f"{params.output_path}/data/{params.iso}/probs/aa_probabilities_{params.index}_{params.issue}.csv",
         index=False,
     )
 
-    merged_db = pd.concat(merged_df).sort_values(["prob_ready", "prob_set"])
+    # Log detailed merged_df concatenation process
+    logger.debug("=== Processing merged trigger dataframes ===")
+    logger.debug("Concatenating %d merged trigger dataframes", len(merged_df))
+    
+    # Log shapes before concatenation
+    total_rows_before = sum(df.shape[0] for df in merged_df)
+    logger.debug("Total rows before concatenation: %d", total_rows_before)
+    
+    merged_db = pd.concat(merged_df)
+    logger.debug("After pd.concat() - merged_db shape: %s", merged_db.shape)
+    log_array_info(logger, "After_Concat_merged_db", merged_db)
+    
+    merged_db = merged_db.sort_values(["prob_ready", "prob_set"])
+    logger.debug("After sort_values() - merged_db shape: %s", merged_db.shape)
+    
+    # Log deduplication details
+    duplicate_cols = merged_db.columns.difference(["prob_ready", "prob_set"])
+    logger.debug("Dropping duplicates on columns: %s", list(duplicate_cols))
+    duplicates_before = merged_db.duplicated(subset=duplicate_cols).sum()
+    logger.debug("Number of duplicate rows (excluding prob columns): %d", duplicates_before)
+    
     merged_db = merged_db.drop_duplicates(
         merged_db.columns.difference(["prob_ready", "prob_set"]), keep="first"
     )
+    logger.debug("After drop_duplicates() - merged_db final shape: %s", merged_db.shape)
+    logger.debug("Rows removed by deduplication: %d", total_rows_before - merged_db.shape[0])
+    
+    log_array_info(logger, "Final_Merged_Triggers", merged_db)
+    
     merged_db.sort_values(["district", "index", "category"]).to_csv(
         f"{params.output_path}/data/{params.iso}/probs/aa_probabilities_triggers_pilots.csv",
         index=False,
     )
 
-    logging.info("Dashboard-formatted dataframe saved for %s", country)
+    logger.info("Dashboard-formatted dataframe saved for %s", country)
 
 
 def run_full_index_pipeline(
@@ -200,16 +262,38 @@ def run_aa_probabilities(forecasts, observations, params, period_months):
         probabilities: xarray.Dataset, raw probabilities for specified period
         probabilities_bc: xarray.Dataset, bias-corrected probabilities for specified period
     """
+    logger = logging.getLogger('aa_operational')
+    logger.info("=== Starting probability computation for period %s ===", period_months)
+    
+    # Log input parameters and data
+    logger.debug("Period months: %s, Index: %s, Monitoring year: %d", 
+                period_months, params.index, params.monitoring_year)
+    logger.debug("Historical anomaly period: %s to %s", 
+                params.hist_anomaly_start, params.hist_anomaly_stop)
+    logger.debug("Season: %d to %d, Intensity thresholds: %s", 
+                params.start_season, params.end_season, params.intensity_thresholds)
+    
+    log_array_info(logger, "Input_Forecasts", forecasts)
+    log_array_info(logger, "Input_Observations", observations)
+
     # Remove 1980 season to harmonize datasets between different indexes
+    cutoff_date = datetime.date(1981, params.start_season, 1)
+    logger.debug("Filtering data from %s onwards", cutoff_date)
+    
     forecasts = forecasts.where(
-        forecasts.time.dt.date >= datetime.date(1981, params.start_season, 1), drop=True
+        forecasts.time.dt.date >= cutoff_date, drop=True
     )
     observations = observations.where(
-        observations.time.dt.date >= datetime.date(1981, params.start_season, 1),
-        drop=True,
+        observations.time.dt.date >= cutoff_date, drop=True
     )
+    
+    logger.debug("After 1981 filtering - Forecasts: %d time steps, Observations: %d time steps", 
+                forecasts.time.size, observations.time.size)
+    log_array_info(logger, "Filtered_Forecasts", forecasts)
+    log_array_info(logger, "Filtered_Observations", observations)
 
     # Accumulation
+    logger.info("Starting accumulation step")
     accumulation_fc = run_accumulation_index(
         forecasts.chunk(dict(time=-1)),
         params.aggregate,
@@ -223,9 +307,12 @@ def run_aa_probabilities(forecasts, observations, params, period_months):
         period_months,
         (params.start_season, params.end_season),
     )
-    logging.info("Completed accumulation")
+    logger.info("Completed accumulation")
+    log_array_info(logger, "Accumulation_Forecasts", accumulation_fc)
+    log_array_info(logger, "Accumulation_Observations", accumulation_obs)
 
     # Anomaly
+    logger.info("Starting gamma standardization (anomaly computation)")
     anomaly_fc = run_gamma_standardization(
         accumulation_fc.load(),
         params.hist_anomaly_start,
@@ -237,9 +324,12 @@ def run_aa_probabilities(forecasts, observations, params, period_months):
         params.hist_anomaly_start,
         params.hist_anomaly_stop,
     )
-    logging.info("Completed anomaly")
+    logger.info("Completed anomaly computation")
+    log_array_info(logger, "Anomaly_Forecasts", anomaly_fc)
+    log_array_info(logger, "Anomaly_Observations", anomaly_obs)
 
     # Bias correction
+    logger.info("Starting bias correction")
     index_bc = run_bias_correction(
         anomaly_fc,
         anomaly_obs,
@@ -247,24 +337,38 @@ def run_aa_probabilities(forecasts, observations, params, period_months):
         nearest_neighbours=8,
         enso=True,
     )
-    logging.info("Completed bias correction")
+    logger.info("Completed bias correction")
+    log_array_info(logger, "BiasCorreected_Index", index_bc)
 
+    # Handle dryspell index sign flip
     if params.index == "dryspell":
+        logger.debug("Applying dryspell sign correction (multiplying by -1)")
         anomaly_fc *= -1
         index_bc *= -1
         anomaly_obs *= -1
+        log_array_info(logger, "SignCorrected_Anomaly_Forecasts", anomaly_fc)
+        log_array_info(logger, "SignCorrected_BiasCorreected_Index", index_bc)
 
     # Probabilities without Bias Correction
+    logger.info("Computing raw probabilities (no bias correction)")
+    monitoring_year_fc = anomaly_fc.where(anomaly_fc.time.dt.year == params.monitoring_year, drop=True)
+    logger.debug("Monitoring year data - time steps: %d", monitoring_year_fc.time.size)
+    log_array_info(logger, "MonitoringYear_Data", monitoring_year_fc)
+    
     probabilities = compute_probabilities(
-        anomaly_fc.where(anomaly_fc.time.dt.year == params.monitoring_year, drop=True),
+        monitoring_year_fc,
         levels=params.intensity_thresholds,
     ).round(2)
 
     # Probabilities after Bias Correction
+    logger.info("Computing bias-corrected probabilities")
     probabilities_bc = compute_probabilities(
         index_bc, levels=params.intensity_thresholds
     ).round(2)
-    logging.info("Completed probabilities")
+    
+    logger.info("Completed probabilities computation")
+    log_array_info(logger, "Raw_Probabilities", probabilities)
+    log_array_info(logger, "BiasCorreected_Probabilities", probabilities_bc)
 
     return probabilities, probabilities_bc
 

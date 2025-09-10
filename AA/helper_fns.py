@@ -9,6 +9,8 @@ import pandas as pd
 import xarray as xr
 from hip.analysis.compute.utils import persist_with_progress_bar
 
+from AA.logging_utils import log_array_info, log_data_loading_step
+
 PORTUGUESE_CATEGORIES = dict(
     Normal="Normal", Mild="Leve", Moderate="Moderado", Severe="Severo"
 )
@@ -81,15 +83,31 @@ def compute_district_average(da, area):
             and admin level of interest.
     Returns: xarray.DataArray, DataArray with computed district averages.
     """
+    logger = logging.getLogger('aa_operational')
+    logger.debug("=== Computing district averages ===")
+    
+    # Log input array information
+    log_array_info(logger, "Input_GriddedData", da)
+    
     # Ensure consistent time dimension
     if "year" in da.dims:
+        logger.debug("Renaming 'year' dimension to 'time'")
         da = da.rename({"year": "time"})
 
     # Determine dimensions to group by (exclude spatial dimensions)
     groupby_dim = set(da.dims) - {"latitude", "longitude", "time"}
+    logger.debug("Groupby dimensions: %s", groupby_dim)
+    logger.debug("Spatial grid: lat (%d), lon (%d)", da.latitude.size, da.longitude.size)
+    
+    # Log spatial bounds
+    logger.debug("Latitude range: %.4f to %.4f", 
+                float(da.latitude.min()), float(da.latitude.max()))
+    logger.debug("Longitude range: %.4f to %.4f", 
+                float(da.longitude.min()), float(da.longitude.max()))
 
     # Transpose dims to ensure equality of shapes
     da = da.transpose(..., *groupby_dim, "latitude", "longitude")
+    logger.debug("After transpose - dims: %s, shape: %s", da.dims, da.shape)
 
     # Compute zonal stats: handle different groupby dimensions lengths
     if len(groupby_dim) > 1:
@@ -97,6 +115,7 @@ def compute_district_average(da, area):
             "Zonal stats with more than one groupby dimension are not supported."
         )
     elif len(groupby_dim) == 1:
+        logger.debug("Computing zonal stats with groupby dimension: %s", list(groupby_dim)[0])
         da_grouped = da.groupby(*groupby_dim).map(
             lambda da: area.zonal_stats(
                 da.squeeze(groupby_dim), stats=["mean"], zone_ids=None, zones=None
@@ -105,40 +124,78 @@ def compute_district_average(da, area):
             .to_xarray()["mean"]
         )
     else:
+        logger.debug("Computing zonal stats without groupby dimensions")
         da_grouped = (
             area.zonal_stats(da, stats=["mean"], zone_ids=None, zones=None)
             .query("zone != 'Administrative unit not available'")
             .to_xarray()["mean"]
         )
 
+    # Log zonal stats results
+    logger.debug("Districts found: %d", da_grouped.zone.size if 'zone' in da_grouped.dims else 0)
+    if 'zone' in da_grouped.dims:
+        districts = list(da_grouped.zone.values)
+        logger.debug("District names: %s", districts[:10])  # Log first 10 districts
+        if len(districts) > 10:
+            logger.debug("... and %d more districts", len(districts) - 10)
+
     # Rename 'zone' to 'district' for consistency
     da_grouped = da_grouped.rename({"zone": "district"})
 
     # Ensure district is a string type
     da_grouped["district"] = da_grouped.district.astype(str)
+    
+    # Log final result
+    log_array_info(logger, "District_Averaged_Data", da_grouped)
 
     return da_grouped
 
 
 def merge_un_biased_probs(probs_district, probs_bc_district, params, period_name):
+    logger = logging.getLogger('aa_operational')
+    logger.debug("=== Merging unbiased and bias-corrected probabilities ===")
+    
+    # Log input arrays
+    log_array_info(logger, "Input_Raw_Probabilities_District", probs_district)
+    log_array_info(logger, "Input_BiasCorreected_Probabilities_District", probs_bc_district)
+    
     # Get fbf_districts data in xarray format
     fbf_bc = params.fbf_districts_df
-    fbf_bc = fbf_bc.loc[fbf_bc["Index"] == f"{params.index.upper()} {period_name}"]
+    logger.debug("FBF districts data shape before filtering: %s", fbf_bc.shape)
+    
+    index_key = f"{params.index.upper()} {period_name}"
+    fbf_bc = fbf_bc.loc[fbf_bc["Index"] == index_key]
+    logger.debug("FBF districts data shape after filtering for index '%s': %s", index_key, fbf_bc.shape)
+    
     fbf_bc = fbf_bc[["district", "category", "issue", "BC"]]
+    log_array_info(logger, "FBF_Districts_Config", fbf_bc)
 
     # If params.fbf_districts_df has Portuguese category names, ensure these are English
     CATEGORY_TRANSLATIONS = {"Leve": "Mild", "Moderado": "Moderate", "Severo": "Severe"}
+    original_categories = fbf_bc["category"].unique()
     fbf_bc["category"] = fbf_bc["category"].apply(
         lambda x: CATEGORY_TRANSLATIONS.get(x, x)
     )
+    translated_categories = fbf_bc["category"].unique()
+    logger.debug("Category translation: %s -> %s", original_categories, translated_categories)
 
     fbf_bc_da = fbf_bc.set_index(["district", "category", "issue"]).to_xarray().BC
     fbf_bc_da = fbf_bc_da.expand_dims(dim={"index": [f"{params.index} {period_name}"]})
+    
+    log_array_info(logger, "FBF_BiasCorrection_Flags", fbf_bc_da)
+
+    # Log bias correction application
+    bc_districts = fbf_bc[fbf_bc["BC"] == 1]["district"].unique()
+    raw_districts = fbf_bc[fbf_bc["BC"] == 0]["district"].unique()
+    logger.debug("Districts using bias correction: %d districts", len(bc_districts))
+    logger.debug("Districts using raw probabilities: %d districts", len(raw_districts))
 
     # Combination of both probabilities datasets
     probs_merged = (1 - fbf_bc_da) * probs_district + fbf_bc_da * probs_bc_district
+    logger.info("Applied conditional bias correction mixing")
 
     probs_merged = probs_merged.to_dataset(name="prob")
+    log_array_info(logger, "Final_Merged_Probabilities", probs_merged)
 
     return probs_merged
 
@@ -247,6 +304,14 @@ def load_trigger_with_reference(params, variant_folder=None):
 
 
 def merge_probabilities_triggers_dashboard(probs, triggers, params, period):
+    logger = logging.getLogger('aa_operational')
+    logger.debug("=== Merging probabilities with triggers for dashboard ===")
+    
+    # Log inputs
+    log_array_info(logger, "Input_Probabilities_Dataset", probs)
+    log_array_info(logger, "Input_Triggers", triggers)
+    logger.debug("Processing period: %s, issue: %d", period, params.issue)
+    
     # Format probabilities
     probs_df = probs.to_dataframe().reset_index()
     probs_df["prob"] = [np.round(p, 2) for p in probs_df.prob.values]
@@ -254,32 +319,64 @@ def merge_probabilities_triggers_dashboard(probs, triggers, params, period):
     probs_df["aggregation"] = np.repeat(
         f"{params.index.upper()} {len(period)}", len(probs_df)
     )
+    
+    log_array_info(logger, "Formatted_Probabilities", probs_df)
 
     triggers_merged = triggers.copy()
+    logger.debug("Triggers dataframe copied, shape: %s", triggers_merged.shape)
 
     # Create prob columns if reading empty triggers df
     if "prob_ready" not in triggers_merged.columns:
+        logger.debug("Creating prob_ready and prob_set columns")
         triggers_merged["prob_ready"] = np.nan
         triggers_merged["prob_set"] = np.nan
 
     # Fill in probabilities columns matching with triggers
+    target_index = f"{params.index.upper()} {period}"
+    matched_ready = 0
+    matched_set = 0
+    
     for idx, row in triggers_merged.iterrows():
         if (row.issue_ready == params.issue) and (
-            row["index"] == f"{params.index.upper()} {period}"
+            row["index"] == target_index
         ):
-            triggers_merged.loc[idx, "prob_ready"] = probs_df.loc[
+            match_filter = (
                 (probs_df["index"] == row["index"])
                 & (probs_df["category"] == row.category)
                 & (probs_df["district"] == row.district)
-            ].prob.values[0]
+            )
+            matching_probs = probs_df.loc[match_filter]
+            if len(matching_probs) > 0:
+                prob_value = matching_probs.prob.values[0]
+                triggers_merged.loc[idx, "prob_ready"] = prob_value
+                logger.debug("Updated %s %s %s %s %s (READY): value: %.3f", 
+                           row.issue_ready, row.district, row.category, 
+                           params.index.upper(), period, prob_value)
+                matched_ready += 1
+                
         elif (row.issue_set == params.issue) and (
-            row["index"] == f"{params.index.upper()} {period}"
+            row["index"] == target_index
         ):
-            triggers_merged.loc[idx, "prob_set"] = probs_df.loc[
+            match_filter = (
                 (probs_df["index"] == row["index"])
                 & (probs_df["category"] == row.category)
                 & (probs_df["district"] == row.district)
-            ].prob.values[0]
+            )
+            matching_probs = probs_df.loc[match_filter]
+            if len(matching_probs) > 0:
+                prob_value = matching_probs.prob.values[0]
+                triggers_merged.loc[idx, "prob_set"] = prob_value
+                logger.debug("Updated %s %s %s %s %s (SET): value: %.3f", 
+                           row.issue_set, row.district, row.category, 
+                           params.index.upper(), period, prob_value)
+                matched_set += 1
+
+    logger.debug("Probability matching complete:")
+    logger.debug("  Ready triggers matched: %d", matched_ready)
+    logger.debug("  Set triggers matched: %d", matched_set)
+    logger.debug("  Target index: %s", target_index)
+    
+    log_array_info(logger, "Final_Triggers_With_Probabilities", triggers_merged)
 
     return probs_df, triggers_merged
 
@@ -292,6 +389,8 @@ def read_fbf_districts(path_fbf, params):
 
 
 def read_forecasts(area, issue, local_path):
+    logger = logging.getLogger('aa_operational')
+    
     fs = fsspec.open(local_path).fs
     zmetadata_path = os.path.join(local_path, ".zmetadata")
     data_exists = fs.exists(zmetadata_path)
@@ -304,59 +403,100 @@ def read_forecasts(area, issue, local_path):
         area.datetime_range.split("/")[1], "%Y-%m-%d"
     )
     forecast_date = datetime.datetime(last_date.year - 1, int(issue), 1)
+    
+    logger.debug("Forecast loading parameters: issue=%d, last_date=%s, forecast_date=%s", 
+                issue, last_date, forecast_date)
+    logger.debug("Local zarr path: %s", local_path)
+    logger.debug("Zarr metadata exists: %s", data_exists)
 
     if data_exists:
-        logging.info("Reading forecasts from precomputed zarr...")
+        logger.info("Reading forecasts from precomputed zarr...")
         ds = xr.open_zarr(local_path).tp
+        log_data_loading_step(logger, "ECMWF forecasts", local_path, ds, "zarr cache")
+        
         if np.datetime64(forecast_date) in ds.time.values:
-            return persist_with_progress_bar(ds.sel(time=slice(None, last_date)))
+            result = persist_with_progress_bar(ds.sel(time=slice(None, last_date)))
+            log_array_info(logger, "Final_Cached_Forecasts", result)
+            return result
         else:
-            logging.info("Forecast date missing in zarr, reading from source...")
+            logger.info("Forecast date missing in zarr, reading from source...")
     else:
-        logging.info("Zarr file not found, reading from source...")
+        logger.info("Zarr file not found, reading from source...")
 
     # Read from source
+    logger.debug("Loading from ECMWF SEAS5 source: RFH_FORECASTS_SEAS5_ISSUE%d_DAILY", int(issue))
     forecasts = area.get_dataset(
         ["ECMWF", f"RFH_FORECASTS_SEAS5_ISSUE{int(issue)}_DAILY"],
         load_config={"gridded_load_kwargs": {"resampling": "bilinear"}},
     )
+    log_data_loading_step(logger, "ECMWF forecasts", "HDC STAC", forecasts, "source API")
+    
     forecasts.attrs["nodata"] = np.nan
+    logger.debug("Caching to zarr: %s", local_path)
     forecasts.chunk({"time": -1}).to_zarr(local_path, mode="w", consolidated=True)
 
-    return persist_with_progress_bar(forecasts)
+    result = persist_with_progress_bar(forecasts)
+    log_array_info(logger, "Final_Source_Forecasts", result)
+    return result
 
 
 def read_observations(area, local_path):
+    logger = logging.getLogger('aa_operational')
+    
     fs = fsspec.open(local_path).fs
-    if fs.exists(os.path.join(local_path, ".zmetadata")):
-        logging.info("Reading of observations from precomputed zarr...")
+    zarr_exists = fs.exists(os.path.join(local_path, ".zmetadata"))
+    
+    logger.debug("Observations loading parameters: local_path=%s", local_path)
+    logger.debug("Zarr metadata exists: %s", zarr_exists)
+    
+    if zarr_exists:
+        logger.info("Reading of observations from precomputed zarr...")
         observations = xr.open_zarr(
             local_path,
             consolidated=True,
         ).band
+        log_data_loading_step(logger, "CHIRPS observations", local_path, observations, "zarr cache")
     else:
-        logging.info("Reading of observations from HDC STAC...")
+        logger.info("Reading of observations from HDC STAC...")
         observations = area.get_dataset(
             ["CHIRPS", "RFH_DAILY"],
             load_config={"gridded_load_kwargs": {"resampling": "bilinear"}},
         )
+        log_data_loading_step(logger, "CHIRPS observations", "HDC STAC", observations, "source API")
+        
+        logger.debug("Caching to zarr: %s", local_path)
         observations.to_zarr(
             local_path,
             mode="w",
             consolidated=True,
         )
 
-    return persist_with_progress_bar(observations)
+    result = persist_with_progress_bar(observations)
+    log_array_info(logger, "Final_Observations", result)
+    return result
 
 
 def read_triggers(params):
+    logger = logging.getLogger('aa_operational')
+    
     triggers_path = f"{params.data_path}/data/{params.iso}/probs/aa_probabilities_triggers_pilots.csv"
     fallback_triggers_path = f"{params.data_path}/data/{params.iso}/triggers/triggers.final.{params.monitoring_year}.pilots.csv"
+    
+    logger.debug("Primary triggers path: %s", triggers_path)
+    logger.debug("Fallback triggers path: %s", fallback_triggers_path)
+    
+    path_exists = fsspec.open(triggers_path).fs.exists(triggers_path)
+    logger.debug("Primary triggers file exists: %s", path_exists)
 
-    if fsspec.open(triggers_path).fs.exists(triggers_path):
+    if path_exists:
+        logger.info("Loading triggers from primary path (probabilities-triggers file)")
         triggers_df = pd.read_csv(triggers_path)
+        log_data_loading_step(logger, "triggers", triggers_path, triggers_df, "primary CSV")
     else:
+        logger.info("Loading triggers from fallback path (final triggers file)")
         triggers_df = pd.read_csv(fallback_triggers_path)
+        log_data_loading_step(logger, "triggers", fallback_triggers_path, triggers_df, "fallback CSV")
+    
     return triggers_df
 
 
