@@ -130,10 +130,37 @@ def run(country, issue, index, data_path, output_path):
         index=False,
     )
 
-    merged_db = pd.concat(merged_df).sort_values(["prob_ready", "prob_set"])
-    merged_db = merged_db.drop_duplicates(
-        merged_db.columns.difference(["prob_ready", "prob_set"]), keep="first"
+    merged_db = pd.concat(merged_df)
+    merged_db = merged_db.sort_values(["prob_ready", "prob_set"])
+
+    # Check for duplicates and raise error if found
+    duplicate_cols = list(merged_db.columns.difference(["prob_ready", "prob_set"]))
+    duplicates_count = merged_db.duplicated(subset=duplicate_cols).sum()
+    if duplicates_count > 0:
+        raise ValueError(f"Data integrity error: {duplicates_count} duplicate rows found in merged trigger data. "
+                        f"This indicates a problem with the trigger merging process.")
+
+    # Perform left merge to find rows in triggers_df that don't exist in merged_db
+    merge_result = triggers_df.merge(
+        merged_db[duplicate_cols], 
+        on=duplicate_cols, 
+        how='left', 
+        indicator=True
     )
+
+    # Get only rows that exist in triggers_df but not in merged_db
+    new_rows_from_triggers = triggers_df[merge_result['_merge'] == 'left_only']
+
+    # Append the new rows to merged_db
+    if not new_rows_from_triggers.empty:
+        merged_db = pd.concat([merged_db, new_rows_from_triggers], ignore_index=True)
+
+    # Assert that final merged_db has same number of rows as original triggers_df
+    assert len(merged_db) == len(triggers_df), (
+        f"Data integrity error: Final merged_db has {len(merged_db)} rows but original "
+        f"triggers_df has {len(triggers_df)} rows. Expected them to be equal."
+    )
+
     merged_db.sort_values(["district", "index", "category"]).to_csv(
         f"{params.output_path}/data/{params.iso}/probs/aa_probabilities_triggers_pilots.csv",
         index=False,
