@@ -106,9 +106,9 @@ districts_vulnerability:
 # Tolerance for thresholds for each category, used to compute false alarm with tolerance
 tolerance:
   Normal: 0
-  Mild: 0
-  Moderate: -0.44
-  Severe: -0.68
+  Mild: -0.44
+  Moderate: -0.68
+  Severe: -0.85
 
 # Skill requirements for General Triggers
 general_t:
