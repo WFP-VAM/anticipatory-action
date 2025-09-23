@@ -8,6 +8,7 @@ issue_months:
   - "11"
   - "12"
   - "01"
+  - "02"
 
 # First year of season to monitor operationally (e.g. 2024 for 2024/2025 season)
 monitoring_year: 2025
