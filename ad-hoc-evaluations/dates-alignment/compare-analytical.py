@@ -6,63 +6,34 @@
 #       extension: .py
 #       format_name: light
 #       format_version: '1.5'
-#       jupytext_version: 1.15.2
+#       jupytext_version: 1.16.1
 #   kernelspec:
-#     display_name: Python 3 (ipykernel)
+#     display_name: hdc
 #     language: python
-#     name: python3
+#     name: conda-env-hdc-py
 # ---
 
-# ### Check *analytical* pipeline using datasets/parameters of interest by comparing results with reference outputs at the district level
+# ### Check *analytical* pipeline differences after dates alignment by comparing results with reference outputs at the district level
 
-# %cd ../
+# %cd ../../
 
-# +
-import geopandas as gpd
-import numpy as np
+import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
-from hip.analysis.analyses.drought import get_accumulation_periods
 
-# -
-from AA.helper_fns import read_forecasts_locally, read_observations_locally
 from config.params import Params
 
 # Prepare input data
 
-fc = read_forecasts_locally("data/MOZ/forecast/Moz_SAB_tp_ecmwf_01/*.nc")
+country = "MOZ"
 
-params = Params(iso="MOZ", index="SPI")
-params.issue = 1
-params.year = 2022
+params = Params(iso=country, index="DRYSPELL")
 
-obs = read_observations_locally("data/MOZ/chirps")
-
-triggers_df = pd.read_csv(
-    f"data/{params.iso}/outputs/Plots/triggers.aa.python.spi.dryspell.2022.csv"
-)
-gdf = gpd.read_file(
-    f"data/{params.iso}/shapefiles/moz_admbnda_2019_SHP/moz_admbnda_adm2_2019.shp"
-)
-
-accumulation_periods = get_accumulation_periods(
-    fc,
-    params.start_season,
-    params.end_season,
-    params.min_index_period,
-    params.max_index_period,
-)
-accumulation_periods
-period = accumulation_periods["AM"]
-
-fc = fc.where(fc.time < np.datetime64("2022-07-01T12:00:00.000000000"), drop=True)
 
 # ### Comparison on the full output at the district level
 
 
 def plot_hist(comparison, title, xlabel, xmin, xmax, s=1, mask_text=False):
-    import matplotlib.pyplot as plt
-
     fig, ax = plt.subplots(figsize=(6, 4))
 
     quant_5, quant_25, quant_50, quant_75, quant_95 = (
@@ -86,8 +57,6 @@ def plot_hist(comparison, title, xlabel, xmin, xmax, s=1, mask_text=False):
     comparison.difference.plot(kind="kde")
 
     # Plot the lines with a loop
-    import matplotlib.pyplot as plt
-
     for i in quants:
         plt.axvline(i[0], alpha=i[1], ymax=i[2], linestyle=":")
 
@@ -117,63 +86,67 @@ def plot_hist(comparison, title, xlabel, xmin, xmax, s=1, mask_text=False):
 
 
 fbfref = pd.read_csv(
-    "data/MOZ/outputs/Districts_FbF/spi/fbf.districts.roc.spi.2022.txt"
+    f"{params.data_path}/data/{params.iso}/auc/fbf.districts.roc.{params.index}.{params.calibration_year}.csv"
 )
-fbfref.columns = ["district", "category", "AUC_ref", "BC_ref", "Index", "issue"]
+fbfref = fbfref.rename(columns={"AUC_best": "AUC_ref", "BC": "BC_ref"})
 fbfref
 
-# +
-data_of_interest = "blended"  # change with output name of dataset of interest
-
-fbfP = pd.read_csv(
-    "data/MOZ/outputs/Districts_FbF/spi/fbf.districts.roc.spi.2022.{data_of_interest}.txt"
+fbf_aligned = pd.read_csv(
+    f"{params.data_path}/data/{params.iso}_align_dates/auc/fbf.districts.roc.{params.index}.{params.calibration_year}.csv"
 )
-fbfP
-# -
+fbf_aligned
 
 # Ratio of bias-corrected values in the final output
 
 # Ratio of cases using Bias Correction
-fbfP.BC.sum() / len(fbfP)
+fbf_aligned.BC.sum() / len(fbf_aligned)
 
 # Histogram of difference between full outputs (auc_to_compare - python_reference)
 
 comparison = (
-    fbfP.set_index(["district", "category", "Index", "issue"])
+    fbf_aligned.set_index(["district", "category", "Index", "issue"])
     .join(fbfref.set_index(["district", "category", "Index", "issue"]))
     .reset_index()
 )
 
 comparison["difference"] = comparison.AUC_best - comparison.AUC_ref
 
+# Filter comparison on pilot districts
+comparison = comparison.loc[comparison.district.isin(params.districts)]
+
+# Histogram of non-null differences
 plot_hist(
-    comparison,
-    title="R/Python AUC (BC and not) difference at the district level",
-    xlabel="AUC difference",
-    xmin=-0.5,
-    xmax=0.5,
-    s=10,
+    comparison.loc[comparison.difference != 0],
+    title="Before/After dates alignment AUC (BC and not) difference at the district level",
+    xlabel="AUC difference (New - Old)",
+    xmin=-0.05,
+    xmax=0.05,
+    s=100,
 )
+
 
 # ### Difference (auc_to_compare - python_reference) on the full output by category / district / index / issue
 
 # +
 x_axis = [5, 6, 7, 8, 9, 10, 11, 12, 1, 2]
 y_axis = [
-    "SPI ON",
-    "SPI ND",
-    "SPI DJ",
-    "SPI JF",
-    "SPI FM",
-    "SPI MA",
-    "SPI AM",
-    "SPI OND",
-    "SPI NDJ",
-    "SPI DJF",
-    "SPI JFM",
-    "SPI FMA",
-    "SPI MAM",
+    "ON",
+    "ND",
+    "DJ",
+    "JF",
+    "FM",
+    "MA",
+    "AM",
+    "MJ",
+    "OND",
+    "NDJ",
+    "DJF",
+    "JFM",
+    "FMA",
+    "MAM",
+    "AMJ",
 ]
+y_axis = [params.index.upper() + " " + ind for ind in y_axis]
 
 
 def draw_heatmap(**kwargs):
@@ -184,7 +157,7 @@ def draw_heatmap(**kwargs):
 
 
 fg = sns.FacetGrid(
-    comparison.loc[(comparison.category == "Severo")], col="district", col_wrap=4
+    comparison.loc[(comparison.category == "Severe")], col="district", col_wrap=5
 )
 fg.map_dataframe(
     draw_heatmap, annot=True, annot_kws={"size": 4}, cbar=True, cmap="RdYlGn", center=0
@@ -194,7 +167,7 @@ fg.fig.suptitle("SEVERE CATEGORY")
 # -
 
 fg = sns.FacetGrid(
-    comparison.loc[(comparison.category == "Moderado")], col="district", col_wrap=4
+    comparison.loc[(comparison.category == "Moderate")], col="district", col_wrap=5
 )
 fg.map_dataframe(
     draw_heatmap, annot=True, annot_kws={"size": 4}, cbar=True, cmap="RdYlGn", center=0
@@ -203,7 +176,7 @@ fg.fig.subplots_adjust(top=0.9)
 fg.fig.suptitle("MODERATE CATEGORY")
 
 fg = sns.FacetGrid(
-    comparison.loc[(comparison.category == "Leve")], col="district", col_wrap=4
+    comparison.loc[(comparison.category == "Mild")], col="district", col_wrap=5
 )
 fg.map_dataframe(
     draw_heatmap, annot=True, annot_kws={"size": 4}, cbar=True, cmap="RdYlGn", center=0
@@ -218,20 +191,23 @@ fg.fig.suptitle("MILD CATEGORY")
 # +
 x_axis = [5, 6, 7, 8, 9, 10, 11, 12, 1, 2]
 y_axis = [
-    "SPI ON",
-    "SPI ND",
-    "SPI DJ",
-    "SPI JF",
-    "SPI FM",
-    "SPI MA",
-    "SPI AM",
-    "SPI OND",
-    "SPI NDJ",
-    "SPI DJF",
-    "SPI JFM",
-    "SPI FMA",
-    "SPI MAM",
+    "ON",
+    "ND",
+    "DJ",
+    "JF",
+    "FM",
+    "MA",
+    "AM",
+    "MJ",
+    "OND",
+    "NDJ",
+    "DJF",
+    "JFM",
+    "FMA",
+    "MAM",
+    "AMJ",
 ]
+y_axis = [params.index.upper() + " " + ind for ind in y_axis]
 
 
 def draw_heatmap(**kwargs):
@@ -285,20 +261,23 @@ fg.map_dataframe(
 
 # +
 x_axis = [
-    "SPI ON",
-    "SPI ND",
-    "SPI DJ",
-    "SPI JF",
-    "SPI FM",
-    "SPI MA",
-    "SPI AM",
-    "SPI OND",
-    "SPI NDJ",
-    "SPI DJF",
-    "SPI JFM",
-    "SPI FMA",
-    "SPI MAM",
+    "ON",
+    "ND",
+    "DJ",
+    "JF",
+    "FM",
+    "MA",
+    "AM",
+    "MJ",
+    "OND",
+    "NDJ",
+    "DJF",
+    "JFM",
+    "FMA",
+    "MAM",
+    "AMJ",
 ]
+x_axis = [params.index.upper() + " " + ind for ind in x_axis]
 y_axis = [
     "Chiure",
     "Chibuto",
@@ -329,3 +308,4 @@ fg = sns.FacetGrid(
 fg.map_dataframe(
     draw_heatmap, annot=True, annot_kws={"size": 4}, cbar=True, cmap="RdYlGn", center=0
 )
+# -

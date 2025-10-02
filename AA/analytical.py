@@ -1,22 +1,13 @@
+import datetime
 import logging
-
-import click
-
-logging.basicConfig(level="INFO", force=True)
-
+import os
 import warnings
 
-warnings.simplefilter(action="ignore", category=FutureWarning)
-
-import datetime
-import os
-import traceback
-
-import dask
+import click
+import fsspec
 import numpy as np
 import pandas as pd
 import xarray as xr
-from config.params import Params
 from hip.analysis.analyses.drought import (
     compute_probabilities,
     concat_obs_levels,
@@ -26,23 +17,44 @@ from hip.analysis.analyses.drought import (
     run_gamma_standardization,
 )
 from hip.analysis.aoi.analysis_area import AnalysisArea
+from hip.analysis.compute.utils import start_dask
 from hip.analysis.ops._statistics import evaluate_roc_forecasts
 
-from AA.helper_fns import aggregate_by_district, read_forecasts, read_observations
+from AA.helper_fns import compute_district_average, read_forecasts, read_observations
+from config.params import S3_OPS_DATA_PATH, Params
 
-from hip.analysis.compute.utils import start_dask
+logging.basicConfig(level="INFO", force=True)
+
+warnings.simplefilter(action="ignore", category=FutureWarning)
 
 
 @click.command()
 @click.argument("country", required=True, type=str)
 @click.argument("index", default="SPI")
-def run(country, index):
-
+@click.option(
+    "--data-path",
+    required=True,
+    type=str,
+    default=S3_OPS_DATA_PATH,
+    help="Root directory for data files.",
+)
+@click.option(
+    "--output-path",
+    required=False,
+    type=str,
+    default=S3_OPS_DATA_PATH,
+    help="Root directory for output files. Defaults to data-path if not provided.",
+)
+def run(country, index, data_path, output_path):
     client = start_dask(n_workers=1)
+    logging.info("+++++++++++++")
     logging.info(f"Dask dashboard: {client.dashboard_link}")
+    logging.info("+++++++++++++")
 
     # End to end workflow for a country using ECMWF forecasts and CHIRPS from HDC
-    params = Params(iso=country, index=index)
+    params = Params(
+        iso=country, index=index, data_path=data_path, output_path=output_path
+    )
 
     area = AnalysisArea.from_admin_boundaries(
         iso3=country.upper(),
@@ -50,8 +62,6 @@ def run(country, index):
         resolution=0.25,
         datetime_range=f"1981-01-01/{params.calibration_year}-06-30",
     )
-
-    gdf = area.get_dataset([area.BASE_AREA_DATASET])
 
     observations = read_observations(
         area,
@@ -63,7 +73,7 @@ def run(country, index):
 
     # Create directory for ROC scores df per issue month in case it doesn't exist
     os.makedirs(
-        f"{params.data_path}/data/{params.iso}/auc/split_by_issue",
+        f"{params.output_path}/data/{params.iso}/auc/split_by_issue",
         exist_ok=True,
     )
 
@@ -71,7 +81,6 @@ def run(country, index):
     fbf_roc_issues = []
 
     for issue in params.issue_months:
-
         forecasts = read_forecasts(
             area,
             issue,
@@ -85,7 +94,7 @@ def run(country, index):
                 observations,
                 issue,
                 params,
-                gdf,
+                area,
             )
         )
         logging.info(
@@ -94,14 +103,14 @@ def run(country, index):
 
     fbf_roc = pd.concat(fbf_roc_issues)
     fbf_roc.to_csv(
-        f"{params.data_path}/data/{params.iso}/auc/fbf.districts.roc.{params.index}.{params.calibration_year}.csv",
+        f"{params.output_path}/data/{params.iso}/auc/fbf.districts.roc.{params.index}.{params.calibration_year}.csv",
         index=False,
     )
 
     logging.info(f"FbF dataframe saved for {country}")
 
 
-def run_issue_verification(forecasts, observations, issue, params, gdf):
+def run_issue_verification(forecasts, observations, issue, params, area):
     """
     Run analytical / verification pipeline for one issue month
 
@@ -109,25 +118,21 @@ def run_issue_verification(forecasts, observations, issue, params, gdf):
         observations: xarray.Dataset, rainfall observations dataset
         issue: str, issue month of forecasts to analyse
         params: Params, parameters class
-        gdf: geopandas.GeoDataFrame, shapefile including admin2 levels
+        area: hip.analysis.AnalysisArea object with aoi information
     Returns:
         fbf_issue: pandas.DataFrame, dataframe with roc scores for all indexes, districts, categories and a specified issue month
     """
 
-    if os.path.exists(
-        f"{params.data_path}/data/{params.iso}/auc/split_by_issue/fbf.districts.roc.{params.index}.{params.calibration_year}.{issue}.csv"
-    ):
+    fbf_path = f"{params.output_path}/data/{params.iso}/auc/split_by_issue/fbf.districts.roc.{params.index}.{params.calibration_year}.{issue}.csv"
 
+    if fsspec.open(fbf_path).fs.exists(fbf_path):
         logging.info(
             f"FbF ROC verification by district for the issue month {issue} read from disk"
         )
 
-        return pd.read_csv(
-            f"{params.data_path}/data/{params.iso}/auc/split_by_issue/fbf.districts.roc.{params.index}.{params.calibration_year}.{issue}.csv"
-        )
+        return pd.read_csv(fbf_path)
 
     else:
-
         # Get accumulation periods (DJ, JF, FM, DJF, JFM...)
         accumulation_periods = get_accumulation_periods(
             forecasts,
@@ -142,7 +147,7 @@ def run_issue_verification(forecasts, observations, issue, params, gdf):
                 forecasts,
                 observations,
                 params,
-                gdf,
+                area,
                 period_name,
                 period_months,
                 issue,
@@ -154,7 +159,7 @@ def run_issue_verification(forecasts, observations, issue, params, gdf):
         fbf_issue["issue"] = int(issue)
 
         fbf_issue.to_csv(
-            f"{params.data_path}/data/{params.iso}/auc/split_by_issue/fbf.districts.roc.{params.index}.{params.calibration_year}.{issue}.csv",
+            fbf_path,
             index=False,
         )
 
@@ -169,7 +174,7 @@ def verify_index_across_districts(
     forecasts,
     observations,
     params,
-    gdf,
+    area,
     period_name,
     period_months,
     issue,
@@ -181,7 +186,7 @@ def verify_index_across_districts(
         forecasts: xarray.Dataset, rainfall forecasts dataset for specific issue month
         observations: xarray.Dataset, rainfall observations dataset
         params: Params, parameters class
-        gdf: geopandas.GeoDataFrame, shapefile including admin2 levels
+        area: hip.analysis.AnalysisArea object with aoi information
         period_name: str, name of index period (eg "ON")
         period_months: tuple, months of index period (eg (10, 11))
     Returns:
@@ -207,15 +212,15 @@ def verify_index_across_districts(
             obs_values,
             probs,
             probs_bc,
+            area,
             issue,
             period_name,
             params,
-            gdf,
         )
 
     # Aggregate by district
-    auc_district = aggregate_by_district(auc, gdf, params)
-    auc_bc_district = aggregate_by_district(auc_bc, gdf, params)
+    auc_district = compute_district_average(auc, area)
+    auc_bc_district = compute_district_average(auc_bc, area)
 
     # Choose W/ or W/OUT BC based on AUROC
     fbf_index_df = get_verification_df(
@@ -254,28 +259,30 @@ def calculate_forecast_probabilities(
         levels_obs: xarray.Dataset, categorical observations at the pixel level for specified index
     """
 
-    # Remove 1980 season to harmonize observations between different indexes
-    if int(issue) >= params.end_season:
-        observations = observations.where(
-            observations.time.dt.date >= datetime.date(1981, 10, 1), drop=True
-        )
+    # Remove 1980 season to harmonize datasets between different indicators
+    forecasts = forecasts.where(
+        forecasts.time.dt.date >= datetime.date(1981, params.start_season, 1), drop=True
+    )
+    observations = observations.where(
+        observations.time.dt.date >= datetime.date(1981, params.start_season, 1),
+        drop=True,
+    )
 
     # Accumulation
     accumulation_fc = run_accumulation_index(
-        forecasts.chunk(dict(time=-1)), params.aggregate, period_months, forecasts=True
+        forecasts.chunk(dict(time=-1)),
+        params.aggregate,
+        period_months,
+        (params.start_season, params.end_season),
+        forecasts=True,
     )
     accumulation_obs = run_accumulation_index(
-        observations.chunk(dict(time=-1)), params.aggregate, period_months
+        observations.chunk(dict(time=-1)),
+        params.aggregate,
+        period_months,
+        (params.start_season, params.end_season),
     )
-    logging.info(f"Completed accumulation")
-
-    # Remove potential inconsistent observations
-    accumulation_obs = accumulation_obs.sel(
-        time=slice(
-            datetime.date(1979, 1, 1),
-            datetime.date(params.calibration_year - 1, 12, 31),
-        )
-    )
+    logging.info("Completed accumulation")
 
     # Anomaly
     anomaly_fc = run_gamma_standardization(
@@ -289,7 +296,7 @@ def calculate_forecast_probabilities(
         params.hist_anomaly_start,
         params.hist_anomaly_stop,
     )
-    logging.info(f"Completed anomaly")
+    logging.info("Completed anomaly")
 
     # Bias correction
     anomaly_bc = xr.concat(
@@ -297,9 +304,7 @@ def calculate_forecast_probabilities(
             run_bias_correction(
                 anomaly_fc,
                 anomaly_obs,
-                params.start_monitoring,
-                year,
-                int(issue),
+                year=year,
                 nearest_neighbours=8,
                 enso=True,
             )
@@ -307,7 +312,7 @@ def calculate_forecast_probabilities(
         ],
         dim="time",
     )
-    logging.info(f"Completed bias correction")
+    logging.info("Completed bias correction")
 
     if params.index == "dryspell":
         anomaly_fc *= -1
@@ -326,7 +331,7 @@ def calculate_forecast_probabilities(
     probabilities = probabilities.where(
         probabilities.year < params.calibration_year, drop=True
     )
-    logging.info(f"Completed probabilities")
+    logging.info("Completed probabilities")
 
     # Convert obs-based SPIs to booleans
     levels_obs = concat_obs_levels(
@@ -341,7 +346,7 @@ def calculate_forecast_probabilities(
     levels_obs["time"] = levels_obs.time.dt.year.values
     levels_obs = levels_obs.rename({"time": "year"})
     levels_obs = levels_obs.sel(year=probabilities.year)
-    logging.info(f"Completed categorical observations")
+    logging.info("Completed categorical observations")
 
     # Probabilities after Bias Correction
     probabilities_bc = (
@@ -355,17 +360,17 @@ def calculate_forecast_probabilities(
     probabilities_bc = probabilities_bc.where(
         probabilities_bc.year < params.calibration_year, drop=True
     )
-    logging.info(f"Completed probabilities with bias correction")
+    logging.info("Completed probabilities with bias correction")
 
     return probabilities, probabilities_bc, anomaly_obs, levels_obs
 
 
 def get_verification_df(auc, auc_bc):
     # Convert AUC datasets to dataframes
-    auc_df = auc.to_dataframe().drop("spatial_ref", axis=1)
+    auc_df = auc.to_dataframe()
     auc_df.columns = ["AUC"]
 
-    auc_bc_df = auc_bc.to_dataframe().drop("spatial_ref", axis=1)
+    auc_bc_df = auc_bc.to_dataframe()
     auc_bc_df.columns = ["AUC_BC"]
 
     # Select method based on AUROC score
@@ -386,24 +391,24 @@ def save_districts_results(
     observations,
     probabilities,
     probabilities_bc,
+    area,
     issue,
     period_name,
     params,
-    gdf,
 ):
     # Aggregate by district
-    obs_district = aggregate_by_district(observations, gdf, params)
-    probs_district = aggregate_by_district(probabilities, gdf, params)
-    probs_bc_district = aggregate_by_district(probabilities_bc, gdf, params)
+    obs_district = compute_district_average(observations, area)
+    probs_district = compute_district_average(probabilities, area)
+    probs_bc_district = compute_district_average(probabilities_bc, area)
 
     # Convert the 'category' coordinate to string type
     probs_district["category"] = probs_district["category"].astype(str)
     probs_bc_district["category"] = probs_bc_district["category"].astype(str)
 
     # Define file paths
-    obs_path = f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}/obs/{params.index} {period_name}/observations.zarr"
-    probs_path = f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}/{issue}/{params.index} {period_name}/probabilities.zarr"
-    probs_bc_path = f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}/{issue}/{params.index} {period_name}/probabilities_bc.zarr"
+    obs_path = f"{params.output_path}/data/{params.iso}/zarr/{params.calibration_year}/obs/{params.index} {period_name}/observations.zarr"
+    probs_path = f"{params.output_path}/data/{params.iso}/zarr/{params.calibration_year}/{issue}/{params.index} {period_name}/probabilities.zarr"
+    probs_bc_path = f"{params.output_path}/data/{params.iso}/zarr/{params.calibration_year}/{issue}/{params.index} {period_name}/probabilities_bc.zarr"
 
     obs_district.to_zarr(obs_path, mode="w")
     probs_district.to_zarr(probs_path, mode="w")
@@ -412,6 +417,6 @@ def save_districts_results(
 
 if __name__ == "__main__":
     # From AA repository:
-    # $ python analytical.py MOZ SPI
+    # $ pixi run python -m AA.analytical MOZ SPI --data-path "C:/path/to/data"
 
     run()

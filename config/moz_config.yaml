@@ -12,7 +12,7 @@ issue_months:
   - "02"
 
 # First year of season to monitor operationally (e.g. 2024 for 2024/2025 season)
-monitoring_year: 2024
+monitoring_year: 2025
 
 # Last year of calibration period used for triggers selection (e.g. 2022 for 1981-2022)
 calibration_year: 2022
@@ -41,9 +41,6 @@ hist_anomaly_stop: "2018-12-31"
 # Save (and overwrite if exists) ds (obs or probs) for future trigger choice
 save_zarr: true
 
-# Data path where to store intermediate and final outputs (should include data folder)
-data_path: "." # /s3/scratch/amine.barkaoui/aa
-
 # Thresholds defining different drought intensities used in probabilities computation
 intensity_thresholds:
   Severe: -1
@@ -52,26 +49,39 @@ intensity_thresholds:
 
 # Vulnerability class of triggers for each district: general or non-regret (GT or NRT)
 districts_vulnerability: 
-  Caia: "NRT"
-  Changara: "NRT"
-  Chemba: "NRT"
-  Chibuto: "NRT"
-  Chigubo: "NRT"
-  Chicualacuala: "NRT"
-  Chiure: "NRT"
-  Funhalouro: "NRT"
-  Guija: "NRT"
-  Mabalane: "NRT"
-  Mabote: "NRT"
-  Mapai: "NRT"
-  Magude: "NRT"
-  Massangena: "NRT"
-  Massingir: "NRT"
-  Moamba: "NRT"
-  Marara: "NRT"
-  Cahora_Bassa: "NRT"
-  Magoe: "NRT"
-  Machanga: "NRT"
+  Cahora_Bassa: "TBD"
+  Caia: "TBD"
+  Changara: "TBD"
+  Chemba: "TBD"
+  Chibabava: "TBD"
+  Chibuto: "TBD"
+  Chigubo: "TBD"
+  Chicualacuala: "TBD"
+  Chiure: "TBD"
+  Cidade_Da_Beira: "TBD"
+  Doa: "TBD"
+  Funhalouro: "TBD"
+  Govuro: "TBD"
+  Guija: "TBD"
+  Guro: "TBD"
+  Homoine: "TBD"
+  Jangamo: "TBD"
+  Mabalane: "TBD"
+  Mabote: "TBD"
+  Machanga: "TBD"
+  Machaze: "TBD"
+  Macossa: "TBD"
+  Magoe: "TBD"
+  Mapai: "TBD"
+  Magude: "TBD"
+  Massangena: "TBD"
+  Massinga: "TBD"
+  Massingir: "TBD"
+  Marara: "TBD"
+  Moamba: "TBD"
+  Mutarara: "TBD"
+  Panda: "TBD"
+  Tambara: "TBD"
 
 # Tolerance for thresholds for each category, used to compute false alarm with tolerance
 tolerance:
@@ -97,52 +107,8 @@ non_regret_t:
 # Window definitions for SPI and DRYSPELL indicators
 windows:
   spi:
-    window1:
-      Cabo_Delgado: ["DJ", "DJF", "JF", "JFM", "FM"]
-      Gaza: ["ON", "OND", "ND", "NDJ", "DJ"]
-      Inhambane: ["ON", "OND", "ND", "NDJ", "DJ"]
-      Manica: ["ND", "NDJ", "DJ", "DJF", "JF"]
-      Maputo: ["ON", "OND", "ND", "NDJ", "DJ"]
-      Maputo City: ["ON", "OND", "ND", "NDJ", "DJ"]
-      Nampula: ["DJ", "DJF", "JF", "JFM", "FM"]
-      Niassa: ["DJ", "DJF", "JF", "JFM", "FM"]
-      Sofala: ["ND", "NDJ", "DJ", "DJF", "JF"]
-      Tete: ["ND", "NDJ", "DJ", "DJF", "JF"]
-      Zambezia: ["ND", "NDJ", "DJ", "DJF", "JF"]
-    window2:
-      Cabo_Delgado: ["FMA", "MA", "MAM", "AM", "AMJ", "MJ"]
-      Gaza: ["DJF", "JF", "JFM", "FM", "FMA", "MA"]
-      Inhambane: ["DJF", "JF", "JFM", "FM", "FMA", "MA"]
-      Manica: ["JFM", "FM", "FMA", "MA", "MAM", "AM"]
-      Maputo: ["DJF", "JF", "JFM", "FM", "FMA", "MA"]
-      Maputo City: ["DJF", "JF", "JFM", "FM", "FMA", "MA"]
-      Nampula: ["FMA", "MA", "MAM", "AM", "AMJ", "MJ"]
-      Niassa: ["FMA", "MA", "MAM", "AM", "AMJ", "MJ"]
-      Sofala: ["JFM", "FM", "FMA", "MA", "MAM", "AM"]
-      Tete: ["JFM", "FM", "FMA", "MA", "MAM", "AM"]
-      Zambezia: ["JFM", "FM", "FMA", "MA", "MAM", "AM"]
+    window1: ["ON", "ND", "DJ", "JF", "FM", "OND", "NDJ", "DJF", "JFM"]
+    window2: ["MA", "AM", "MAM"]
   dryspell:
-    window1:
-      Cabo_Delgado: ["DJ", "JF", "FM"]
-      Gaza: []
-      Inhambane: []
-      Manica: ["DJ", "JF"]
-      Maputo: []
-      Maputo City: []
-      Nampula: ["DJ", "JF", "FM"]
-      Niassa: ["DJ", "JF", "FM"]
-      Sofala: ["DJ", "JF"]
-      Tete: ["DJ", "JF"]
-      Zambezia: ["DJ", "JF"]
-    window2:
-      Cabo_Delgado: ["MA", "AM", "MJ"]
-      Gaza: ["DJ", "JF", "FM", "MA"]
-      Inhambane: ["DJ", "JF", "FM", "MA"]
-      Manica: ["JF", "FM", "MA", "AM"]
-      Maputo: ["DJ", "JF", "FM", "MA"]
-      Maputo City: ["DJ", "JF", "FM", "MA"]
-      Nampula: ["MA", "AM", "MJ"]
-      Niassa: ["MA", "AM", "MJ"]
-      Sofala: ["JF", "FM", "MA", "AM"]
-      Tete: ["JF", "FM", "MA", "AM"]
-      Zambezia: ["JF", "FM", "MA", "AM"]
+    window1: ["DJ", "JF", "FM"]
+    window2: []

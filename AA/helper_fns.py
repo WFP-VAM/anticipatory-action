@@ -1,13 +1,12 @@
-import logging
+import datetime
 import glob
+import logging
 import os
 
-import datetime
-import geopandas as gpd
+import fsspec
 import numpy as np
 import pandas as pd
 import xarray as xr
-
 from hip.analysis.compute.utils import persist_with_progress_bar
 
 PORTUGUESE_CATEGORIES = dict(
@@ -33,45 +32,92 @@ def create_flexible_dataarray(start_season, end_season):
     return data_array
 
 
-def triggers_da_to_df(triggers_da, hr_da):
-    triggers_df = triggers_da.to_dataframe().drop(["spatial_ref"], axis=1).dropna()
-    triggers_df = triggers_df.reset_index().set_index(
-        ["index", "category", "district", "issue"]
-    )
-    triggers_df.columns = ["trigger", "trigger_value", "lead_time"]
-    hr_df = (
-        hr_da.to_dataframe()
+def triggers_da_to_df(triggers_da, score_da):
+    """Converts trigger and score DataArrays to a merged DataFrame.
+
+    This function processes two xarray DataArrays containing trigger values and scores,
+    converts them to pandas DataFrames, and merges them based on specified indices.
+
+    Args:
+        triggers_da (xarray.DataArray): DataArray containing trigger information.
+        score_da (xarray.DataArray): DataArray containing score information.
+
+    Returns:
+        pandas.DataFrame: A DataFrame combining trigger values and scores, with duplicates removed.
+    """
+    # Convert triggers to DataFrame, clean and set index
+    triggers_df = (
+        triggers_da.rename("trigger_value")
+        .to_dataframe()
+        .drop(columns=["spatial_ref", "return_period", "tolerance"], errors="ignore")
+        .dropna()
         .reset_index()
-        .drop("lead_time", axis=1)
+        .set_index(["index", "category", "district", "issue"])
+    )
+
+    # Convert score to DataFrame, clean and set index
+    score_df = (
+        score_da.rename("HR")
+        .to_dataframe()
+        .reset_index()
+        .drop(columns=["lead_time", "return_period", "tolerance"], errors="ignore")
         .set_index(["district", "category", "issue", "index"])
     )
-    triggers_df = triggers_df.join(hr_df)
-    triggers_df = triggers_df.drop(["spatial_ref"], axis=1)
-    triggers_df.columns = ["trigger", "lead_time", "trigger_value", "HR"]
+
+    # Join triggers with score
+    triggers_df = triggers_df.join(score_df)
+
+    # Reset index and remove duplicates
     return triggers_df.reset_index().drop_duplicates()
 
 
-def aggregate_by_district(ds, gdf, params):
-    PROJ = "+proj=longlat +ellps=clrk66 +towgs84=-80,-100,-228,0,0,0,0 +no_defs"
+def compute_district_average(da, area):
+    """
+    Computes zonal statistics on an xarray DataArray for both observations and probabilities.
 
-    # Clip ds to districts
-    list_districts = {}
-    for _, row in gdf.iterrows():
-        try:
-            list_districts[row["Name"]] = (
-                ds.rio.write_crs(PROJ)
-                .rio.clip(gpd.GeoSeries(row.geometry))
-                .mean(dim=["latitude", "longitude"])
+    Args:
+        da : xarray.DataArray, Input DataArray (can be observations or probabilities).
+        area : hip.analysis.aoi.analysis_area.AnalysisArea: object characterizing the area
+            and admin level of interest.
+    Returns: xarray.DataArray, DataArray with computed district averages.
+    """
+    # Ensure consistent time dimension
+    if "year" in da.dims:
+        da = da.rename({"year": "time"})
+
+    # Determine dimensions to group by (exclude spatial dimensions)
+    groupby_dim = set(da.dims) - {"latitude", "longitude", "time"}
+
+    # Transpose dims to ensure equality of shapes
+    da = da.transpose(..., *groupby_dim, "latitude", "longitude")
+
+    # Compute zonal stats: handle different groupby dimensions lengths
+    if len(groupby_dim) > 1:
+        raise NotImplementedError(
+            "Zonal stats with more than one groupby dimension are not supported."
+        )
+    elif len(groupby_dim) == 1:
+        da_grouped = da.groupby(*groupby_dim).map(
+            lambda da: area.zonal_stats(
+                da.squeeze(groupby_dim), stats=["mean"], zone_ids=None, zones=None
             )
-        except:
-            continue
+            .query("zone != 'Administrative unit not available'")
+            .to_xarray()["mean"]
+        )
+    else:
+        da_grouped = (
+            area.zonal_stats(da, stats=["mean"], zone_ids=None, zones=None)
+            .query("zone != 'Administrative unit not available'")
+            .to_xarray()["mean"]
+        )
 
-    ds_by_district = xr.concat(
-        list_districts.values(), pd.Index(list_districts.keys(), name="district")
-    )
-    ds_by_district["district"] = ds_by_district.district.astype(str)
+    # Rename 'zone' to 'district' for consistency
+    da_grouped = da_grouped.rename({"zone": "district"})
 
-    return ds_by_district
+    # Ensure district is a string type
+    da_grouped["district"] = da_grouped.district.astype(str)
+
+    return da_grouped
 
 
 def merge_un_biased_probs(probs_district, probs_bc_district, params, period_name):
@@ -106,9 +152,18 @@ def format_triggers_df_for_dashboard(triggers, params):
 
     triggers["prob"] = np.nan
     triggers["HR"] = triggers["HR"].abs()
-    # triggers["season"] = f"{params.monitoring_year}-{str(params.monitoring_year+1)[-2:]}"
-    # triggers['date'] = [params.monitoring_year if r.issue >= 5 else params.monitoring_year+1 for _, r in triggers.iterrows()]
-    # triggers['date'] = [pd.to_datetime(f"{r.issue}-1-{r.date}") for _, r in triggers.iterrows()]
+
+    if "season" not in triggers.columns:
+        triggers["season"] = (
+            f"{params.monitoring_year}-{str(params.monitoring_year + 1)[-2:]}"
+        )
+        triggers["date"] = [
+            params.monitoring_year if r.issue >= 5 else params.monitoring_year + 1
+            for _, r in triggers.iterrows()
+        ]
+        triggers["date"] = [
+            pd.to_datetime(f"{r.issue}-1-{r.date}") for _, r in triggers.iterrows()
+        ]
 
     def substract(issue):
         return 2 if issue == 1 else 1
@@ -144,7 +199,7 @@ def get_coverage(triggers_df, districts: list, columns: list):
         columns=columns,
         index=districts,
     )
-    for d, r in cov.iterrows():
+    for d, _ in cov.iterrows():
         val = []
         for w in triggers_df["window"].unique():
             for c in triggers_df["category"].unique():
@@ -165,9 +220,35 @@ def get_coverage(triggers_df, districts: list, columns: list):
     return cov
 
 
+def load_trigger_with_reference(params, variant_folder=None):
+    """
+    Load trigger data and reference trigger data for comparison.
+
+    Args:
+        params: An object containing parameters such as data_path, iso, and calibration_year.
+        variant_folder (str, optional): If provided, modifies the data path to load from an alternative directory.
+
+    Returns:
+        dict: A dictionary containing DataFrames for GT, NRT, and pilots triggers and reference triggers.
+    """
+    base_path = f"{params.data_path}/data/{variant_folder or params.iso}"
+
+    files = ["GT", "NRT", "pilots"]
+
+    triggers = {}
+    for file in files:
+        trigger_path = f"{base_path}/triggers/triggers.spi.dryspell.{params.calibration_year}.{file}.csv"
+        ref_path = f"{params.data_path}/data/{params.iso}/triggers/triggers.spi.dryspell.{params.calibration_year}.{file}.csv"
+
+        triggers[f"triggers_{file}"] = pd.read_csv(trigger_path)
+        triggers[f"reference_{file}"] = pd.read_csv(ref_path)
+
+    return triggers
+
+
 def merge_probabilities_triggers_dashboard(probs, triggers, params, period):
     # Format probabilities
-    probs_df = probs.to_dataframe().reset_index().drop("spatial_ref", axis=1)
+    probs_df = probs.to_dataframe().reset_index()
     probs_df["prob"] = [np.round(p, 2) for p in probs_df.prob.values]
     probs_df["index"] = probs_df["index"].str.upper()
     probs_df["aggregation"] = np.repeat(
@@ -182,23 +263,33 @@ def merge_probabilities_triggers_dashboard(probs, triggers, params, period):
         triggers_merged["prob_set"] = np.nan
 
     # Fill in probabilities columns matching with triggers
-    for l, row in triggers_merged.iterrows():
-        if (row.issue_ready == params.issue) and (
-            row["index"] == f"{params.index.upper()} {period}"
-        ):
-            triggers_merged.loc[l, "prob_ready"] = probs_df.loc[
-                (probs_df["index"] == row["index"])
+    target_index = f"{params.index.upper()} {period}"
+
+    # Drop all rows that do not related to the target_index
+    triggers_merged = triggers_merged[triggers_merged['index']==target_index]
+    
+    for idx, row in triggers_merged.iterrows():
+        if (row.issue_ready == params.issue):
+            match_filter = (
+                (probs_df["index"] == target_index)
                 & (probs_df["category"] == row.category)
                 & (probs_df["district"] == row.district)
-            ].prob.values[0]
-        elif (row.issue_set == params.issue) and (
-            row["index"] == f"{params.index.upper()} {period}"
-        ):
-            triggers_merged.loc[l, "prob_set"] = probs_df.loc[
-                (probs_df["index"] == row["index"])
+            )
+            matching_probs = probs_df.loc[match_filter]
+            if len(matching_probs) > 0:
+                prob_value = matching_probs.prob.values[0]
+                triggers_merged.loc[idx, "prob_ready"] = prob_value
+                
+        elif (row.issue_set == params.issue):
+            match_filter = (
+                (probs_df["index"] == target_index)
                 & (probs_df["category"] == row.category)
                 & (probs_df["district"] == row.district)
-            ].prob.values[0]
+            )
+            matching_probs = probs_df.loc[match_filter]
+            if len(matching_probs) > 0:
+                prob_value = matching_probs.prob.values[0]
+                triggers_merged.loc[idx, "prob_set"] = prob_value
 
     return probs_df, triggers_merged
 
@@ -210,53 +301,145 @@ def read_fbf_districts(path_fbf, params):
     return fbf_districts
 
 
-def read_forecasts(area, issue, local_path, update=False):
-    if os.path.exists(local_path) and not update:
-        forecasts = xr.open_zarr(local_path).tp
-        forecasts = forecasts.sel(
-            time=slice(
-                None,
-                datetime.datetime.strptime(
-                    area.datetime_range.split("/")[1], "%Y-%m-%d"
-                ),
-            )
-        )
-        logging.info("Reading of forecasts from precomputed zarr...")
-        forecasts = persist_with_progress_bar(forecasts)
+def read_forecasts(area, issue, local_path):
+    fs = fsspec.open(local_path).fs
+    zmetadata_path = os.path.join(local_path, ".zmetadata")
+    data_exists = fs.exists(zmetadata_path)
+    
+    # Determine the forecast period:
+    # - `last_date` is the end of the target time range, extracted from area.datetime_range (e.g., "2024-01-01/2024-12-31")
+    # - `forecast_date` is the start of the forecast, set to the 1st of the issue month of the year before `last_date`, as last_date.year = monitoring_year + 1
+    #   For example, if issue=6 (June) and last_date is 2024-12-31, then forecast_date becomes 2023-06-01
+    last_date = datetime.datetime.strptime(
+        area.datetime_range.split("/")[1], "%Y-%m-%d"
+    )
+    forecast_date = datetime.datetime(last_date.year - 1, int(issue), 1)
+
+    if data_exists:
+        logging.info("Reading forecasts from precomputed zarr...")
+        ds = xr.open_zarr(local_path).tp
+        if np.datetime64(forecast_date) in ds.time.values:
+            return persist_with_progress_bar(ds.sel(time=slice(None, last_date)))
+        else:
+            logging.info("Forecast date missing in zarr, reading from source...")
     else:
-        forecasts = area.get_dataset(
-            ["ECMWF", f"RFH_FORECASTS_SEAS5_ISSUE{int(issue)}_DAILY"],
-            load_config={
-                "gridded_load_kwargs": {
-                    "resampling": "bilinear",
-                }
-            },
-        )
-        logging.info("Reading of forecasts from source...")
-        forecasts = persist_with_progress_bar(forecasts)
-        forecasts.attrs["nodata"] = np.nan
-        forecasts.chunk(dict(time=-1)).to_zarr(local_path, mode="w", consolidated=True)
-    return forecasts
+        logging.info("Zarr file not found, reading from source...")
+
+    # Read from source
+    forecasts = area.get_dataset(
+        ["ECMWF", f"RFH_FORECASTS_SEAS5_ISSUE{int(issue)}_DAILY"],
+        load_config={"gridded_load_kwargs": {"resampling": "bilinear"}},
+    )
+    forecasts.attrs["nodata"] = np.nan
+    forecasts.chunk({"time": -1}).to_zarr(local_path, mode="w", consolidated=True)
+
+    return persist_with_progress_bar(forecasts)
 
 
 def read_observations(area, local_path):
-    if os.path.exists(local_path):
-        observations = xr.open_zarr(local_path, consolidated=True).band
+    fs = fsspec.open(local_path).fs
+    if fs.exists(os.path.join(local_path, ".zmetadata")):
         logging.info("Reading of observations from precomputed zarr...")
-        observations = persist_with_progress_bar(observations)
+        observations = xr.open_zarr(
+            local_path,
+            consolidated=True,
+        ).band
     else:
+        logging.info("Reading of observations from HDC STAC...")
         observations = area.get_dataset(
             ["CHIRPS", "RFH_DAILY"],
-            load_config={
-                "gridded_load_kwargs": {
-                    "resampling": "bilinear",
-                }
-            },
+            load_config={"gridded_load_kwargs": {"resampling": "bilinear"}},
         )
-        logging.info("Reading of observations from HDC STAC...")
-        observations = persist_with_progress_bar(observations)
-        observations.to_zarr(local_path, mode="w", consolidated=True)
-    return observations
+        observations.to_zarr(
+            local_path,
+            mode="w",
+            consolidated=True,
+        )
+
+    return persist_with_progress_bar(observations)
+
+
+def read_triggers(params):
+    triggers_path = f"{params.data_path}/data/{params.iso}/probs/aa_probabilities_triggers_pilots.csv"
+    fallback_triggers_path = f"{params.data_path}/data/{params.iso}/triggers/triggers.final.{params.monitoring_year}.pilots.csv"
+
+    if fsspec.open(triggers_path).fs.exists(triggers_path):
+        triggers_df = pd.read_csv(triggers_path)
+    else:
+        triggers_df = pd.read_csv(fallback_triggers_path)
+    return triggers_df
+
+
+def validate_prism_dataframe(df: pd.DataFrame):
+    # Expected columns and types
+    expected_columns = {
+        "district": str,
+        "index": str,
+        "category": str,
+        "window": str,
+        "issue_ready": float | int,
+        "issue_set": float | int,
+        "trigger_ready": float,
+        "trigger_set": float,
+        "vulnerability": str,
+        "prob_ready": float,
+        "prob_set": float,
+        "season": str,
+        "date_ready": str,
+        "date_set": str,
+    }
+
+    # Check columns
+    missing = set(expected_columns) - set(df.columns)
+    extra = set(df.columns) - set(expected_columns)
+    if missing:
+        raise ValueError(f"Missing columns: {missing}")
+    if extra:
+        raise ValueError(f"Unexpected columns: {extra}")
+
+    # Check column types
+    for col, expected_type in expected_columns.items():
+        if not df[col].map(lambda x: isinstance(x, expected_type)).all():
+            raise TypeError(
+                f"Column '{col}' has incorrect type. Expected {expected_type.__name__}"
+            )
+
+    # Check index column is uppercase
+    if not df["index"].map(lambda x: x.isupper()).all():
+        raise ValueError("All values in 'index' column must be uppercase")
+
+    # Check category values
+    valid_categories = {"Normal", "Mild", "Moderate", "Severe"}
+    if not df["category"].isin(valid_categories).all():
+        raise ValueError(
+            f"'category' column contains invalid values. Allowed: {valid_categories}"
+        )
+
+    # Check window values
+    valid_windows = {"Window 1", "Window 2"}
+    if not df["window"].isin(valid_windows).all():
+        raise ValueError(
+            f"'window' column contains invalid values. Allowed: {valid_windows}"
+        )
+
+    # Check vulnerability values
+    valid_vulnerability = {"General Triggers", "Emergency Triggers"}
+    if not df["vulnerability"].isin(valid_vulnerability).all():
+        raise ValueError(
+            f"'vulnerability' column contains invalid values. Allowed: {valid_vulnerability}"
+        )
+
+    # Check date formats
+    for col in ["date_ready", "date_set"]:
+        try:
+            parsed_dates = pd.to_datetime(df[col], format="%Y-%m-%d", errors="raise")
+        except Exception:
+            raise ValueError(f"Column '{col}' must use format YYYY-MM-DD")
+
+        if not all(parsed_dates.dt.day == 1):
+            raise ValueError(f"All dates in '{col}' must have day = 01")
+
+    return True
 
 
 ## Get SPI/probabilities of reference produced with R script from Gabriela Nobre for validation ##

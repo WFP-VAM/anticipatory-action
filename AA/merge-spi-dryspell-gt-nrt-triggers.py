@@ -20,24 +20,25 @@
 # %cd ..
 
 # +
-import pandas as pd
-from config.params import Params
 import os
 
-from AA.helper_fns import format_triggers_df_for_dashboard, get_coverage, merge_un_biased_probs, triggers_da_to_df
+import pandas as pd
+
+from config.params import Params
+
 # -
 
 # Read GT and NRT
 params = Params(iso="MOZ", index="SPI")
 
-params.iso
+print(params.iso)
 
 # +
 # ### Get and save final dataframe
 
 # Now, you are done with the processing of one index (SPI or DRYSPELL). So you can rerun everything from the beginning with the other index. If you've already done it, you can run the next cell so it will merge all the different outputs to provide you with the very final dataframe that will be used operationally.
 
-# The next cells merge SPI and DRYSPELL for each vulnerability level. So SPI is taken first, and if no SPI is available DRYSPELL is included. 
+# The next cells merge SPI and DRYSPELL for each vulnerability level. So SPI is taken first, and if no SPI is available DRYSPELL is included.
 
 # Read all GT csvs
 if os.path.exists(
@@ -99,7 +100,7 @@ if os.path.exists(
 nrt_merged.head()
 
 # +
-# Now we read dataframes for both vulnerability levels if they exist and merge them according to the vulnerability defined for each district in the config file. 
+# Now we read dataframes for both vulnerability levels if they exist and merge them according to the vulnerability defined for each district in the config file.
 
 # Read GT and NRT dataframes
 if os.path.exists(

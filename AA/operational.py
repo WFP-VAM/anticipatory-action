@@ -1,24 +1,11 @@
-import sys
-
-sys.path.append("..")
-
+import datetime
 import logging
 import os
-
-import click
-
-logging.basicConfig(level="INFO", force=True)
-
 import warnings
 
-warnings.simplefilter(action="ignore", category=FutureWarning)
-
-import datetime
-import traceback
-
-import dask
+import click
+import numpy as np
 import pandas as pd
-from config.params import Params
 from hip.analysis.analyses.drought import (
     compute_probabilities,
     get_accumulation_periods,
@@ -29,22 +16,48 @@ from hip.analysis.analyses.drought import (
 from hip.analysis.aoi.analysis_area import AnalysisArea
 
 from AA.helper_fns import (
-    aggregate_by_district,
+    compute_district_average,
     merge_probabilities_triggers_dashboard,
     merge_un_biased_probs,
     read_forecasts,
     read_observations,
+    read_triggers,
 )
+from config.params import S3_OPS_DATA_PATH, Params
+
+logging.basicConfig(level="INFO", force=True)
+
+warnings.simplefilter(action="ignore", category=FutureWarning)
 
 
 @click.command()
 @click.argument("country", required=True, type=str)
 @click.argument("issue", required=True, type=int)
 @click.argument("index", default="SPI")
-def run(country, issue, index):
+@click.option(
+    "--data-path",
+    required=True,
+    type=str,
+    default=S3_OPS_DATA_PATH,
+    help="Root directory for data files.",
+)
+@click.option(
+    "--output-path",
+    required=False,
+    type=str,
+    default=S3_OPS_DATA_PATH,
+    help="Root directory for output files. Defaults to data-path if not provided.",
+)
+def run(country, issue, index, data_path, output_path):
     # End to end workflow for a country using pre-stored ECMWF forecasts and CHIRPS
 
-    params = Params(iso=country, issue=issue, index=index)
+    params = Params(
+        iso=country,
+        issue=issue,
+        index=index,
+        data_path=data_path,
+        output_path=output_path,
+    )
 
     area = AnalysisArea.from_admin_boundaries(
         iso3=country.upper(),
@@ -53,39 +66,37 @@ def run(country, issue, index):
         datetime_range=f"1981-01-01/{params.monitoring_year + 1}-06-30",
     )
 
-    gdf = area.get_dataset([area.BASE_AREA_DATASET])
-
     forecasts = read_forecasts(
         area,
         issue,
         f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}/{str(issue).zfill(2)}/forecasts.zarr",
-        update=False,  # True,
     )
-    logging.info(f"Completed reading of forecasts for the whole {params.iso} country")
+
+    # Check if the forecast date is in the time coordinate
+    forecast_date = np.datetime64(
+        datetime.datetime(params.monitoring_year, params.issue, 1), "ns"
+    )
+    if forecast_date not in forecasts.time.values:
+        raise ValueError(
+            "Forecast missing from dataset — it might not have been released yet. Try again later."
+        )
+
+    logging.info("Completed reading of forecasts for the whole %s country", params.iso)
 
     observations = read_observations(
         area,
         f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}/obs/observations.zarr",
     )
     logging.info(
-        f"Completed reading of observations for the whole {params.iso} country"
+        "Completed reading of observations for the whole %s country", params.iso
     )
 
     os.makedirs(
-        f"{params.data_path}/data/{params.iso}/probs",
+        f"{params.output_path}/data/{params.iso}/probs",
         exist_ok=True,
     )
 
-    if os.path.exists(
-        f"{params.data_path}/data/{params.iso}/probs/aa_probabilities_triggers_pilots.csv"
-    ):
-        triggers_df = pd.read_csv(
-            f"{params.data_path}/data/{params.iso}/probs/aa_probabilities_triggers_pilots.csv",
-        )
-    else:
-        triggers_df = pd.read_csv(
-            f"{params.data_path}/data/{params.iso}/triggers/triggers.spi.dryspell.{params.calibration_year}.pilots.csv",
-        )
+    triggers_df = read_triggers(params)
 
     # Get accumulation periods (DJ, JF, FM, DJF, JFM...)
     accumulation_periods = get_accumulation_periods(
@@ -103,36 +114,63 @@ def run(country, issue, index):
             observations,
             params,
             triggers_df,
-            gdf,
+            area,
             period_name,
             period_months,
         )
         for period_name, period_months in accumulation_periods.items()
     ]
-    logging.info(f"Completed analysis for the required indexes over {country} country")
+    logging.info("Completed analysis for the required indexes over %s country", country)
 
     probs_df, merged_df = zip(*probs_merged_dataframes)
 
     probs_dashboard = pd.concat(probs_df).drop_duplicates()
     probs_dashboard.to_csv(
-        f"{params.data_path}/data/{params.iso}/probs/aa_probabilities_{params.index}_{params.issue}.csv",
+        f"{params.output_path}/data/{params.iso}/probs/aa_probabilities_{params.index}_{params.issue}.csv",
         index=False,
     )
 
-    merged_db = pd.concat(merged_df).sort_values(["prob_ready", "prob_set"])
-    merged_db = merged_db.drop_duplicates(
-        merged_db.columns.difference(["prob_ready", "prob_set"]), keep="first"
+    merged_db = pd.concat(merged_df)
+    merged_db = merged_db.sort_values(["prob_ready", "prob_set"])
+
+    # Check for duplicates and raise error if found
+    duplicate_cols = list(merged_db.columns.difference(["prob_ready", "prob_set"]))
+    duplicates_count = merged_db.duplicated(subset=duplicate_cols).sum()
+    if duplicates_count > 0:
+        raise ValueError(f"Data integrity error: {duplicates_count} duplicate rows found in merged trigger data. "
+                        f"This indicates a problem with the trigger merging process.")
+
+    # Perform left merge to find rows in triggers_df that don't exist in merged_db
+    merge_result = triggers_df.merge(
+        merged_db[duplicate_cols], 
+        on=duplicate_cols, 
+        how='left', 
+        indicator=True
     )
+
+    # Get only rows that exist in triggers_df but not in merged_db
+    new_rows_from_triggers = triggers_df[merge_result['_merge'] == 'left_only']
+
+    # Append the new rows to merged_db
+    if not new_rows_from_triggers.empty:
+        merged_db = pd.concat([merged_db, new_rows_from_triggers], ignore_index=True)
+
+    # Assert that final merged_db has same number of rows as original triggers_df
+    assert len(merged_db) == len(triggers_df), (
+        f"Data integrity error: Final merged_db has {len(merged_db)} rows but original "
+        f"triggers_df has {len(triggers_df)} rows. Expected them to be equal."
+    )
+
     merged_db.sort_values(["district", "index", "category"]).to_csv(
-        f"{params.data_path}/data/{params.iso}/probs/aa_probabilities_triggers_pilots.csv",
+        f"{params.output_path}/data/{params.iso}/probs/aa_probabilities_triggers_pilots.csv",
         index=False,
     )
 
-    logging.info(f"Dashboard-formatted dataframe saved for {country}")
+    logging.info("Dashboard-formatted dataframe saved for %s", country)
 
 
 def run_full_index_pipeline(
-    forecasts, observations, params, triggers, gdf, period_name, period_months
+    forecasts, observations, params, triggers, area, period_name, period_months
 ):
     """
     Run operational pipeline for single index (period)
@@ -142,7 +180,7 @@ def run_full_index_pipeline(
         observations: xarray.Dataset, rainfall observations dataset
         params: Params, parameters class
         triggers: pd.DataFrame, selected triggers (output of triggers.py)
-        gdf: geopandas.GeoDataFrame, shapefile including admin2 levels
+        area: hip.analysis.AnalysisArea object with aoi information
         period_name: str, name of index period (eg "ON")
         period_months: tuple, months of index period (eg (10, 11))
     Returns:
@@ -154,8 +192,8 @@ def run_full_index_pipeline(
     )
 
     # Aggregate by district
-    probs_district = aggregate_by_district(probabilities, gdf, params)
-    probs_bc_district = aggregate_by_district(probabilities_bc, gdf, params)
+    probs_district = compute_district_average(probabilities, area)
+    probs_bc_district = compute_district_average(probabilities_bc, area)
 
     # Build single xarray with merged unbiased/biased probabilities
     probs_by_district = merge_un_biased_probs(
@@ -168,7 +206,9 @@ def run_full_index_pipeline(
     )
 
     logging.info(
-        f"Completed probabilities computation by district for the {params.index.upper()} {period_name} index"
+        "Completed probabilities computation by district for the %s %s index",
+        params.index.upper(),
+        period_name,
     )
 
     return probs_df, merged_df
@@ -187,27 +227,30 @@ def run_aa_probabilities(forecasts, observations, params, period_months):
         probabilities: xarray.Dataset, raw probabilities for specified period
         probabilities_bc: xarray.Dataset, bias-corrected probabilities for specified period
     """
-    # Remove 1980 season to harmonize observations between different indexes
-    if int(params.issue) >= params.end_season:
-        observations = observations.where(
-            observations.time.dt.date >= datetime.date(1981, 10, 1), drop=True
-        )
+    # Remove 1980 season to harmonize datasets between different indexes
+    forecasts = forecasts.where(
+        forecasts.time.dt.date >= datetime.date(1981, params.start_season, 1), drop=True
+    )
+    observations = observations.where(
+        observations.time.dt.date >= datetime.date(1981, params.start_season, 1),
+        drop=True,
+    )
 
     # Accumulation
     accumulation_fc = run_accumulation_index(
-        forecasts.chunk(dict(time=-1)), params.aggregate, period_months, forecasts=True
+        forecasts.chunk(dict(time=-1)),
+        params.aggregate,
+        period_months,
+        (params.start_season, params.end_season),
+        forecasts=True,
     )
     accumulation_obs = run_accumulation_index(
-        observations.chunk(dict(time=-1)), params.aggregate, period_months
+        observations.chunk(dict(time=-1)),
+        params.aggregate,
+        period_months,
+        (params.start_season, params.end_season),
     )
-    logging.info(f"Completed accumulation")
-
-    # Remove inconsistent observations
-    accumulation_obs = accumulation_obs.sel(
-        time=slice(
-            datetime.date(1979, 1, 1), datetime.date(params.monitoring_year - 1, 12, 31)
-        )
-    )
+    logging.info("Completed accumulation")
 
     # Anomaly
     anomaly_fc = run_gamma_standardization(
@@ -221,19 +264,17 @@ def run_aa_probabilities(forecasts, observations, params, period_months):
         params.hist_anomaly_start,
         params.hist_anomaly_stop,
     )
-    logging.info(f"Completed anomaly")
+    logging.info("Completed anomaly")
 
     # Bias correction
     index_bc = run_bias_correction(
         anomaly_fc,
         anomaly_obs,
-        params.start_monitoring,
         params.monitoring_year,
-        int(params.issue),
         nearest_neighbours=8,
         enso=True,
     )
-    logging.info(f"Completed bias correction")
+    logging.info("Completed bias correction")
 
     if params.index == "dryspell":
         anomaly_fc *= -1
@@ -250,13 +291,13 @@ def run_aa_probabilities(forecasts, observations, params, period_months):
     probabilities_bc = compute_probabilities(
         index_bc, levels=params.intensity_thresholds
     ).round(2)
-    logging.info(f"Completed probabilities")
+    logging.info("Completed probabilities")
 
     return probabilities, probabilities_bc
 
 
 if __name__ == "__main__":
     # From AA repository:
-    # $ python operational.py MOZ 10 SPI
+    # $ pixi run python -m AA.operational MOZ 10 SPI --data-path "C:/path/to/data"
 
     run()

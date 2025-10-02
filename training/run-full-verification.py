@@ -6,11 +6,11 @@
 #       extension: .py
 #       format_name: light
 #       format_version: '1.5'
-#       jupytext_version: 1.16.2
+#       jupytext_version: 1.17.1
 #   kernelspec:
-#     display_name: aa-env
+#     display_name: Python (Pixi)
 #     language: python
-#     name: python3
+#     name: pixi-kernel-python3
 # ---
 
 # ## Run full AA drought verification
@@ -19,38 +19,38 @@
 #
 # This notebook is intended to be self-sufficient for executing the entire workflow operationally ahead of the season and get the triggers using specific parameters and specific datasets. It is designed to be interactive, and does not require any direct interaction with another file, except for the configuration file. This will therefore be the main front-end for Anticipatory Action analysts.
 
-# If you have not downloaded the data yet, please go to that link:
-#
-# https://data.earthobservation.vam.wfp.org/public-share/aa/mozambique/moz.zip
+# If you have not downloaded the data yet, please download it from the link you should have received by email.
 
 # **Import required libraries and functions**
 
-# %cd ..
-
 # +
-import os
 import logging
-import xarray as xr
+import os
+
+import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
-import matplotlib.pyplot as plt
-
-from config.params import Params
+import xarray as xr
+from hip.analysis.aoi.analysis_area import AnalysisArea
+from IPython.display import Markdown as md
 
 from AA.analytical import run_issue_verification
+from AA.helper_fns import get_coverage, read_forecasts, read_observations
 from AA.triggers import run_triggers_selection
-from AA.helper_fns import get_coverage, read_observations, read_forecasts
+from config.params import Params
 
-from hip.analysis.aoi.analysis_area import AnalysisArea
-
-from IPython.display import Markdown as md
+if os.getcwd().split("\\")[-1] != "anticipatory-action":
+    os.chdir("..")
+os.getcwd()
 # -
 
 # **First, please define the country ISO code and the index of interest**
 
 
-country = "MOZ"
+country = "MWI"
 index = "SPI"  # 'SPI' or 'DRYSPELL'
+data_path = "."  # current directory (anticipatory-action)
+output_path = "."
 
 
 # Now, we will configure some parameters. Please feel free to edit the year of the last season considered. By default, it is equal to 2022. This means that for the purposes of evaluating and selecting triggers, the time series studied will end with the 2021-2022 season. This is the configuration chosen for monitoring the 2023-2024 season.
@@ -60,7 +60,7 @@ index = "SPI"  # 'SPI' or 'DRYSPELL'
 # *Note: if you change a parameter or a dataset, please make sure to manage correctly the different output paths so you don't overwrite previous results.*
 
 
-params = Params(iso=country, index=index)
+params = Params(iso=country, index=index, data_path=data_path, output_path=output_path)
 
 
 # ### Read data
@@ -102,7 +102,9 @@ observations
 # If your dataset is not available via hip-analysis or if you already have stored locally the forecasts you would like to use, you can edit the path below and forecasts will be read in the analytical loop. Once again, make sure that your coordinates match those of the observations, that your forecasts are daily, and that you have 51 members. The name of the data variable must be 'tp'.
 
 
-forecasts_folder_path = f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}"
+forecasts_folder_path = (
+    f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}"
+)
 
 
 # Congratulations! You've completed the part that requires the most energy during this process. Now all you have to do is run the different cells and check the results!
@@ -127,8 +129,7 @@ os.makedirs(
 # Define empty list for each issue month's ROC score dataframe
 fbf_roc_issues = []
 
-for issue in ["05", "06"]: # params.issue_months:
-
+for issue in ["07", "08"]:  # params.issue_months:
     forecasts = read_forecasts(
         area,
         issue,
@@ -142,7 +143,7 @@ for issue in ["05", "06"]: # params.issue_months:
             observations,
             issue,
             params,
-            gdf,
+            area,
         )
     )
     logging.info(
@@ -150,25 +151,23 @@ for issue in ["05", "06"]: # params.issue_months:
     )
 
 fbf_roc = pd.concat(fbf_roc_issues)
-display(fbf_roc)
+display(fbf_roc)  # noqa: F821
 # -
-
-roc
 
 # Let's have a look at how the computed probabilities data looks like.
 
-xr.open_zarr(f"{forecasts_folder_path}/05/{params.index} ON/probabilities.zarr")
+xr.open_zarr(f"{forecasts_folder_path}/07/{params.index} OND/probabilities.zarr")
 
-# We can also check how the CHIRPS-based anomalies that have been saved look like. They have been used to calculate the roc scores and will be used to select the triggers. 
+# We can also check how the CHIRPS-based anomalies that have been saved look like. They have been used to calculate the roc scores and will be used to select the triggers.
 
-xr.open_zarr(f"{forecasts_folder_path}/obs/{params.index} ON/observations.zarr")
+xr.open_zarr(f"{forecasts_folder_path}/obs/{params.index} OND/observations.zarr")
 
-# By running the next cell, you can save the dataframe containing the ROC scores. We commented it here so we don't overwrite the file with all the issue months with a file that only contains a few issue months. 
+# By running the next cell, you can save the dataframe containing the ROC scores. We commented it here so we don't overwrite the file with all the issue months with a file that only contains a few issue months.
 
 
 fbf_roc.to_csv(
-   f"{params.data_path}/data/{params.iso}/auc/fbf.districts.roc.{params.index}.{params.calibration_year}.csv",
-   index=False,
+    f"{params.data_path}/data/{params.iso}/auc/fbf.districts.roc.{params.index}.{params.calibration_year}.csv",
+    index=False,
 )
 
 # Now we can read this dataframe locally to visualize the ROC scores.
@@ -178,17 +177,17 @@ roc = pd.read_csv(
 )
 
 # +
-display(
+display(  # noqa: F821
     md(
         f"This roc file shows {round(100 * roc.BC.sum() / len(roc), 1)} % of bias-corrected values."
     )
 )
-display(roc)
+display(roc)  # noqa: F821
 
 # Filter to include only 'AUC_best' scores and pivot the table
-roc_pivot = roc.loc[(roc.district.isin(params.districts)) & (roc.category.isin(['Moderate']))].pivot_table(
-    values="AUC_best", index="Index", columns="district"
-)
+roc_pivot = roc.loc[
+    (roc.district.isin(params.districts)) & (roc.category.isin(["Moderate"]))
+].pivot_table(values="AUC_best", index="Index", columns="district")
 
 # Plot the heatmap
 plt.figure(figsize=(10, 8))
@@ -206,24 +205,18 @@ plt.show()
 # Let's first define the vulnerability. We will run (if needed for at least one district) the triggers selection for two vulnerability levels: General Triggers & Non-Regret (or Emergency) Triggers.
 
 
-vulnerability = "NRT"  # "GT"
+params.load_vulnerability_requirements("GT")  # "NRT", "TBD"
 
 
-run_triggers_selection(
-    params, vulnerability
-)
+run_triggers_selection(params)
 
-
-# Please have a look at the triggers dataset before any filtering by lead time / window.
-
-xr.open_zarr(f"{params.data_path}/data/{params.iso}/triggers/triggers_{params.index}_{params.calibration_year}_{vulnerability}.zarr")
 
 # Then, we keep the best pair for each lead time and the 4 best pairs of triggers per window of activation (in terms of Hit Rate first, and Failure Rate then).
 
 # The triggers dataframe has been saved here: `"data/{iso}/triggers/triggers.aa.python.{index}.{calibration_year}.{vulnerability}.csv"`
 
 triggers = pd.read_csv(
-    f"{params.data_path}/data/{params.iso}/triggers/triggers.{params.index}.{params.calibration_year}.{vulnerability }.csv",
+    f"{params.data_path}/data/{params.iso}/triggers/triggers.{params.index}.{params.calibration_year}.{params.vulnerability}.csv",
 )
 triggers
 
@@ -232,7 +225,7 @@ triggers
 
 # Now, you are done with the processing of one index (SPI or DRYSPELL). So you can rerun everything from the beginning with the other index. If you've already done it, you can run the next cell so it will merge all the different outputs to provide you with the very final dataframe that will be used operationally.
 
-# The next cells merge SPI and DRYSPELL for each vulnerability level. So SPI is taken first, and if no SPI is available DRYSPELL is included. 
+# The next cells merge SPI and DRYSPELL for each vulnerability level. So SPI is taken first, and if no SPI is available DRYSPELL is included.
 
 # Read all GT csvs
 if os.path.exists(
@@ -288,7 +281,7 @@ if os.path.exists(
         index=False,
     )
 
-# Now we read dataframes for both vulnerability levels if they exist and merge them according to the vulnerability defined for each district in the config file. 
+# Now we read dataframes for both vulnerability levels if they exist and merge them according to the vulnerability defined for each district in the config file.
 
 # Read GT and NRT dataframes
 if os.path.exists(
@@ -327,18 +320,18 @@ for d, v in params.districts_vulnerability.items():
 
 # Save final triggers file
 triggers_full.to_csv(
-    f"{params.data_path}/data/{params.iso}/triggers/triggers.spi.dryspell.{params.calibration_year}.pilots.csv",
+    f"{params.data_path}/data/{params.iso}/triggers/triggers.final.{params.monitoring_year}.pilots.csv",
     index=False,
 )
 
 
-triggers_full #.loc[triggers_full.issue_ready == 6]
+triggers_full  # .loc[triggers_full.issue_ready == 6]
 
 # ### Visualize coverage
 
-
-columns = ["W1-Mild", "W1-Moderate", "W1-Severe", "W2-Mild", "W2-Moderate", "W2-Severe"]
-#columns = ["W1-Normal", "W2-Normal"]
+columns = None
+# columns = ["W1-Mild", "W1-Moderate", "W1-Severe", "W2-Mild", "W2-Moderate", "W2-Severe"]
+# columns = ["W1-Normal", "W2-Normal"]
 get_coverage(triggers_full, triggers_full["district"].sort_values().unique(), columns)
 
 
@@ -346,4 +339,4 @@ get_coverage(triggers_full, triggers_full["district"].sort_values().unique(), co
 
 # Please find the final dataframe here!
 #
-# `data/{iso}/triggers/triggers.spi.dryspell.{params.year}.csv`
+# `data/{iso}/triggers/triggers.final.{monitoring_year}.pilots.csv`

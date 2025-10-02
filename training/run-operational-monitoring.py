@@ -6,11 +6,11 @@
 #       extension: .py
 #       format_name: light
 #       format_version: '1.5'
-#       jupytext_version: 1.16.2
+#       jupytext_version: 1.17.1
 #   kernelspec:
-#     display_name: aa-env
+#     display_name: Python (Pixi)
 #     language: python
-#     name: python3
+#     name: pixi-kernel-python3
 # ---
 
 # ## Run AA operational monitoring script
@@ -23,33 +23,42 @@
 
 # **Import required libraries and functions**
 
-# %cd ..
-
 # +
 import os
-import pandas as pd
 
+import pandas as pd
+from hip.analysis.analyses.drought import get_accumulation_periods
+from hip.analysis.aoi.analysis_area import AnalysisArea
+
+from AA.helper_fns import read_forecasts, read_observations, read_triggers
+from AA.operational import run_full_index_pipeline
 from config.params import Params
 
-from AA.helper_fns import read_observations, read_forecasts
-from AA.operational import run_full_index_pipeline
-
-from hip.analysis.aoi.analysis_area import AnalysisArea
-from hip.analysis.analyses.drought import get_accumulation_periods
+if os.getcwd().split("\\")[-1] != "anticipatory-action":
+    os.chdir("..")
+os.getcwd()
 # -
 
 # **First, please define the country ISO code, the issue month and the index of interest**
 
 
-country = "MOZ"
-issue = 5
+country = "ISO" # Replace with the ISO code of the country you want to run the monitoring for
+issue = 6
 index = "SPI"  # 'SPI' or 'DRYSPELL'
+data_path = "."  # anticipatory-action directory
+output_path = "."
 
 
 # Now, we will configure some parameters. Please feel free to edit the `{country}_config.yaml` file if you need to change the *monitoring_year* or any other relevant parameter.
 
 
-params = Params(iso=country, issue=issue, index=index)
+params = Params(
+    iso=country,
+    issue=issue,
+    index=index,
+    data_path=data_path,
+    output_path=output_path,
+)
 
 
 # ### Read data
@@ -95,7 +104,6 @@ forecasts = read_forecasts(
     area,
     issue,
     f"{params.data_path}/data/{params.iso}/zarr/2022/{str(issue).zfill(2)}/forecasts.zarr",
-    update=False,  # True,
 )
 forecasts
 
@@ -104,22 +112,16 @@ forecasts.isel(ensemble=0).mean("time").hip.viz.map(
 )
 
 
-# Now that we got all the data we need, let's read the triggers file so we can merge the probabilities with it once we have them. This triggers file corresponds to the output of the `run-full-verification` notebook if we're in May. Then, we read the merged dataframe that already contains the probabilities from the previous months so we add the new probabilities to the existing merged dataframe.
+# Now that we got all the data we need, let's read the triggers file so we can merge the probabilities with it once we have them. This triggers file corresponds to the output of the `run-full-verification` notebook if we're in the first monitoring month. Then, we read the merged dataframe that already contains the probabilities from the previous months so we add the new probabilities to the existing merged dataframe.
 #
 # **Note:**
 #
-# This means that if you want to re-run the probabilities for May, you should delete or move the existing probabilities dataframes from the probs directory.
+# This means that if you want to re-run the probabilities for the first monitoring month (e.g. May, June or July), you should delete or move the existing probabilities dataframes from the probs directory.
 
 
 # Read triggers file
-if os.path.exists(f"{params.data_path}/data/{params.iso}/probs/aa_probabilities_triggers_pilots.csv"):
-    triggers_df = pd.read_csv(
-        f"{params.data_path}/data/{params.iso}/probs/aa_probabilities_triggers_pilots.csv",
-    )
-else:
-    triggers_df = pd.read_csv(
-        f"{params.data_path}/data/{params.iso}/triggers/triggers.spi.dryspell.{params.calibration_year}.pilots.csv",
-    )
+triggers_df = read_triggers(params)
+triggers_df
 
 
 # ### Run forecasts processing
@@ -148,7 +150,7 @@ probs_merged_dataframes = [
         observations,
         params,
         triggers_df,
-        gdf,
+        area,
         period_name,
         period_months,
     )

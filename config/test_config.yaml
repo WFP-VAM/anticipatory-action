@@ -2,21 +2,18 @@
 issue_months:
   - "06"
   - "07"
-  - "08"
-  - "09"
-  - "10"
-  - "11"
-  - "12"
-  - "01"
 
 # First year of season to monitor operationally (e.g. 2024 for 2024/2025 season)
-monitoring_year: 2025
+monitoring_year: 2024
 
 # Last year of calibration period used for triggers selection (e.g. 2022 for 1981-2022)
 calibration_year: 2022
 
+# Month from which the monitoring starts (e.g. 5 if the first predictions are produced in May)
+start_monitoring: 5
+
 # Minimum length of indicator periods (ON, NDJ, JFMA...)
-min_index_period: 3
+min_index_period: 2
 
 # Maximum length of indicator periods (ON, NDJ, JFMA...)
 max_index_period: 3
@@ -41,37 +38,28 @@ intensity_thresholds:
   Severe: -1
   Moderate: -0.85
   Mild: -0.68
-  Normal: -0.44
-  
 
 # Vulnerability class of triggers for each district: general or non-regret (GT or NRT)
 districts_vulnerability: 
-  Kasungu: "TBD"
-  Machinga: "TBD"
-  Mangochi: "TBD"
-  Mulanje: "TBD"
-  Nsanje: "TBD"
-  Phalombe: "TBD"
-  Zomba: "TBD"
-  
+  Caia: "NRT"
 
 # Tolerance for thresholds for each category, used to compute false alarm with tolerance
 tolerance:
   Normal: 0
-  Mild: -0.44
-  Moderate: -0.68
-  Severe: -0.85
+  Mild: 0
+  Moderate: -0.44
+  Severe: -0.68
 
 # Skill requirements for General Triggers
 general_t:
-  HR: 0.5  # W/out exceptions: HR=0.55
-  SR: 0.55
-  FR: 0.45
+  HR: 0.5
+  SR: 0.65
+  FR: 0.35
   RP: 4.0
 
 # Skill requirements for Non Regret Triggers
 non_regret_t:
-  HR: 0.5  # W/out exceptions: HR=0.70
+  HR: 0.5  # W/out exceptions: HR=0.65
   SR: 0.55
   FR: 0.45
   RP: 3.0
@@ -79,8 +67,27 @@ non_regret_t:
 # Window definitions for SPI and DRYSPELL indicators
 windows:
   spi:
-    window1: ["OND", "NDJ"]
-    window2: ["DJF", "JFM"]
-  dryspell:
-    window1: []
-    window2: ["DJ", "JF", "FM"]
+    window1:
+      Cabo_Delgado: ["DJ"]
+      Gaza: ["ON", "OND", "ND", "NDJ", "DJ"]
+      Inhambane: ["ON", "OND", "ND", "NDJ", "DJ"]
+      Manica: ["ND", "NDJ", "DJ"]
+      Maputo: ["ON", "OND", "ND", "NDJ", "DJ"]
+      Maputo City: ["ON", "OND", "ND", "NDJ", "DJ"]
+      Nampula: ["DJ"]
+      Niassa: ["DJ"]
+      Sofala: ["ND", "NDJ", "DJ"]
+      Tete: ["ND", "NDJ", "DJ"]
+      Zambezia: ["ND", "NDJ", "DJ"]
+    window2:
+      Cabo_Delgado: []
+      Gaza: []
+      Inhambane: []
+      Manica: []
+      Maputo: []
+      Maputo City: []
+      Nampula: []
+      Niassa: []
+      Sofala: []
+      Tete: []
+      Zambezia: []
