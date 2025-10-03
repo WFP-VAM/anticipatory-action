@@ -5,24 +5,30 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.1
+#       jupytext_version: 1.17.1
 #   kernelspec:
-#     display_name: hdc
+#     display_name: Python (Pixi)
 #     language: python
-#     name: conda-env-hdc-py
+#     name: pixi-kernel-python3
 # ---
+
+# %% [markdown]
+# ### Split forecasts into individual netcdf files
+# This will prevent memory errors in the following scripts
 
 # %%
 import xarray as xr
 import os
 from tqdm import tqdm
+from pathlib import Path
 
 # %%
 country = 'mozambique'  # define country of interest
 
 # %%
-input_dir = f"/s3/scratch/jamie.towner/flood_aa/{country}/data/forecasts/glofas_reforecasts/stations"
-output_dir = f"/s3/scratch/jamie.towner/flood_aa/{country}/data/forecasts/glofas_reforecasts"
+directory = Path(r"C:\Users\15133\Documents\WFP\flood_hazard\flood_aa\MOZ_training")  # define main working directory
+input_dir = directory / "data/forecasts/glofas_reforecasts/stations"
+output_dir = directory / "data/forecasts/glofas_reforecasts"
 os.makedirs(output_dir, exist_ok=True)
 
 # %%

@@ -11,6 +11,7 @@ import pandas as pd
 import os
 import glob
 import numpy as np
+from pathlib import Path
 
 # %% [markdown]
 # Section 1: Define variables, paths and read in data 
@@ -19,37 +20,42 @@ import numpy as np
 
 # %%
 country = 'mozambique'  # define country of interest
-directory = '/s3/scratch/jamie.towner/flood_aa'  # define main working directory
+#directory = Path(f'/s3/scratch/jamie.towner/flood_aa/{country}')
+directory = Path(r"C:\Users\15133\Documents\WFP\flood_hazard\flood_aa\MOZ_training")  # define main working directory
 benchmark = 'observations'  # choose 'observations' or 'glofas_reanalysis' as the benchmark
 
 # define paths to data
-forecast_data_directory = os.path.join(directory, country, "data/forecasts/glofas_reforecasts")
-metadata_directory = os.path.join(directory, country, "data/metadata")
-output_directory = os.path.join(directory, country, "outputs/triggers")
+forecast_data_directory = directory / "data/forecasts/glofas_reforecasts"
+metadata_directory = directory / "data/metadata"
+output_directory = directory / "outputs/triggers"
 
 # create output directory if it does not exist
 os.makedirs(output_directory, exist_ok=True)
 
 # set observed data and metadata directory and filenames based on benchmark choice
 if benchmark == 'observations':
-    observed_data_directory = os.path.join(directory, country, "data/observations/gauging_stations/all_stations")
+    observed_data_directory = directory / "data/observations/gauging_stations/all_stations"
     observed_data_file = "observations.csv"
     station_info_file = "metadata_observations.csv"
 elif benchmark == 'glofas_reanalysis':
-    observed_data_directory = os.path.join(directory, country, "data/forecasts/glofas_reanalysis/all_stations")
+    observed_data_directory = directory / "data/forecasts/glofas_reanalysis/all_stations"
     observed_data_file = "glofas_reanalysis.csv"
     station_info_file = 'metadata_glofas_reanalysis.csv'
 else:
     raise ValueError("invalid benchmark choice. choose 'observations' or 'glofas_reanalysis'.")
 
 # load the observed or reanalysis data and gauging stations metadata
-observed_data_path = os.path.join(observed_data_directory, observed_data_file)
-station_info_path = os.path.join(metadata_directory, station_info_file)
+observed_data_path = observed_data_directory / observed_data_file
+station_info_path = metadata_directory / station_info_file
 
 observed_data = pd.read_csv(observed_data_path)
 station_info = pd.read_csv(station_info_path)
 # format station name
 station_info['station name'] = ["".join(c for c in name if c.isalnum() or c in (' ', '_')).replace(' ', '_') for name in station_info['station name']]
+
+# %%
+# select only chokwe station for training
+station_info = station_info[station_info['station name'] == 'Limpopo_em_Chokwe']
 
 # %%
 # check the observed data 
@@ -193,7 +199,7 @@ print("processing complete.")
 events_df.head()
 
 # %%
-events_df.to_csv('events_df.csv')
+events_df.to_csv(output_directory / 'events_df.csv')
 
 
 # %% [markdown]
@@ -356,12 +362,12 @@ combined_df = pd.concat(all_dfs_combine, ignore_index=False)
 combined_df
 
 # %%
-combined_df.to_csv(f'{country}_combined_output.csv', index=True)
+combined_df.to_csv(output_directory / f'{country}_combined_output.csv', index=True)
 
 # %%
 # display an example of one of the grouped_dfs
-example = grouped_dfs['beitbridge','bankfull']
-example
+# example = grouped_dfs['beitbridge','bankfull']
+# example
 
 # %% [markdown]
 # Section 5: Trigger selection 
@@ -438,14 +444,14 @@ print(best_triggers_df)
 
 # Save output as a CSV using country name
 filename = f"{country.lower()}_triggers_2025_2026.csv"
-best_triggers_df.to_csv(os.path.join(output_directory, filename), index=False)
+best_triggers_df.to_csv(output_directory / filename, index=False)
 
 # %%
 best_triggers_df.loc[best_triggers_df.groupby(['station','threshold'])['f1_score'].idxmax()]
 
 # %%
 best_triggers_df_lead= best_triggers_df.loc[best_triggers_df.groupby(['station','threshold'])['f1_score'].idxmax()]
-best_triggers_df_lead.to_csv(f'{country}_best_triggers.csv')
+best_triggers_df_lead.to_csv(output_directory / f'{country}_best_triggers.csv')
 
 # %% [markdown]
 # ## calculate # of exceedances of each threshold

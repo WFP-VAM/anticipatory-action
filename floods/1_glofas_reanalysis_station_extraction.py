@@ -5,11 +5,11 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.1
+#       jupytext_version: 1.17.1
 #   kernelspec:
-#     display_name: hdc
+#     display_name: Python (Pixi)
 #     language: python
-#     name: conda-env-hdc-py
+#     name: pixi-kernel-python3
 # ---
 
 # %% [markdown]
@@ -23,43 +23,50 @@ import numpy as np
 import pandas as pd
 import os
 from tqdm import tqdm
+from pathlib import Path
 
 # %%
 country = 'mozambique'  # define country of interest
-directory = '/s3/scratch/jamie.towner/flood_aa'  # define main working directory
+#directory = Path(f'/s3/scratch/jamie.towner/flood_aa/{country}')  # define main working directory
+directory = Path(r"C:\Users\15133\Documents\WFP\flood_hazard\flood_aa\MOZ_training")  # define main working directory
 
 # %%
 # Set up the S3 path for the Zarr files
-store = f"s3://wfp-seasmon/input/cds/glofas-historical/saf/01/*.zarr"
+# store = f"s3://wfp-seasmon/input/cds/glofas-historical/saf/01/*.zarr"
 
-# Set up connection to s3 store
-s3 = s3fs.S3FileSystem.current()
+# # Set up connection to s3 store
+# s3 = s3fs.S3FileSystem.current()
 
-# Fetch list of .zarr stores (files)
-remote_files = s3.glob(store)
-store = [
-    s3fs.S3Map(root=f"s3://{file}", s3=s3, check=False) for file in remote_files
-]
+# # Fetch list of .zarr stores (files)
+# remote_files = s3.glob(store)
+# store = [
+#     s3fs.S3Map(root=f"s3://{file}", s3=s3, check=False) for file in remote_files
+# ]
+
+
+
+# %%
+store = list(Path.glob(directory / "data/forecasts/glofas_reanalysis/", "*.zarr"))
 
 # %%
 # Load the CSV file containing station information (i.e., station name, lat, lon)
 # define paths to data
-metadata_directory = os.path.join(directory, country, "data/metadata")
-station_info_file = "metadata_observations.csv"
-station_info_path = os.path.join(metadata_directory, station_info_file)
-station_info = pd.read_csv(station_info_path)
+station_info = pd.read_csv(directory / "data/metadata/metadata_observations.csv")
 
 # Create the output directory if it doesn't exist
-out_dir = os.path.join(directory, country, "data/forecasts/glofas_reanalysis")
-if not os.path.exists(out_dir):
-    os.makedirs(out_dir)
+out_dir = directory / "data/forecasts/glofas_reanalysis"
+Path(out_dir).mkdir(parents=True, exist_ok=True)
 
+# select only chokwe station for training
+station_info = station_info[station_info['station name'] == 'Limpopo_em_Chokwe']
+
+# %%
 # Initialize a dictionary to store data for each station
 station_data = {}
 
 # Initialize tqdm with the total number of iterations to track progress
-total_iterations = len(remote_files) * len(station_info)
-pbar = tqdm(total=total_iterations, desc="Extracting Data")
+# total_iterations = len(remote_files) * len(station_info)
+# pbar = tqdm(total=total_iterations, desc="Extracting Data")
 
 # Open multiple .zarr files with dask and xarray, setting chunk configuration
 with dask.config.set(**{"array.slicing.split_large_chunks": True}):
@@ -101,10 +108,10 @@ with dask.config.set(**{"array.slicing.split_large_chunks": True}):
             # Merge with the existing data for the same station
             station_data[point_name] = pd.concat([station_data[point_name], extracted_df])
         
-        pbar.update(len(remote_files))  # Update tqdm progress by number of files processed
+        #pbar.update(len(remote_files))  # Update tqdm progress by number of files processed
 
 # Close the tqdm progress bar
-pbar.close()
+#pbar.close()
 
 # Save extracted data for each station to CSV files
 for station, data in station_data.items():
@@ -135,7 +142,7 @@ df_all[df_all.index>='01/01/2003'].to_csv(csv_file_name)
 # ### get correlation of observed data with glofas
 
 # %%
-df_obs = pd.read_csv('/s3/scratch/jamie.towner/flood_aa/mozambique/data/observations/gauging_stations/all_stations/observations_newstations.csv')
+df_obs = pd.read_csv(directory / 'data/observations/gauging_stations/all_stations/observations.csv')
 df_obs = df_obs.rename(columns={'Unnamed: 0':'date'})
 df_obs["date"] = pd.to_datetime(df_obs["date"], format='mixed')
 df_obs = df_obs.set_index('date')

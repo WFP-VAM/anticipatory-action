@@ -5,11 +5,11 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.1
+#       jupytext_version: 1.17.1
 #   kernelspec:
-#     display_name: hdc
+#     display_name: Python (Pixi)
 #     language: python
-#     name: conda-env-hdc-py
+#     name: pixi-kernel-python3
 # ---
 
 # %% [markdown]
@@ -19,25 +19,30 @@
 import s3fs
 import dask
 import xarray as xr
+import numpy as np
 import pandas as pd
 import os
 from tqdm import tqdm
 from hip.analysis.compute.utils import persist_with_progress_bar
+from pathlib import Path
 
 # %%
 country = 'mozambique'  # define country of interest
-directory = '/s3/scratch/jamie.towner/flood_aa'  # define main working directory
+#directory = Path(f'/s3/scratch/jamie.towner/flood_aa/{country}')  # define main working directory
+directory = Path(r"C:\Users\15133\Documents\WFP\flood_hazard\flood_aa\MOZ_training")  # define main working directory
 
 # %%
-# Set up the S3 path for the Zarr files
-store = f"s3://wfp-seasmon/input/cds/glofas-reforecast/saf/*/*.zarr"
+# # Set up the S3 path for the Zarr files
+# store = f"s3://wfp-seasmon/input/cds/glofas-reforecast/saf/*/*.zarr"
 
-# Set up connection to s3 store
-s3 = s3fs.S3FileSystem.current()
+# # Set up connection to s3 store
+# s3 = s3fs.S3FileSystem.current()
 
-# Define mapper object for multiple files
-remote_files = s3.glob(store)
-store = [s3fs.S3Map(root=f"s3://{file}", s3=s3, check=False) for file in remote_files]
+# # Define mapper object for multiple files
+# remote_files = s3.glob(store)
+# store = [s3fs.S3Map(root=f"s3://{file}", s3=s3, check=False) for file in remote_files]
+
+store = list(Path.glob(directory / "data/forecasts/glofas_reforecasts/", "*.zarr"))
 
 # Configure dask to avoid creating large chunks and open the dataset
 with dask.config.set(**{"array.slicing.split_large_chunks": True}):
@@ -46,15 +51,14 @@ with dask.config.set(**{"array.slicing.split_large_chunks": True}):
 # %%
 # Load the CSV file containing station information (i.e., station name, lat, lon)
 # define paths to data
-metadata_directory = os.path.join(directory, country, "data/metadata")
-station_info_file = "metadata_observations.csv"
-station_info_path = os.path.join(metadata_directory, station_info_file)
-station_info = pd.read_csv(station_info_path)
+station_info = pd.read_csv(directory / "data/metadata/metadata_observations.csv")
+
+# select only chokwe station for training
+station_info = station_info[station_info['station name'] == 'Limpopo_em_Chokwe']
 
 # Define the output directory
-out_dir = os.path.join(directory, country, "data/forecasts/glofas_reforecasts/stations")
-if not os.path.exists(out_dir):
-    os.makedirs(out_dir)
+out_dir = directory / "data/forecasts/glofas_reforecasts/stations"
+Path(out_dir).mkdir(parents=True, exist_ok=True)
 
 # %%
 # Initialize tqdm progress bar

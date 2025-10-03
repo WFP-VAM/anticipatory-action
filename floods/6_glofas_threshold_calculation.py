@@ -5,11 +5,11 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.1
+#       jupytext_version: 1.17.1
 #   kernelspec:
-#     display_name: hdc
+#     display_name: Python (Pixi)
 #     language: python
-#     name: conda-env-hdc-py
+#     name: pixi-kernel-python3
 # ---
 
 # %% [markdown]
@@ -21,33 +21,40 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 import os
+from pathlib import Path
 
 # %%
 # define country and directory
 country = 'mozambique'
-directory = '/s3/scratch/jamie.towner/flood_aa'
+#directory = Path(f'/s3/scratch/jamie.towner/flood_aa/{country}')
+directory = Path(r"C:\Users\15133\Documents\WFP\flood_hazard\flood_aa\MOZ_training")  # define main working directory
 
-output_directory = os.path.join(directory, country, "outputs/thresholds")
-os.makedirs(output_directory, exist_ok=True)  # create directory if it does not already exist 
+
+output_directory = directory / "outputs/thresholds"
+Path(output_directory).mkdir(parents=True, exist_ok=True)  # create directory if it does not already exist 
 
 # %%
 # define paths to data
-metadata_directory = os.path.join(directory, country, "data/metadata")
-observed_data_directory = os.path.join(directory, country, "data/observations/gauging_stations/all_stations")
-reanalysis_data_directory = os.path.join(directory, country, "data/forecasts/glofas_reanalysis/all_stations")
+metadata_directory = directory / "data/metadata"
+observed_data_directory = directory / "data/observations/gauging_stations/all_stations"
+reanalysis_data_directory = directory / "data/forecasts/glofas_reanalysis/all_stations"
 
 observed_data_file = "observations_complete_series.csv"
 reanalysis_data_file = "glofas_reanalysis_complete_series.csv"
 station_info_file = "metadata_observations.csv"
 
 # load data
-observed_data_path = os.path.join(observed_data_directory, observed_data_file)
-reanalysis_data_path = os.path.join(reanalysis_data_directory, reanalysis_data_file)
-station_info_path = os.path.join(metadata_directory, station_info_file)
+observed_data_path = observed_data_directory / observed_data_file
+reanalysis_data_path = reanalysis_data_directory / reanalysis_data_file
+station_info_path = metadata_directory / station_info_file
 
 observed_data = pd.read_csv(observed_data_path)
 reanalysis_data = pd.read_csv(reanalysis_data_path)
 station_info = pd.read_csv(station_info_path)
+
+# %%
+# select only chokwe station for training
+station_info = station_info[station_info['station name'] == 'Limpopo_em_Chokwe']
 
 # %%
 # convert date columns to datetime

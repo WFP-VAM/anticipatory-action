@@ -5,11 +5,11 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.1
+#       jupytext_version: 1.17.1
 #   kernelspec:
-#     display_name: hdc
+#     display_name: Python (Pixi)
 #     language: python
-#     name: conda-env-hdc-py
+#     name: pixi-kernel-python3
 # ---
 
 # %% [markdown]
@@ -21,21 +21,23 @@ import pandas as pd
 import numpy as np
 from scipy.stats import genextreme
 import os
+from pathlib import Path
 
 # %%
 # define country and directory
-country = 'zimbabwe'
-directory = '/s3/scratch/jamie.towner/flood_aa'   
-output_directory = os.path.join(directory, country, "outputs/thresholds")
-os.makedirs(output_directory, exist_ok=True)  # create directory if it does not already exist 
+country = 'mozambique'
+#directory = Path(f'/s3/scratch/jamie.towner/flood_aa/{country}')
+directory = Path(r"C:\Users\15133\Documents\WFP\flood_hazard\flood_aa\MOZ_training")  # define main working directory
+output_directory = directory / "outputs/thresholds"
+Path(output_directory).mkdir(parents=True, exist_ok=True)  # create directory if it does not already exist 
 
 # %%
 # define paths to data
-observed_data_directory = os.path.join(directory, country, "data/observations/gauging_stations/all_stations")
+observed_data_directory = directory / "data/observations/gauging_stations/all_stations"
 observed_data_file = "observations_complete_series.csv" # use observations.csv for 2003-2023 period
 
 # load data
-observed_data_path = os.path.join(observed_data_directory, observed_data_file)
+observed_data_path = directory / observed_data_directory /observed_data_file
 observed_data = pd.read_csv(observed_data_path)
 
 # %%
@@ -44,7 +46,7 @@ observed_data["date"] = pd.to_datetime(observed_data["date"], format='mixed')
 
 # %%
 # check data
-observed_data
+observed_data.head()
 
 
 # %%
@@ -104,3 +106,5 @@ return_periods_df
 # %%
 # save output as a csv 
 return_periods_df.to_csv(os.path.join(output_directory, "observed_return_periods_complete_series.csv"), index=True)
+
+# %%

@@ -5,11 +5,11 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.1
+#       jupytext_version: 1.17.1
 #   kernelspec:
-#     display_name: hdc
+#     display_name: Python (Pixi)
 #     language: python
-#     name: conda-env-hdc-py
+#     name: pixi-kernel-python3
 # ---
 
 # %% [markdown]
@@ -48,12 +48,11 @@ import geoviews.feature as gf
 # ## step 1: read and map station locations
 
 # %%
-# %pip install openpyxl
-
-# %%
 country = 'mozambique'  # define country of interest
-directory = Path(f'/s3/scratch/jamie.towner/flood_aa/{country}/data/observations')  # define main working directory
-station_info = pd.read_excel(directory / "raw_data/Limpopo_e_Zambeze/Limpopo/LIMPOPO_Cadastro.xlsx")
+# directory = Path(f'/s3/scratch/jamie.towner/flood_aa/{country}/data/observations')  # define main working directory
+# station_info = pd.read_excel(directory / "raw_data/Limpopo_e_Zambeze/Limpopo/LIMPOPO_Cadastro.xlsx")
+directory = Path(r"C:\Users\15133\Documents\WFP\flood_hazard\flood_aa\MOZ_training\data")  # define main working directory
+station_info = pd.read_excel(directory / r"observations\raw_data\Limpopo_e_Zambeze\Limpopo\LIMPOPO_Cadastro.xlsx")
 station_info.head()
 
 # %% [markdown]
@@ -71,6 +70,13 @@ station_info['lon'] = dms_lon['d'] + dms_lon['m'].div(60) + dms_lon['s'].div(360
 
 station_info.head()
 
+# %%
+# Remove leading/trailing whitespace from metadata station names
+station_info['Localidade'] = [
+    "".join(c for c in name if c.isalnum() or c in (' ', '_')).replace(' ', '_') for name in station_info['Localidade']
+]
+station_info.head()
+
 # %% [markdown]
 # #### plot station locations
 
@@ -79,7 +85,8 @@ gdf = gpd.GeoDataFrame(
     station_info, geometry=gpd.points_from_xy(station_info.lon, station_info.lat), crs="EPSG:4326"
 )
 
-adm = gpd.read_file('/s3/scratch/public-share/CDI/boundaries/global_adm2_27082024.shp')
+# adm = gpd.read_file('/s3/scratch/public-share/CDI/boundaries/global_adm2_27082024.shp')
+adm = gpd.read_file(directory / r'metadata\MOZ_adm2.shp')
 adm = adm[adm['iso3']=='MOZ']
 
 # %%
@@ -136,7 +143,8 @@ def format_streamflow(df,start_month,end_month, date_column, station_id_column, 
 
 
 # %%
-xl = pd.read_excel(directory / "raw_data/Limpopo_e_Zambeze/Limpopo/LIMPOPO_NIVEL_HIDROMETRICO.xlsx", sheet_name=None)
+# xl = pd.read_excel(directory / "raw_data/Limpopo_e_Zambeze/Limpopo/LIMPOPO_NIVEL_HIDROMETRICO.xlsx", sheet_name=None)
+xl = pd.read_excel(directory / "observations/raw_data/Limpopo_e_Zambeze/Limpopo/LIMPOPO_NIVEL_HIDROMETRICO.xlsx", sheet_name=None)
 df = pd.concat(xl)
 df_l_1, completeness_l_1 = format_streamflow(df,start_month,end_month, date_column, station_id_column, value_column)
 
@@ -144,9 +152,15 @@ df_l_1, completeness_l_1 = format_streamflow(df,start_month,end_month, date_colu
 df_l_1.head()
 
 # %%
+# replace station id with names
+df_l_1.columns = [station_info[station_info['NrEstacao']==c]['Localidade'].item() for c in df_l_1.columns]
+
+# %%
 # save observed data to CSV
-path_csv_full = directory / 'gauging_stations/all_stations/observations_complete_series.csv'
-path_csv_2003_2023 = directory / 'gauging_stations/all_stations/observations.csv'
+# path_csv_full = directory / 'gauging_stations/all_stations/observations_complete_series.csv'
+# path_csv_2003_2023 = directory / 'gauging_stations/all_stations/observations.csv'
+path_csv_full = directory / 'observations/gauging_stations/all_stations/observations_complete_series.csv'
+path_csv_2003_2023 = directory / 'observations/gauging_stations/all_stations/observations.csv'
 if Path.exists(path_csv_full):
     print('Station observations file exists. Change file path to save or append to existing csv instead.')
 else:
@@ -164,28 +178,33 @@ completeness_l_1
 # ## visualize station locations compared to GloFAS grid
 
 # %%
-# Set up the S3 path for the Zarr files
-store = f"s3://wfp-seasmon/input/cds/glofas-historical/saf/01/*.zarr"
+# # Set up the S3 path for the Zarr files
+# store = f"s3://wfp-seasmon/input/cds/glofas-historical/saf/01/*.zarr"
 
-# Set up connection to s3 store
-s3 = s3fs.S3FileSystem.current()
+# # Set up connection to s3 store
+# s3 = s3fs.S3FileSystem.current()
 
-# Fetch list of .zarr stores (files)
-remote_files = s3.glob(store)
-store = [
-    s3fs.S3Map(root=f"s3://{file}", s3=s3, check=False) for file in remote_files
-]
-with dask.config.set(**{"array.slicing.split_large_chunks": True}):
-    ds = xr.open_mfdataset(
-        store,
-        decode_coords="all",
-        engine="zarr",
-        parallel=True,  # Enable parallel processing for speed-up
-        combine="by_coords"
-    )
+# # Fetch list of .zarr stores (files)
+# remote_files = s3.glob(store)
+# store = [
+#     s3fs.S3Map(root=f"s3://{file}", s3=s3, check=False) for file in remote_files
+# ]
+# with dask.config.set(**{"array.slicing.split_large_chunks": True}):
+#     ds = xr.open_mfdataset(
+#         store,
+#         decode_coords="all",
+#         engine="zarr",
+#         parallel=True,  # Enable parallel processing for speed-up
+#         combine="by_coords"
+#     )
+
+# # get average glofas streamflow from the past year
+# ds_sel = persist_with_progress_bar(ds.isel(time=slice(-365,-1)).mean(dim='time')['dis24'])
 
 # %%
-# get average glofas streamflow from the past year
+# read in GloFAS reanalysis data from 2023
+ds = xr.open_dataset(directory / 'forecasts/glofas_reanalysis/glofas_reanalysis_2023.nc')
+# get average glofas streamflow over the year
 ds_sel = persist_with_progress_bar(ds.isel(time=slice(-365,-1)).mean(dim='time')['dis24'])
 
 # %% [markdown]
