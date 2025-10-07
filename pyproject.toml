@@ -24,6 +24,7 @@ hip-analysis = ">=0.13.4"
 numpy = "<2.0"
 xclim = "0.53.1.*"
 openpyxl = ">=3.1.5,<4"
+cfgrib = ">=0.9.15.1,<0.10"
 
 [tool.pixi.environments]
 test = { features = ["test"], solve-group = "prod" }
