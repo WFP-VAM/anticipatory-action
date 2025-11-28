@@ -17,7 +17,7 @@ monitoring_year: 2025
 calibration_year: 2022
 
 # Minimum length of indicator periods (ON, NDJ, JFMA...)
-min_index_period: 3
+min_index_period: 2
 
 # Maximum length of indicator periods (ON, NDJ, JFMA...)
 max_index_period: 3
@@ -83,7 +83,6 @@ districts_vulnerability:
     Chilanga: "TBD"
     Vubwi: "TBD"
     Shibuyunji: "TBD"
-    # Lusaka: "TBD"
     Chibombo: "TBD"
     Kabwe: "TBD"
     Mumbwa: "TBD"
@@ -103,6 +102,18 @@ districts_vulnerability:
     Kalabo: "TBD"
     Kaoma: "TBD"
     Lukulu: "TBD"
+    Mwinilunga: "TBD"
+    Solwezi: "TBD"
+    Chavuma: "TBD"
+    Kitwe: "TBD"
+    Ndola: "TBD"
+    Petauke: "TBD"
+    Lundazi: "TBD"
+    Chinsali: "TBD"
+    Mbala: "TBD"
+    Isoka: "TBD"
+    Nakonde: "TBD"
+    Mafinga: "TBD"
 
 # Tolerance for thresholds for each category, used to compute false alarm with tolerance
 tolerance:
@@ -129,7 +140,7 @@ non_regret_t:
 windows:
   spi:
     window1: ["OND", "NDJ"]
-    window2: ["DJF", "JFM"]
+    window2: ["DJF", "JFM", "DJ", "JF"]
   dryspell:
     window1: []
     window2: ["DJ", "JF", "FM"]
