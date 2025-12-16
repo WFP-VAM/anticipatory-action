@@ -1,0 +1,8 @@
+site_name: Drought Anticipatory Action Analysis Package Docs
+
+theme:
+  name: "material"
+  navigation_depth: 3
+
+nav:
+  - index.md
