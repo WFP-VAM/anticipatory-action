@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: light
 #       format_version: '1.5'
-#       jupytext_version: 1.16.7
+#       jupytext_version: 1.16.1
 #   kernelspec:
 #     display_name: hdc
 #     language: python
@@ -39,6 +39,7 @@ from AA.helper_fns import (
     merge_un_biased_probs,
     read_forecasts,
     read_observations,
+    read_triggers,
 )
 from config.params import Params
 
@@ -73,7 +74,6 @@ forecasts = read_forecasts(
     area,
     params.issue,
     f"{params.data_path}/data/{params.iso}/zarr/2022/{str(params.issue).zfill(2)}/forecasts.zarr",
-    update=False,  # True,
 )
 forecasts
 
@@ -91,17 +91,7 @@ observations
 # Now that we got all the data we need, let's read the triggers file so we can merge the probabilities with it once we have them.
 
 # Read triggers file
-if os.path.exists(
-    f"{params.data_path}/data/{params.iso}/probs/aa_probabilities_triggers_pilots.csv"
-):
-    triggers_df = pd.read_csv(
-        f"{params.data_path}/data/{params.iso}/probs/aa_probabilities_triggers_pilots.csv",
-    )
-else:
-    triggers_df = pd.read_csv(
-        f"{params.data_path}/data/{params.iso}/triggers/triggers.spi.dryspell.{params.calibration_year}.pilots.csv",
-    )
-triggers_df
+triggers_df = read_triggers(params)
 
 # **Get accumulation periods covered by the forecasts of the defined issue month**
 
