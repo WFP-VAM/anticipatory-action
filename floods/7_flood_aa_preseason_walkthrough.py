@@ -211,7 +211,7 @@ events_df.to_csv(output_directory / 'events_df.csv')
 # function to calculate verification metrics 
 def calculate_metrics(df):
     hits, false_alarms, misses, correct_rejections = {}, {}, {}, {}
-    hit_rate, false_alarm_rate, csi, f1_score = {}, {}, {}, {}
+    hit_rate, false_alarm_ratio, csi, f1_score = {}, {}, {}, {}
 
     # loop through all "trigger" columns
     for column in [col for col in df.columns if 'trigger' in col]:
@@ -229,7 +229,7 @@ def calculate_metrics(df):
         total_forecasted_events = hits[column] + false_alarms[column]
 
         hit_rate[column] = hits[column] / total_observed_events if total_observed_events > 0 else 0
-        false_alarm_rate[column] = false_alarms[column] / total_forecasted_events if total_forecasted_events > 0 else 0
+        false_alarm_ratio[column] = false_alarms[column] / total_forecasted_events if total_forecasted_events > 0 else 0
         csi[column] = hits[column] / (hits[column] + false_alarms[column] + misses[column]) if (hits[column] + false_alarms[column] + misses[column]) > 0 else 0
         
         precision = hits[column] / total_forecasted_events if total_forecasted_events > 0 else 0
@@ -243,7 +243,7 @@ def calculate_metrics(df):
         pd.DataFrame(misses, index=['misses']),
         pd.DataFrame(correct_rejections, index=['correct_rejections']),
         pd.DataFrame(hit_rate, index=['hit_rate']),
-        pd.DataFrame(false_alarm_rate, index=['false_alarm_rate']),
+        pd.DataFrame(false_alarm_ratio, index=['false_alarm_ratio']),
         pd.DataFrame(csi, index=['csi']),
         pd.DataFrame(f1_score, index=['f1_score']),
     ])
@@ -410,9 +410,9 @@ for grouped_dfs in all_dfs:
 
                 # if there are still ties, resolve by choosing the lowest false alarm rate
                 if len(best_f1_thresholds) > 1:
-                    false_alarm_rates = df.loc['false_alarm_rate', best_f1_thresholds]
-                    min_false_alarm_rate = false_alarm_rates.min()
-                    best_f1_thresholds = false_alarm_rates[false_alarm_rates == min_false_alarm_rate].index.tolist()
+                    false_alarm_ratios = df.loc['false_alarm_ratio', best_f1_thresholds]
+                    min_false_alarm_ratio = false_alarm_ratios.min()
+                    best_f1_thresholds = false_alarm_ratios[false_alarm_ratios == min_false_alarm_ratio].index.tolist()
 
                     # if there are still ties, choose the lowest trigger (threshold)
                     if len(best_f1_thresholds) > 1:
@@ -434,7 +434,7 @@ for grouped_dfs in all_dfs:
                 'best_trigger': best_threshold,
                 'f1_score': df.loc['f1_score', best_threshold],
                 'hit_rate': df.loc['hit_rate', best_threshold],
-                'false_alarm_rate': df.loc['false_alarm_rate', best_threshold]
+                'false_alarm_ratio': df.loc['false_alarm_ratio', best_threshold]
             }
 
 best_triggers_df = pd.DataFrame(best_triggers.values())
