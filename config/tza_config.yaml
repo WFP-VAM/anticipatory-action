@@ -86,8 +86,8 @@ non_regret_t:
 # Window definitions for SPI and DRYSPELL indicators
 windows:
   spi:
-    window1: ["ON", "OND", "ND", "NDJ"]
-    window2: ["DJ", "DJF", "JF", "JFM", "FM", "FMA"]
+    window1: ["OND", "NDJ"]
+    window2: ["DJF", "JFM", "FMA"]
   dryspell:
     window1: []
-    window2: ["DJ", "JF", "FM"]
+    window2: []

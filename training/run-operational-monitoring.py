@@ -30,9 +30,9 @@ import pandas as pd
 from hip.analysis.analyses.drought import get_accumulation_periods
 from hip.analysis.aoi.analysis_area import AnalysisArea
 
-from AA.helper_fns import read_forecasts, read_observations, read_triggers
 from AA.operational import run_full_index_pipeline
-from config.params import Params
+from AA.src.params import Params
+from AA.src.utils import read_forecasts, read_observations, read_triggers
 
 if os.getcwd().split("\\")[-1] != "anticipatory-action":
     os.chdir("..")
@@ -42,7 +42,9 @@ os.getcwd()
 # **First, please define the country ISO code, the issue month and the index of interest**
 
 
-country = "ISO" # Replace with the ISO code of the country you want to run the monitoring for
+country = (
+    "ISO"  # Replace with the ISO code of the country you want to run the monitoring for
+)
 issue = 6
 index = "SPI"  # 'SPI' or 'DRYSPELL'
 data_path = "."  # anticipatory-action directory

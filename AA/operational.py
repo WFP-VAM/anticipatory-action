@@ -15,7 +15,8 @@ from hip.analysis.analyses.drought import (
 )
 from hip.analysis.aoi.analysis_area import AnalysisArea
 
-from AA.helper_fns import (
+from AA.src.params import S3_OPS_DATA_PATH, Params
+from AA.src.utils import (
     compute_district_average,
     merge_probabilities_triggers_dashboard,
     merge_un_biased_probs,
@@ -23,7 +24,6 @@ from AA.helper_fns import (
     read_observations,
     read_triggers,
 )
-from config.params import S3_OPS_DATA_PATH, Params
 
 logging.basicConfig(level="INFO", force=True)
 
@@ -137,19 +137,18 @@ def run(country, issue, index, data_path, output_path):
     duplicate_cols = list(merged_db.columns.difference(["prob_ready", "prob_set"]))
     duplicates_count = merged_db.duplicated(subset=duplicate_cols).sum()
     if duplicates_count > 0:
-        raise ValueError(f"Data integrity error: {duplicates_count} duplicate rows found in merged trigger data. "
-                        f"This indicates a problem with the trigger merging process.")
+        raise ValueError(
+            f"Data integrity error: {duplicates_count} duplicate rows found in merged trigger data. "
+            f"This indicates a problem with the trigger merging process."
+        )
 
     # Perform left merge to find rows in triggers_df that don't exist in merged_db
     merge_result = triggers_df.merge(
-        merged_db[duplicate_cols], 
-        on=duplicate_cols, 
-        how='left', 
-        indicator=True
+        merged_db[duplicate_cols], on=duplicate_cols, how="left", indicator=True
     )
 
     # Get only rows that exist in triggers_df but not in merged_db
-    new_rows_from_triggers = triggers_df[merge_result['_merge'] == 'left_only']
+    new_rows_from_triggers = triggers_df[merge_result["_merge"] == "left_only"]
 
     # Append the new rows to merged_db
     if not new_rows_from_triggers.empty:

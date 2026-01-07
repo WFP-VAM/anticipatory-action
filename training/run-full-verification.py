@@ -35,9 +35,9 @@ from hip.analysis.aoi.analysis_area import AnalysisArea
 from IPython.display import Markdown as md
 
 from AA.analytical import run_issue_verification
-from AA.helper_fns import get_coverage, read_forecasts, read_observations
+from AA.src.params import Params
+from AA.src.utils import get_coverage, read_forecasts, read_observations
 from AA.triggers import run_triggers_selection
-from config.params import Params
 
 if os.getcwd().split("\\")[-1] != "anticipatory-action":
     os.chdir("..")

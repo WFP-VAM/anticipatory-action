@@ -27,6 +27,7 @@ To install [Pixi](https://pixi.sh/latest/getting_started/), follow the official 
 ```bash
 pixi install --locked
 ```
+
 You can now run any of the scripts:
 
 #### 1. Analytical script
@@ -152,7 +153,19 @@ This will export the necessary credentials as environment variables:
 - AWS_SECRET_ACCESS_KEY
 - AWS_SESSION_TOKEN
 
-#### 3. Run the workflow in Docker
+#### 3. Export the config parameters environment variable
+
+You can provide the configuration via an environment variable instead of mounting a file. Convert your YAML config to JSON using `yq`:
+
+```bash
+export AA_CONFIG_JSON="$(pixi run yq '.' config/{iso}_config.yaml)"
+```
+
+Replace `{iso}` with the ISO3 country code (e.g., tza).
+If `AA_CONFIG_JSON` is not set, the workflow will automatically fall back to reading *./config/{iso}_config.yaml* inside the container.
+
+
+#### 4. Run the workflow in Docker
 
 You can run any module via `docker run`, passing command-line arguments:
 
@@ -162,6 +175,7 @@ docker run --rm \
   -e AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} \
   -e AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} \
   -e AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN} \
+  -e AA_CONFIG_JSON="${AA_CONFIG_JSON}" \
   aa-runner:latest \
   python -m AA.analytical <ISO> <SPI/DRYSPELL> --data-path <DATA_PATH> --output-path <OUTPUT_PATH>
 ```
@@ -172,6 +186,7 @@ docker run --rm \
   -e AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} \
   -e AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} \
   -e AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN} \
+  -e AA_CONFIG_JSON="${AA_CONFIG_JSON}" \
   aa-runner:latest \
   python -m AA.triggers <ISO> <SPI/DRYSPELL> <VULNERABILITY> --data-path <DATA_PATH> --output-path <OUTPUT_PATH>
 ```
@@ -182,6 +197,7 @@ docker run --rm \
   -e AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} \
   -e AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} \
   -e AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN} \
+  -e AA_CONFIG_JSON="${AA_CONFIG_JSON}" \
   aa-runner:latest \
   python -m AA.analytical <ISO> <ISSUE_MONTH> <SPI/DRYSPELL> --data-path <DATA_PATH> --output-path <OUTPUT_PATH>
 ```

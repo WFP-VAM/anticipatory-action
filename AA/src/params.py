@@ -1,4 +1,6 @@
 import datetime
+import json
+import logging
 import os
 from dataclasses import dataclass, field
 
@@ -10,7 +12,7 @@ import yaml
 from numba import types
 from numba.typed import Dict
 
-from AA.helper_fns import read_fbf_districts
+from AA.src.utils import read_fbf_districts
 
 DRYSPELL_THRESHOLD = 2.0
 
@@ -24,13 +26,70 @@ AGGREGATES = {
 S3_OPS_DATA_PATH = "s3://wfp-ops-userdata/amine.barkaoui/aa"
 
 
-def load_config(iso):
-    config_file = f"./config/{iso}_config.yaml"
-    if os.path.exists(config_file):
-        with open(config_file, "r") as f:
-            return yaml.safe_load(f)
-    else:
-        raise FileNotFoundError(f"Configuration file for {iso} not found.")
+def load_config(iso: str) -> dict:
+    """
+    Load configuration for the given ISO3 code.
+
+    Priority:
+    1) AA_CONFIG_JSON environment variable (must contain a JSON document).
+    2) Local file: ./config/{iso}_config.yaml (or .yml). Supports YAML or JSON content.
+    Args:
+        iso: ISO3 country code, e.g. "TZA"
+
+    Returns:
+        dict: Parsed configuration.
+
+    Raises:
+        FileNotFoundError: If neither env nor a file exists.
+        ValueError: If parsing fails for available sources.
+    """
+    # --- 1) Env var ---
+    env_val = os.environ.get("AA_CONFIG_JSON")
+    if env_val is not None:
+        try:
+            cfg = json.loads(env_val)
+            if not isinstance(cfg, dict):
+                raise ValueError("AA_CONFIG_JSON must represent a JSON object (dict).")
+            logging.info("Loaded config from environment variable AA_CONFIG_JSON.")
+            return cfg
+        except json.JSONDecodeError as e:
+            # Warn and continue to file fallback
+            logging.warning("AA_CONFIG_JSON is set but contains invalid JSON: %s", e)
+
+    # --- 2) File fallback ---
+    iso_lower = iso.lower()
+    config_path = f"./config/{iso_lower}_config.yaml"
+    config_file = (
+        config_path if fsspec.open(config_path).fs.exists(config_path) else None
+    )
+    if not config_file:
+        msg = (
+            f"No configuration provided via AA_CONFIG_JSON and no file found. "
+            f"Checked: {config_path}"
+        )
+        logging.error(msg)
+        raise FileNotFoundError(msg)
+
+    with fsspec.open(config_file, mode="rt", encoding="utf-8") as f:
+        text = f.read()
+
+    # Try JSON first (some teams store JSON in .yml files), then YAML.
+    try:
+        cfg = json.loads(text)
+        if not isinstance(cfg, dict):
+            raise ValueError(f"{config_file} must represent a JSON object (dict).")
+        logging.info("Loaded config from file (JSON): %s", config_file)
+        return cfg
+    except json.JSONDecodeError:
+        try:
+            cfg = yaml.safe_load(text)
+            if not isinstance(cfg, dict):
+                raise ValueError(f"{config_file} must represent a mapping (dict).")
+            logging.info("Loaded config from file (YAML): %s", config_file)
+            return cfg
+        except Exception as e:
+            logging.error("Failed to parse YAML in %s: %s", config_file, e)
+            raise ValueError(f"Invalid YAML in {config_file}: {e}") from e
 
 
 @dataclass
