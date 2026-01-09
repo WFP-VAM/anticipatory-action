@@ -47,20 +47,8 @@ intensity_thresholds:
 
 # Vulnerability class of triggers for each district: general or non-regret (GT or NRT)
 districts_vulnerability: 
-  Beitbridge: "NRT"
-  Bikita: "NRT"
-  Binga: "NRT"
-  Chiredzi: "NRT"
-  Gwande: "NRT"
-  Hwange: "NRT"
-  Kariba: "NRT"
-  Masvingo: "NRT"
-  Matobo: "NRT"
-  Mbire: "NRT"
-  Mount Darwin: "NRT"
-  Mudzi: "NRT"
-  Mwenezi: "NRT"
-  Rushinga: "NRT"
+  Longido: "TBD"
+  Kondoa: "TBD"
 
 # Tolerance for thresholds for each category, used to compute false alarm with tolerance
 tolerance:

@@ -3,12 +3,18 @@
 [![Tests](https://github.com/WFP-VAM/anticipatory-action/actions/workflows/ci.yml/badge.svg)](https://github.com/WFP-VAM/anticipatory-action/actions/workflows/ci.yml)
 [![Coverage](.github/badges/coverage.svg)](https://github.com/WFP-VAM/anticipatory-action/actions/workflows/ci.yml)
 
-
 This repository provides a set of scripts and Jupytext notebooks to run analytical, trigger, and operational workflows for anticipatory action. You can run them either:
 
 - in a local Pixi-managed environment, or
 
 - inside a Docker container, using environment variables to pass parameters.
+
+
+## 📚 Documentation
+
+Full usage instructions, tutorials, and reference details are available in the documentation site:
+
+[👉 View the Docs](https://wfp-vam.github.io/anticipatory-action/)
 
 
 ## Running
