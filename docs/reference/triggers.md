@@ -38,4 +38,4 @@ After running both SPI and Dryspell triggers, use:
 > https://wfp-vam.github.io/hip-analysis/
 
 
-:::AA._triggers_ready_set
+:::AA._triggers
