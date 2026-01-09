@@ -22,7 +22,7 @@ import pytest
 import xarray as xr
 
 from AA.analytical import calculate_forecast_probabilities
-from config.params import Params
+from AA.src.params import Params
 
 # -
 
