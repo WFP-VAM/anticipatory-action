@@ -33,7 +33,7 @@ from hip.analysis.analyses.drought import (
 )
 from hip.analysis.aoi.analysis_area import AnalysisArea
 
-from AA.helper_fns import (
+from AA.src.utils import (
     compute_district_average,
     merge_probabilities_triggers_dashboard,
     merge_un_biased_probs,
@@ -41,7 +41,7 @@ from AA.helper_fns import (
     read_observations,
     read_triggers,
 )
-from config.params import Params
+from AA.src.params import Params
 
 # -
 
@@ -49,7 +49,13 @@ from config.params import Params
 
 # The `config/{country}_config.yaml` file gathers all the parameters used in the operational script and that can be customized. For example, the *monitoring_year*, the list of districts or the intensity levels can be defined in that file.
 
-params = Params(iso="MOZ", issue=5, index="SPI")
+params = Params(
+    iso="TZA", 
+    issue=6, 
+    index="SPI",
+    data_path = "s3://wfp-ops-userdata/amine.barkaoui/aa",
+    output_path = "s3://wfp-ops-userdata/amine.barkaoui/aa"
+)
 
 # **Read shapefile**
 
@@ -59,7 +65,7 @@ area = AnalysisArea.from_admin_boundaries(
     iso3=params.iso.upper(),
     admin_level=2,
     resolution=0.25,
-    datetime_range=f"1981-01-01/{params.monitoring_year + 1}-06-30",
+    datetime_range=f"1981-01-01/{params.calibration_year}-06-30",
 )
 
 # Read the shapefile
@@ -69,13 +75,17 @@ gdf
 
 # **Read forecasts**
 
+# +
 # When update is set to False, the downscaled dataset is read from a local folder or a s3 bucket. Otherwise, it is directly read from HDC.
+forecasts_folder_path = f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}"
+
 forecasts = read_forecasts(
     area,
     params.issue,
-    f"{params.data_path}/data/{params.iso}/zarr/2022/{str(params.issue).zfill(2)}/forecasts.zarr",
+    f"{forecasts_folder_path}/{str(params.issue).zfill(2)}/forecasts.zarr",
 )
 forecasts
+# -
 
 # **Read observations**
 
@@ -90,8 +100,10 @@ observations
 
 # Now that we got all the data we need, let's read the triggers file so we can merge the probabilities with it once we have them.
 
+# + jupyter={"outputs_hidden": true}
 # Read triggers file
 triggers_df = read_triggers(params)
+# -
 
 # **Get accumulation periods covered by the forecasts of the defined issue month**
 
@@ -108,7 +120,7 @@ accumulation_periods
 # Here we focus on the pipeline for one indicator (one period) so we select a single element from the above dictionary (November-December using October forecasts).
 
 # Get single use case
-period_name, period_months = list(accumulation_periods.items())[1]  # [4]
+period_name, period_months = list(accumulation_periods.items())[0]  # [4]
 period_name, period_months
 
 # **Run accumulation (sum for SPI)**
