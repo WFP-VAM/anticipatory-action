@@ -7,23 +7,19 @@ import numpy as np
 import pandas as pd
 import s3fs
 import xarray as xr
-from hip.analysis.analyses.drought import concat_obs_levels, get_accumulation_periods
+from hip.analysis.analyses.drought import (concat_obs_levels,
+                                           get_accumulation_periods)
 from hip.analysis.aoi.analysis_area import AnalysisArea
 from hip.analysis.compute.utils import persist_with_progress_bar, start_dask
 
-from AA.helpers._triggers import (
-    filter_triggers_by_window,
-    get_window_district,
-    run_pilot_districts_metrics,
-    run_ready_set_brute_selection,
-)
+from AA.helpers._triggers import (filter_triggers_by_window,
+                                  get_window_district,
+                                  run_pilot_districts_metrics,
+                                  run_ready_set_brute_selection)
 from AA.helpers.params import S3_OPS_DATA_PATH, Params
-from AA.helpers.utils import (
-    create_flexible_dataarray,
-    format_triggers_df_for_dashboard,
-    merge_un_biased_probs,
-    triggers_da_to_df,
-)
+from AA.helpers.utils import (create_flexible_dataarray,
+                              format_triggers_df_for_dashboard,
+                              merge_un_biased_probs, triggers_da_to_df)
 
 logging.basicConfig(level="INFO", force=True)
 warnings.simplefilter(action="ignore")
@@ -33,6 +29,11 @@ warnings.simplefilter(action="ignore")
 @click.argument("country", required=True, type=str)
 @click.argument("index", default="SPI")
 @click.argument("vulnerability", default="TBD")
+@click.option(
+    "--config-json",
+    default=None,
+    help="Optional JSON string with configuration parameters.",
+)
 @click.option(
     "--data-path",
     required=True,
@@ -47,7 +48,7 @@ warnings.simplefilter(action="ignore")
     default=S3_OPS_DATA_PATH,
     help="Root directory for output files. Defaults to data-path if not provided.",
 )
-def run(country, index, vulnerability, data_path, output_path):
+def run(country, index, vulnerability, config_json, data_path, output_path):
     client = start_dask(n_workers=1)
     logging.info("+++++++++++++")
     logging.info(f"Dask dashboard: {client.dashboard_link}")
@@ -57,6 +58,7 @@ def run(country, index, vulnerability, data_path, output_path):
         iso=country,
         index=index,
         vulnerability=vulnerability,
+        config_json=config_json,
         data_path=data_path,
         output_path=output_path,
     )

@@ -159,16 +159,24 @@ This will export the necessary credentials as environment variables:
 - AWS_SECRET_ACCESS_KEY
 - AWS_SESSION_TOKEN
 
-#### 3. Export the config parameters environment variable
+#### 3. Provide the AA configuration
 
-You can provide the configuration via an environment variable instead of mounting a file. Convert your YAML config to JSON using `yq`:
+The AA pipeline takes configuration only via CLI parameter:
 
 ```bash
-export AA_CONFIG_JSON="$(pixi run yq '.' config/{iso}_config.yaml)"
+--config-json
+```
+
+To load your YAML config and convert it into JSON, use yq:
+
+```bash
+CONFIG_JSON="$(pixi run yq -o=json '.' config/{iso}_config.yaml)"
 ```
 
 Replace `{iso}` with the ISO3 country code (e.g., tza).
-If `AA_CONFIG_JSON` is not set, the workflow will automatically fall back to reading *./config/{iso}_config.yaml* inside the container.
+
+
+You will pass this directly to the container in the next step.
 
 
 #### 4. Run the workflow in Docker
@@ -181,9 +189,12 @@ docker run --rm \
   -e AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} \
   -e AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} \
   -e AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN} \
-  -e AA_CONFIG_JSON="${AA_CONFIG_JSON}" \
   aa-runner:latest \
-  python -m AA.cli.analytical <ISO> <SPI/DRYSPELL> --data-path <DATA_PATH> --output-path <OUTPUT_PATH>
+  python -m AA.cli.analytical \
+    <ISO> <SPI|DRYSPELL> \
+    --config-json "${CONFIG_JSON}" \
+    --data-path <DATA_PATH> \
+    --output-path <OUTPUT_PATH>
 ```
 
 **Triggers**
@@ -192,9 +203,12 @@ docker run --rm \
   -e AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} \
   -e AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} \
   -e AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN} \
-  -e AA_CONFIG_JSON=${AA_CONFIG_JSON} \
   aa-runner:latest \
-  python -m AA.cli.triggers <ISO> <SPI/DRYSPELL> <VULNERABILITY> --data-path <DATA_PATH> --output-path <OUTPUT_PATH>
+  python -m AA.cli.triggers \
+    <ISO> <SPI|DRYSPELL> <VULNERABILITY> \
+    --config-json "${CONFIG_JSON}" \
+    --data-path <DATA_PATH> \
+    --output-path <OUTPUT_PATH>
 ```
 
 **Operational**
@@ -203,9 +217,12 @@ docker run --rm \
   -e AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} \
   -e AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} \
   -e AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN} \
-  -e AA_CONFIG_JSON="${AA_CONFIG_JSON}" \
   aa-runner:latest \
-  python -m AA.cli.analytical <ISO> <ISSUE_MONTH> <SPI/DRYSPELL> --data-path <DATA_PATH> --output-path <OUTPUT_PATH>
+  python -m AA.cli.operational \
+    <ISO> <ISSUE_MONTH> <SPI|DRYSPELL> \
+    --config-json "${CONFIG_JSON}" \
+    --data-path <DATA_PATH> \
+    --output-path <OUTPUT_PATH>
 ```
 
 ## Set-up

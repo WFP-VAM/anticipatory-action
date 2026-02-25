@@ -8,20 +8,19 @@ import fsspec
 import numpy as np
 import pandas as pd
 import xarray as xr
-from hip.analysis.analyses.drought import (
-    compute_probabilities,
-    concat_obs_levels,
-    get_accumulation_periods,
-    run_accumulation_index,
-    run_bias_correction,
-    run_gamma_standardization,
-)
+from hip.analysis.analyses.drought import (compute_probabilities,
+                                           concat_obs_levels,
+                                           get_accumulation_periods,
+                                           run_accumulation_index,
+                                           run_bias_correction,
+                                           run_gamma_standardization)
 from hip.analysis.aoi.analysis_area import AnalysisArea
 from hip.analysis.compute.utils import start_dask
 from hip.analysis.ops._statistics import evaluate_roc_forecasts
 
 from AA.helpers.params import S3_OPS_DATA_PATH, Params
-from AA.helpers.utils import compute_district_average, read_forecasts, read_observations
+from AA.helpers.utils import (compute_district_average, read_forecasts,
+                              read_observations)
 
 logging.basicConfig(level="INFO", force=True)
 
@@ -31,6 +30,11 @@ warnings.simplefilter(action="ignore", category=FutureWarning)
 @click.command()
 @click.argument("country", required=True, type=str)
 @click.argument("index", default="SPI")
+@click.option(
+    "--config-json",
+    default=None,
+    help="Optional JSON string with configuration parameters.",
+)
 @click.option(
     "--data-path",
     required=True,
@@ -45,7 +49,7 @@ warnings.simplefilter(action="ignore", category=FutureWarning)
     default=S3_OPS_DATA_PATH,
     help="Root directory for output files. Defaults to data-path if not provided.",
 )
-def run(country, index, data_path, output_path):
+def run(country, index, config_json, data_path, output_path):
     client = start_dask(n_workers=1)
     logging.info("+++++++++++++")
     logging.info(f"Dask dashboard: {client.dashboard_link}")
@@ -53,7 +57,11 @@ def run(country, index, data_path, output_path):
 
     # End to end workflow for a country using ECMWF forecasts and CHIRPS from HDC
     params = Params(
-        iso=country, index=index, data_path=data_path, output_path=output_path
+        iso=country,
+        index=index,
+        config_json=config_json,
+        data_path=data_path,
+        output_path=output_path,
     )
 
     area = AnalysisArea.from_admin_boundaries(

@@ -108,7 +108,7 @@ def objective(
         conf_matrix,
         conf_matrix,
     )
-    
+
     # tn, fp, fn, tp - should we use these standard terms for variable names instead?
     misses, false, fn, hits = (
         conf_matrix[0],
@@ -126,7 +126,7 @@ def objective(
 
         # Number of years in which forecast probabilities exceeded the trigger pair
         number_actions = np.sum(prediction)
-         # FAR = FP/ (FP + TN). Should this be called false discovery rate instead?
+        # FAR = FP/ (FP + TN). Should this be called false discovery rate instead?
         false_alarm_rate = false / (false + hits + EPS)
         # Num of years with prediction, where obs_val was more favourable than the more lenient tolerance threshold
         false_tol = np.sum(prediction & (obs_val > tolerance))

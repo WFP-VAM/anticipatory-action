@@ -6,24 +6,18 @@ import warnings
 import click
 import numpy as np
 import pandas as pd
-from hip.analysis.analyses.drought import (
-    compute_probabilities,
-    get_accumulation_periods,
-    run_accumulation_index,
-    run_bias_correction,
-    run_gamma_standardization,
-)
+from hip.analysis.analyses.drought import (compute_probabilities,
+                                           get_accumulation_periods,
+                                           run_accumulation_index,
+                                           run_bias_correction,
+                                           run_gamma_standardization)
 from hip.analysis.aoi.analysis_area import AnalysisArea
 
 from AA.helpers.params import S3_OPS_DATA_PATH, Params
-from AA.helpers.utils import (
-    compute_district_average,
-    merge_probabilities_triggers_dashboard,
-    merge_un_biased_probs,
-    read_forecasts,
-    read_observations,
-    read_triggers,
-)
+from AA.helpers.utils import (compute_district_average,
+                              merge_probabilities_triggers_dashboard,
+                              merge_un_biased_probs, read_forecasts,
+                              read_observations, read_triggers)
 
 logging.basicConfig(level="INFO", force=True)
 
@@ -34,6 +28,11 @@ warnings.simplefilter(action="ignore", category=FutureWarning)
 @click.argument("country", required=True, type=str)
 @click.argument("issue", required=True, type=int)
 @click.argument("index", default="SPI")
+@click.option(
+    "--config-json",
+    default=None,
+    help="Optional JSON string with configuration parameters.",
+)
 @click.option(
     "--data-path",
     required=True,
@@ -48,13 +47,14 @@ warnings.simplefilter(action="ignore", category=FutureWarning)
     default=S3_OPS_DATA_PATH,
     help="Root directory for output files. Defaults to data-path if not provided.",
 )
-def run(country, issue, index, data_path, output_path):
+def run(country, issue, index, config_json, data_path, output_path):
     # End to end workflow for a country using pre-stored ECMWF forecasts and CHIRPS
 
     params = Params(
         iso=country,
         issue=issue,
         index=index,
+        config_json=config_json,
         data_path=data_path,
         output_path=output_path,
     )

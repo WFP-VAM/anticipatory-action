@@ -26,70 +26,49 @@ AGGREGATES = {
 S3_OPS_DATA_PATH = "s3://wfp-ops-userdata/amine.barkaoui/aa"
 
 
-def load_config(iso: str) -> dict:
+def load_config(iso: str, cli_json: str | None = None) -> dict:
     """
     Load configuration for the given ISO3 code.
 
     Priority:
-    1) AA_CONFIG_JSON environment variable (must contain a JSON document).
-    2) Local file: ./config/{iso}_config.yaml (or .yml). Supports YAML or JSON content.
-    Args:
-        iso: ISO3 country code, e.g. "TZA"
-
-    Returns:
-        dict: Parsed configuration.
-
-    Raises:
-        FileNotFoundError: If neither env nor a file exists.
-        ValueError: If parsing fails for available sources.
+    1) CLI parameter --config-json (must be valid JSON)
+    2) Local file: ./config/{iso}_config.yaml (YAML or JSON)
     """
-    # --- 1) Env var ---
-    env_val = os.environ.get("AA_CONFIG_JSON")
-    if env_val is not None:
+    # --- 1) CLI-supplied JSON ---
+    if cli_json is not None:
         try:
-            cfg = json.loads(env_val)
+            cfg = json.loads(cli_json)
             if not isinstance(cfg, dict):
-                raise ValueError("AA_CONFIG_JSON must represent a JSON object (dict).")
-            logging.info("Loaded config from environment variable AA_CONFIG_JSON.")
+                raise ValueError("--config-json must contain a JSON object.")
+            logging.info("Loaded config from --config-json parameter.")
             return cfg
         except json.JSONDecodeError as e:
-            # Warn and continue to file fallback
-            logging.warning("AA_CONFIG_JSON is set but contains invalid JSON: %s", e)
+            raise ValueError(f"--config-json contains invalid JSON: {e}")
 
-    # --- 2) File fallback ---
+    # --- 2) Fallback to file ---
     iso_lower = iso.lower()
     config_path = f"./config/{iso_lower}_config.yaml"
-    config_file = (
-        config_path if fsspec.open(config_path).fs.exists(config_path) else None
-    )
-    if not config_file:
-        msg = (
-            f"No configuration provided via AA_CONFIG_JSON and no file found. "
-            f"Checked: {config_path}"
-        )
-        logging.error(msg)
-        raise FileNotFoundError(msg)
 
-    with fsspec.open(config_file, mode="rt", encoding="utf-8") as f:
+    if not fsspec.open(config_path).fs.exists(config_path):
+        raise FileNotFoundError(
+            f"No config provided via --config-json, and no file exists at {config_path}"
+        )
+
+    with fsspec.open(config_path, mode="rt", encoding="utf-8") as f:
         text = f.read()
 
-    # Try JSON first (some teams store JSON in .yml files), then YAML.
+    # Try JSON, then YAML
     try:
         cfg = json.loads(text)
-        if not isinstance(cfg, dict):
-            raise ValueError(f"{config_file} must represent a JSON object (dict).")
-        logging.info("Loaded config from file (JSON): %s", config_file)
+        logging.info("Loaded config from file as JSON.")
         return cfg
     except json.JSONDecodeError:
         try:
             cfg = yaml.safe_load(text)
-            if not isinstance(cfg, dict):
-                raise ValueError(f"{config_file} must represent a mapping (dict).")
-            logging.info("Loaded config from file (YAML): %s", config_file)
+            logging.info("Loaded config from file as YAML.")
             return cfg
         except Exception as e:
-            logging.error("Failed to parse YAML in %s: %s", config_file, e)
-            raise ValueError(f"Invalid YAML in {config_file}: {e}") from e
+            raise ValueError(f"Invalid YAML in {config_path}: {e}")
 
 
 @dataclass
@@ -105,6 +84,8 @@ class Params:
         country ISO code
     index : str
         name of index to process: can be "SPI" or "DRYSPELL"
+    config_json: str
+        optional JSON string with configuration parameters, takes precedence over config file
     issue : int
         issue month: month of interest for operational script
     issue_months : list
@@ -149,6 +130,7 @@ class Params:
         dictionary containing two dictionaries (window1, window2) containing indicators for each window (by province or not)
     save_zarr : bool
         save (and overwrite if exists) ds (obs or probs) for future trigger choice
+
     data_path : str
         data path where to read input data from (should include data folder)
     output_path : str
@@ -186,7 +168,7 @@ class Params:
         self.iso = self.iso.lower()
         self.index = self.index.lower()
 
-        config = load_config(self.iso)
+        config = load_config(self.iso, cli_json=self.config_json)
 
         # Set attributes based on the config file
         for key, value in config.items():
