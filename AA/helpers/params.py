@@ -139,6 +139,7 @@ class Params:
 
     iso: str
     index: str
+    config_json: str | None = None
     issue: int = None
     issue_months: list = None
     vulnerability: str = None
