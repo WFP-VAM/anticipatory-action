@@ -1,0 +1,43 @@
+
+site_name: Drought Anticipatory Action Analysis Package Docs
+
+theme:
+  name: material
+  navigation_depth: 3
+  features:
+    - navigation.sections
+    - content.code.copy
+
+nav:
+  - Home: index.md
+  - Tutorials:
+      - Load forecasts from CDS: tutorials/load-forecasts-from-cds.ipynb
+      - Run full verification: tutorials/run-full-verification.ipynb
+      - Run operational monitoring: tutorials/run-operational-monitoring.ipynb
+  - How-To Guides:
+      - Run locally with Pixi: how-to-guides/run-locally-pixi.md
+      - Run with Docker: how-to-guides/run-docker.md
+      - Set up SSH & GitHub: how-to-guides/setup-ssh-github.md
+      - Configure HDC credentials: how-to-guides/hdc-credentials.md
+      - Manage dependencies: how-to-guides/dependencies.md
+      - Testing & linting: how-to-guides/testing-and-linting.md
+      - Use Jupytext: how-to-guides/jupytext.md
+      - Monitoring process (for Met Services): how-to-guides/monitoring.md
+  - Explanation:
+      - Overview: explanation/overview.md
+  - Reference:
+      - Analytical: reference/analytical.md
+      - Triggers: reference/triggers.md
+      - Operational: reference/operational.md
+      - Utils: reference/utils.md
+      - Configuration: reference/configuration.md
+      - Environments: reference/environment.md
+
+plugins:
+  - mkdocs-jupyter
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: google
+            show_source: false

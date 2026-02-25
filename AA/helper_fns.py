@@ -263,23 +263,33 @@ def merge_probabilities_triggers_dashboard(probs, triggers, params, period):
         triggers_merged["prob_set"] = np.nan
 
     # Fill in probabilities columns matching with triggers
+    target_index = f"{params.index.upper()} {period}"
+
+    # Drop all rows that do not related to the target_index
+    triggers_merged = triggers_merged[triggers_merged['index']==target_index]
+    
     for idx, row in triggers_merged.iterrows():
-        if (row.issue_ready == params.issue) and (
-            row["index"] == f"{params.index.upper()} {period}"
-        ):
-            triggers_merged.loc[idx, "prob_ready"] = probs_df.loc[
-                (probs_df["index"] == row["index"])
+        if (row.issue_ready == params.issue):
+            match_filter = (
+                (probs_df["index"] == target_index)
                 & (probs_df["category"] == row.category)
                 & (probs_df["district"] == row.district)
-            ].prob.values[0]
-        elif (row.issue_set == params.issue) and (
-            row["index"] == f"{params.index.upper()} {period}"
-        ):
-            triggers_merged.loc[idx, "prob_set"] = probs_df.loc[
-                (probs_df["index"] == row["index"])
+            )
+            matching_probs = probs_df.loc[match_filter]
+            if len(matching_probs) > 0:
+                prob_value = matching_probs.prob.values[0]
+                triggers_merged.loc[idx, "prob_ready"] = prob_value
+                
+        elif (row.issue_set == params.issue):
+            match_filter = (
+                (probs_df["index"] == target_index)
                 & (probs_df["category"] == row.category)
                 & (probs_df["district"] == row.district)
-            ].prob.values[0]
+            )
+            matching_probs = probs_df.loc[match_filter]
+            if len(matching_probs) > 0:
+                prob_value = matching_probs.prob.values[0]
+                triggers_merged.loc[idx, "prob_set"] = prob_value
 
     return probs_df, triggers_merged
 
@@ -291,23 +301,38 @@ def read_fbf_districts(path_fbf, params):
     return fbf_districts
 
 
-def read_forecasts(area, issue, local_path, update=False):
+def read_forecasts(area, issue, local_path):
     fs = fsspec.open(local_path).fs
-    if fs.exists(os.path.join(local_path, ".zmetadata")) and not update:
-        logging.info("Reading of forecasts from precomputed zarr...")
+    zmetadata_path = os.path.join(local_path, ".zmetadata")
+    data_exists = fs.exists(zmetadata_path)
+    
+    # Determine the forecast period:
+    # - `last_date` is the end of the target time range, extracted from area.datetime_range (e.g., "2024-01-01/2024-12-31")
+    # - `forecast_date` is the start of the forecast, set to the 1st of the issue month of the year before `last_date`, as last_date.year = monitoring_year + 1
+    #   For example, if issue=6 (June) and last_date is 2024-12-31, then forecast_date becomes 2023-06-01
+    last_date = datetime.datetime.strptime(
+        area.datetime_range.split("/")[1], "%Y-%m-%d"
+    )
+    forecast_date = datetime.datetime(last_date.year - 1, int(issue), 1)
+
+    if data_exists:
+        logging.info("Reading forecasts from precomputed zarr...")
         ds = xr.open_zarr(local_path).tp
-        end_date = datetime.datetime.strptime(
-            area.datetime_range.split("/")[1], "%Y-%m-%d"
-        )
-        forecasts = ds.sel(time=slice(None, end_date))
+        if np.datetime64(forecast_date) in ds.time.values:
+            return persist_with_progress_bar(ds.sel(time=slice(None, last_date)))
+        else:
+            logging.info("Forecast date missing in zarr, reading from source...")
     else:
-        logging.info("Reading of forecasts from source...")
-        forecasts = area.get_dataset(
-            ["ECMWF", f"RFH_FORECASTS_SEAS5_ISSUE{int(issue)}_DAILY"],
-            load_config={"gridded_load_kwargs": {"resampling": "bilinear"}},
-        )
-        forecasts.attrs["nodata"] = np.nan
-        forecasts.chunk({"time": -1}).to_zarr(local_path, mode="w", consolidated=True)
+        logging.info("Zarr file not found, reading from source...")
+
+    # Read from source
+    forecasts = area.get_dataset(
+        ["ECMWF", f"RFH_FORECASTS_SEAS5_ISSUE{int(issue)}_DAILY"],
+        load_config={"gridded_load_kwargs": {"resampling": "bilinear"}},
+    )
+    forecasts.attrs["nodata"] = np.nan
+    forecasts.chunk({"time": -1}).to_zarr(local_path, mode="w", consolidated=True)
+
     return persist_with_progress_bar(forecasts)
 
 
@@ -343,6 +368,78 @@ def read_triggers(params):
     else:
         triggers_df = pd.read_csv(fallback_triggers_path)
     return triggers_df
+
+
+def validate_prism_dataframe(df: pd.DataFrame):
+    # Expected columns and types
+    expected_columns = {
+        "district": str,
+        "index": str,
+        "category": str,
+        "window": str,
+        "issue_ready": float | int,
+        "issue_set": float | int,
+        "trigger_ready": float,
+        "trigger_set": float,
+        "vulnerability": str,
+        "prob_ready": float,
+        "prob_set": float,
+        "season": str,
+        "date_ready": str,
+        "date_set": str,
+    }
+
+    # Check columns
+    missing = set(expected_columns) - set(df.columns)
+    extra = set(df.columns) - set(expected_columns)
+    if missing:
+        raise ValueError(f"Missing columns: {missing}")
+    if extra:
+        raise ValueError(f"Unexpected columns: {extra}")
+
+    # Check column types
+    for col, expected_type in expected_columns.items():
+        if not df[col].map(lambda x: isinstance(x, expected_type)).all():
+            raise TypeError(
+                f"Column '{col}' has incorrect type. Expected {expected_type.__name__}"
+            )
+
+    # Check index column is uppercase
+    if not df["index"].map(lambda x: x.isupper()).all():
+        raise ValueError("All values in 'index' column must be uppercase")
+
+    # Check category values
+    valid_categories = {"Normal", "Mild", "Moderate", "Severe"}
+    if not df["category"].isin(valid_categories).all():
+        raise ValueError(
+            f"'category' column contains invalid values. Allowed: {valid_categories}"
+        )
+
+    # Check window values
+    valid_windows = {"Window 1", "Window 2"}
+    if not df["window"].isin(valid_windows).all():
+        raise ValueError(
+            f"'window' column contains invalid values. Allowed: {valid_windows}"
+        )
+
+    # Check vulnerability values
+    valid_vulnerability = {"General Triggers", "Emergency Triggers"}
+    if not df["vulnerability"].isin(valid_vulnerability).all():
+        raise ValueError(
+            f"'vulnerability' column contains invalid values. Allowed: {valid_vulnerability}"
+        )
+
+    # Check date formats
+    for col in ["date_ready", "date_set"]:
+        try:
+            parsed_dates = pd.to_datetime(df[col], format="%Y-%m-%d", errors="raise")
+        except Exception:
+            raise ValueError(f"Column '{col}' must use format YYYY-MM-DD")
+
+        if not all(parsed_dates.dt.day == 1):
+            raise ValueError(f"All dates in '{col}' must have day = 01")
+
+    return True
 
 
 ## Get SPI/probabilities of reference produced with R script from Gabriela Nobre for validation ##

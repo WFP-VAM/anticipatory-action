@@ -25,6 +25,8 @@ def compute_confusion_matrix(true, pred, out_shape, result):
 
     However, this function avoids the dependency on sklearn and
     allows to use numba in nopython mode.
+
+    Returns an array [true negatives, false positives, false negatives, true positives]
     """
     # TODO move to hip-analysis
     result.fill(0)
@@ -108,6 +110,7 @@ def objective(
         conf_matrix,
         conf_matrix,
     )
+    # tn, fp, fn, tp - should we use these standard terms for variable names instead?
     misses, false, fn, hits = (
         conf_matrix[0],
         conf_matrix[1],
@@ -121,12 +124,18 @@ def objective(
 
     else:
         # Compute metrics
-        number_actions = np.sum(prediction)
+        number_actions = np.sum(prediction) # number of years in which forecast probabilities exceeded the trigger pair
+        # FAR = FP/ (FP + TN). Should this be called false discovery rate instead?
         false_alarm_rate = false / (false + hits + EPS)
+        # num of years with prediction, where obs_val was more favourable than the more lenient tolerance threshold
         false_tol = np.sum(prediction & (obs_val > tolerance))
+        # Also known as recall
         hit_rate = np.round(hits / (hits + fn + EPS), 3)
-        success_rate = hits + false - false_tol
-        failure_rate = false_tol
+        # Correct prediction positive predictions + (FPs where obs_val was nevertheless below the more lenient tolerance threshold)
+        successes = hits + false - false_tol
+        # As above, num of years with prediction, where obs_val was instead more favourable than even the more lenient tolerance threshold
+        failures = false_tol
+        # Return period of the action
         return_period = np.round(
             len(obs_val) / number_actions if number_actions != 0 else 0, 0
         )
@@ -134,8 +143,8 @@ def objective(
         # When we need to select the optimal pair of triggers
         if filter_constraints:
             constraints[0] = hit_rate >= min_hit_rate
-            constraints[1] = success_rate >= (min_success_rate * number_actions)
-            constraints[2] = failure_rate <= (max_failure_rate * number_actions)
+            constraints[1] = successes >= (min_success_rate * number_actions)
+            constraints[2] = failures <= (max_failure_rate * number_actions)
             constraints[3] = return_period >= min_return_period
             constraints[4] = (leadtime - (issue + 1)) % 12 > 1
 
@@ -146,6 +155,7 @@ def objective(
 
         # When we need to retrieve all the metrics
         else:
+            # ["TN", "FP", "FN", "TP", "HR", "FAR", "SR", "FR", "RP"]
             result[0] = misses
             result[1] = false
             result[2] = fn
@@ -153,8 +163,8 @@ def objective(
             result[4] = hit_rate
             result[5] = false_alarm_rate
             result[6] = false_tol
-            result[7] = success_rate / (number_actions + EPS)
-            result[8] = failure_rate / (number_actions + EPS)
+            result[7] = successes / (number_actions + EPS)
+            result[8] = failures / (number_actions + EPS)
             result[9] = return_period
 
 

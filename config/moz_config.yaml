@@ -12,7 +12,7 @@ issue_months:
   - "02"
 
 # First year of season to monitor operationally (e.g. 2024 for 2024/2025 season)
-monitoring_year: 2024
+monitoring_year: 2025
 
 # Last year of calibration period used for triggers selection (e.g. 2022 for 1981-2022)
 calibration_year: 2022
@@ -70,6 +70,7 @@ districts_vulnerability:
   Mabote: "TBD"
   Machanga: "TBD"
   Machaze: "TBD"
+  Macossa: "TBD"
   Magoe: "TBD"
   Mapai: "TBD"
   Magude: "TBD"

@@ -8,15 +8,16 @@ issue_months:
   - "11"
   - "12"
   - "01"
+  - "02"
 
 # First year of season to monitor operationally (e.g. 2024 for 2024/2025 season)
-monitoring_year: 2024
+monitoring_year: 2025
 
 # Last year of calibration period used for triggers selection (e.g. 2022 for 1981-2022)
 calibration_year: 2022
 
 # Minimum length of indicator periods (ON, NDJ, JFMA...)
-min_index_period: 3
+min_index_period: 2
 
 # Maximum length of indicator periods (ON, NDJ, JFMA...)
 max_index_period: 3
@@ -46,69 +47,80 @@ intensity_thresholds:
 
 # Vulnerability class of triggers for each district: general or non-regret (GT or NRT)
 districts_vulnerability: 
-    Chirundu: ""
-    Chongwe: ""
-    Chisamba: ""
-    Sesheke: ""
-    Mwandi: ""
-    Sioma: ""
-    Zimba: ""
-    Kapiri Mposhi: ""
-    Serenje: ""
-    Chikankanta: ""
-    Pemba: ""
-    Shangombo: ""
-    Livingstone: ""
-    Sinazongwe: ""
-    Gwembe: ""
-    Kalomo: ""
-    Kazungula: ""
-    Siavonga: ""
-    Monze: ""
-    Mazabuka: ""
-    Mulobezi: ""
-    Itezhi-tezhi: ""
-    Kafue: ""
-    Luangwa: ""
-    Rufunsa: ""
-    Nyimba: ""
-    Luano: ""
-    Mambwe: ""
-    Chitambo: ""
-    Mpika: ""
-    Masaiti: ""
-    Nkeyema: ""
-    Sinda: ""
-    Chilanga: ""
-    Vubwi: ""
-    Shibuyunji: ""
-    # Lusaka: ""
-    Chibombo: ""
-    Kabwe: ""
-    Mumbwa: ""
-    Chadiza: ""
-    Ngabwe: ""
-    Mpongwe: ""
-    Chipata: ""
-    Mufumbwe: ""
-    Kasempa: ""
-    Chama: ""
-    Shiwamg'andu: ""
-    Nalolo: ""
-    Sikongo: ""
-    Limulunga: ""
-    Kabompo: ""
-    Mongu: ""
-    Kalabo: ""
-    Kaoma: ""
-    Lukulu: ""
+    Chirundu: "TBD"
+    Chongwe: "TBD"
+    Chisamba: "TBD"
+    Sesheke: "TBD"
+    Mwandi: "TBD"
+    Sioma: "TBD"
+    Zimba: "TBD"
+    Kapiri Mposhi: "TBD"
+    Serenje: "TBD"
+    Chikankanta: "TBD"
+    Pemba: "TBD"
+    Shangombo: "TBD"
+    Livingstone: "TBD"
+    Sinazongwe: "TBD"
+    Gwembe: "TBD"
+    Kalomo: "TBD"
+    Kazungula: "TBD"
+    Siavonga: "TBD"
+    Monze: "TBD"
+    Mazabuka: "TBD"
+    Mulobezi: "TBD"
+    Itezhi-tezhi: "TBD"
+    Kafue: "TBD"
+    Luangwa: "TBD"
+    Rufunsa: "TBD"
+    Nyimba: "TBD"
+    Luano: "TBD"
+    Mambwe: "TBD"
+    Chitambo: "TBD"
+    Mpika: "TBD"
+    Masaiti: "TBD"
+    Nkeyema: "TBD"
+    Sinda: "TBD"
+    Chilanga: "TBD"
+    Vubwi: "TBD"
+    Shibuyunji: "TBD"
+    Chibombo: "TBD"
+    Kabwe: "TBD"
+    Mumbwa: "TBD"
+    Chadiza: "TBD"
+    Ngabwe: "TBD"
+    Mpongwe: "TBD"
+    Chipata: "TBD"
+    Mufumbwe: "TBD"
+    Kasempa: "TBD"
+    Chama: "TBD"
+    Shiwamg'andu: "TBD"
+    Nalolo: "TBD"
+    Sikongo: "TBD"
+    Limulunga: "TBD"
+    Kabompo: "TBD"
+    Mongu: "TBD"
+    Kalabo: "TBD"
+    Kaoma: "TBD"
+    Lukulu: "TBD"
+    Mwinilunga: "TBD"
+    Solwezi: "TBD"
+    Chavuma: "TBD"
+    Kitwe: "TBD"
+    Ndola: "TBD"
+    Petauke: "TBD"
+    Lundazi: "TBD"
+    Chinsali: "TBD"
+    Mbala: "TBD"
+    Isoka: "TBD"
+    Nakonde: "TBD"
+    Mafinga: "TBD"
 
 # Tolerance for thresholds for each category, used to compute false alarm with tolerance
 tolerance:
   Normal: 0
-  Mild: 0
-  Moderate: -0.44
-  Severe: -0.68
+  Mild: -0.44
+  Moderate: -0.68
+  Severe: -0.85
 
 # Skill requirements for General Triggers
 general_t:
@@ -128,7 +140,7 @@ non_regret_t:
 windows:
   spi:
     window1: ["OND", "NDJ"]
-    window2: ["DJF", "JFM"]
+    window2: ["DJF", "JFM", "DJ", "JF"]
   dryspell:
     window1: []
     window2: ["DJ", "JF", "FM"]
