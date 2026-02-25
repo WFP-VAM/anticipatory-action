@@ -21,8 +21,8 @@ import pandas as pd
 import pytest
 import xarray as xr
 
-from AA.analytical import calculate_forecast_probabilities
-from AA.src.params import Params
+from AA.cli.analytical import calculate_forecast_probabilities
+from AA.helpers.params import Params
 
 # -
 
