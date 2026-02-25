@@ -123,12 +123,20 @@ def objective(
 
     else:
         # Compute metrics
+
+        # Number of years in which forecast probabilities exceeded the trigger pair
         number_actions = np.sum(prediction)
+         # FAR = FP/ (FP + TN). Should this be called false discovery rate instead?
         false_alarm_rate = false / (false + hits + EPS)
+        # Num of years with prediction, where obs_val was more favourable than the more lenient tolerance threshold
         false_tol = np.sum(prediction & (obs_val > tolerance))
+        # Also known as recall
         hit_rate = np.round(hits / (hits + fn + EPS), 3)
+        # Correct prediction positive predictions + (FPs where obs_val was nevertheless below the more lenient tolerance threshold)
         successes = hits + false - false_tol
+        # As above, num of years with prediction, where obs_val was instead more favourable than even the more lenient tolerance threshold
         failures = false_tol
+        # Return period of the action
         return_period = np.round(
             len(obs_val) / number_actions if number_actions != 0 else 0, 0
         )
@@ -148,6 +156,7 @@ def objective(
 
         # When we need to retrieve all the metrics
         else:
+            # ["TN", "FP", "FN", "TP", "HR", "FAR", "FPtol", "SR", "FR", "RP"]
             result[0] = misses
             result[1] = false
             result[2] = fn
