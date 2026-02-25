@@ -11,7 +11,7 @@ pixi install --locked
 
 Run any script:
 ```bash
-pixi run python -m AA.analytical <ISO> <SPI/DRYSPELL>
+pixi run python -m AA.cli.analytical <ISO> <SPI/DRYSPELL>
 ```
 
 ## Docker
@@ -35,6 +35,6 @@ docker run --rm \
   -e AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} \
   -e AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN} \
   aa-runner:latest \
-  python -m AA.triggers <ISO> <SPI/DRYSPELL> <VULNERABILITY> \
+  python -m AA.cli.triggers <ISO> <SPI/DRYSPELL> <VULNERABILITY> \
   --data-path <DATA_PATH> --output-path <OUTPUT_PATH>
 ```

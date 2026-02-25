@@ -20,8 +20,8 @@ from hip.analysis.aoi.analysis_area import AnalysisArea
 from hip.analysis.compute.utils import start_dask
 from hip.analysis.ops._statistics import evaluate_roc_forecasts
 
-from AA.src.params import S3_OPS_DATA_PATH, Params
-from AA.src.utils import compute_district_average, read_forecasts, read_observations
+from AA.helpers.params import S3_OPS_DATA_PATH, Params
+from AA.helpers.utils import compute_district_average, read_forecasts, read_observations
 
 logging.basicConfig(level="INFO", force=True)
 

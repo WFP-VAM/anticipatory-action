@@ -2,7 +2,7 @@ import argparse
 
 import pandas as pd
 
-from AA.src.utils import validate_prism_dataframe
+from AA.helpers.utils import validate_prism_dataframe
 
 
 def main(iso3: str):

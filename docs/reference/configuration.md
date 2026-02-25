@@ -1,6 +1,6 @@
 # Configuration: `config/{iso}_config.yaml`
 
-Each country has a YAML configuration file that defines workflow parameters for **analytical**, **trigger**, and **operational** scripts. These files are read by the `Params` class in `AA/params.py`.
+Each country has a YAML configuration file that defines workflow parameters for **analytical**, **trigger**, and **operational** scripts. These files are read by the `Params` class in `AA/helpers/params.py`.
 
 ---
 

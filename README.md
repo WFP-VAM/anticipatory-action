@@ -39,13 +39,13 @@ You can now run any of the scripts:
 #### 1. Analytical script
 
 ```bash
-pixi run python -m AA.analytical <ISO> <SPI/DRYSPELL>
+pixi run python -m AA.cli.analytical <ISO> <SPI/DRYSPELL>
 ```
 
 #### 2. Triggers script
 
 ```bash
-pixi run python -m AA.triggers <ISO> <SPI/DRYSPELL> <VULNERABILITY>
+pixi run python -m AA.cli.triggers <ISO> <SPI/DRYSPELL> <VULNERABILITY>
 ```
 
 Where `<VULNERABILITY>` is one of:
@@ -61,7 +61,7 @@ After running both SPI and Dryspell triggers, use the notebook `merge-spi-dryspe
 #### 3. Operational script
 
 ```bash
-pixi run python -m AA.operational <ISO> <ISSUE_MONTH> <SPI/DRYSPELL>
+pixi run python -m AA.cli.operational <ISO> <ISSUE_MONTH> <SPI/DRYSPELL>
 ```
 
 ### 📓 Working with Jupytext Notebooks
@@ -183,7 +183,7 @@ docker run --rm \
   -e AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN} \
   -e AA_CONFIG_JSON="${AA_CONFIG_JSON}" \
   aa-runner:latest \
-  python -m AA.analytical <ISO> <SPI/DRYSPELL> --data-path <DATA_PATH> --output-path <OUTPUT_PATH>
+  python -m AA.cli.analytical <ISO> <SPI/DRYSPELL> --data-path <DATA_PATH> --output-path <OUTPUT_PATH>
 ```
 
 **Triggers**
@@ -194,7 +194,7 @@ docker run --rm \
   -e AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN} \
   -e AA_CONFIG_JSON=${AA_CONFIG_JSON} \
   aa-runner:latest \
-  python -m AA.triggers <ISO> <SPI/DRYSPELL> <VULNERABILITY> --data-path <DATA_PATH> --output-path <OUTPUT_PATH>
+  python -m AA.cli.triggers <ISO> <SPI/DRYSPELL> <VULNERABILITY> --data-path <DATA_PATH> --output-path <OUTPUT_PATH>
 ```
 
 **Operational**
@@ -205,7 +205,7 @@ docker run --rm \
   -e AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN} \
   -e AA_CONFIG_JSON="${AA_CONFIG_JSON}" \
   aa-runner:latest \
-  python -m AA.analytical <ISO> <ISSUE_MONTH> <SPI/DRYSPELL> --data-path <DATA_PATH> --output-path <OUTPUT_PATH>
+  python -m AA.cli.analytical <ISO> <ISSUE_MONTH> <SPI/DRYSPELL> --data-path <DATA_PATH> --output-path <OUTPUT_PATH>
 ```
 
 ## Set-up

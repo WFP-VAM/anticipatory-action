@@ -9,7 +9,7 @@ This document outlines the step-by-step process for generating, packaging, and s
 Generate forecast outputs using the operational script.
 
 ```bash
-pixi run python -m AA.operational <ISO> <ISSUE_MONTH> <SPI/DRYSPELL>
+pixi run python -m AA.cli.operational <ISO> <ISSUE_MONTH> <SPI/DRYSPELL>
 ```
 
 ***Notes:***
@@ -30,7 +30,7 @@ This step automatically merges the current issue month probabilities with the tr
 Compress the forecast files to prepare them for sharing.
 
 ```bash
-bash AA/zip-forecasts.sh <ISO> <ISSUE_MONTH>
+bash AA/helpers/zip-forecasts.sh <ISO> <ISSUE_MONTH>
 ```
 
 ***Notes:***
@@ -69,7 +69,7 @@ Wait for confirmation that each Met Service has successfully run the script and 
 Once confirmation is received, update the dashboard using the Prism script.
 
 ```bash
-pixi run python -m AA.prism <ISO> <ISSUE_MONTH>
+pixi run python -m AA.helpers.prism <ISO> <ISSUE_MONTH>
 ```
 
 ***Notes:***

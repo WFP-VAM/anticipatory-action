@@ -5,7 +5,7 @@ import click
 import fsspec
 import pandas as pd
 
-from AA.src.params import S3_OPS_DATA_PATH
+from AA.helpers.params import S3_OPS_DATA_PATH
 
 logging.basicConfig(level="INFO", force=True)
 

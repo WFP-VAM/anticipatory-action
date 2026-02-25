@@ -11,14 +11,14 @@ from hip.analysis.analyses.drought import concat_obs_levels, get_accumulation_pe
 from hip.analysis.aoi.analysis_area import AnalysisArea
 from hip.analysis.compute.utils import persist_with_progress_bar, start_dask
 
-from AA.src._triggers import (
+from AA.helpers._triggers import (
     filter_triggers_by_window,
     get_window_district,
     run_pilot_districts_metrics,
     run_ready_set_brute_selection,
 )
-from AA.src.params import S3_OPS_DATA_PATH, Params
-from AA.src.utils import (
+from AA.helpers.params import S3_OPS_DATA_PATH, Params
+from AA.helpers.utils import (
     create_flexible_dataarray,
     format_triggers_df_for_dashboard,
     merge_un_biased_probs,

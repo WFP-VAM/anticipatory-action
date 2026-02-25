@@ -15,8 +15,8 @@ from hip.analysis.analyses.drought import (
 )
 from hip.analysis.aoi.analysis_area import AnalysisArea
 
-from AA.src.params import S3_OPS_DATA_PATH, Params
-from AA.src.utils import (
+from AA.helpers.params import S3_OPS_DATA_PATH, Params
+from AA.helpers.utils import (
     compute_district_average,
     merge_probabilities_triggers_dashboard,
     merge_un_biased_probs,

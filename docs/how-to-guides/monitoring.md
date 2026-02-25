@@ -9,7 +9,7 @@ This guide explains how national meteorological services can generate seasonal f
 Generate forecast outputs using the operational script:
 
 ```bash
-pixi run python -m AA.operational <ISO> <ISSUE_MONTH> <SPI/DRYSPELL>
+pixi run python -m AA.cli.operational <ISO> <ISSUE_MONTH> <SPI/DRYSPELL>
 ```
 
 ### Notes:
