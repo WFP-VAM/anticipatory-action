@@ -1,6 +1,5 @@
 # Issue month: months corresponding to the forecasts used for monitoring
 issue_months:
-  - "05"
   - "06"
   - "07"
   - "08"
@@ -12,13 +11,13 @@ issue_months:
   - "02"
 
 # First year of season to monitor operationally (e.g. 2024 for 2024/2025 season)
-monitoring_year: 2024
+monitoring_year: 2025
 
 # Last year of calibration period used for triggers selection (e.g. 2022 for 1981-2022)
 calibration_year: 2022
 
 # Minimum length of indicator periods (ON, NDJ, JFMA...)
-min_index_period: 3
+min_index_period: 2
 
 # Maximum length of indicator periods (ON, NDJ, JFMA...)
 max_index_period: 3
@@ -48,20 +47,15 @@ intensity_thresholds:
 
 # Vulnerability class of triggers for each district: general or non-regret (GT or NRT)
 districts_vulnerability: 
-  Beitbridge: "NRT"
-  Bikita: "NRT"
-  Binga: "NRT"
-  Chiredzi: "NRT"
-  Gwande: "NRT"
-  Hwange: "NRT"
-  Kariba: "NRT"
-  Masvingo: "NRT"
-  Matobo: "NRT"
-  Mbire: "NRT"
-  Mount Darwin: "NRT"
-  Mudzi: "NRT"
-  Mwenezi: "NRT"
-  Rushinga: "NRT"
+  Handeni: "TBD"
+  Kiteto: "TBD"
+  Kondoa: "TBD"
+  Longido: "TBD"
+  Meatu: "TBD"
+  # Micheweni: "TBD"
+  Monduli: "TBD"
+  Same: "TBD"
+  Simanjiro: "TBD"
 
 # Tolerance for thresholds for each category, used to compute false alarm with tolerance
 tolerance:
@@ -88,7 +82,7 @@ non_regret_t:
 windows:
   spi:
     window1: ["ON", "OND", "ND", "NDJ"]
-    window2: ["DJ", "DJF", "JF", "JFM", "FM", "FMA"]
+    window2: ["DJ", "DJF", "JF", "JFM", "FM", "FMA", "MA", "MAM", "AM"]
   dryspell:
     window1: []
     window2: ["DJ", "JF", "FM"]
