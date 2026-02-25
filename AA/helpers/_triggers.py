@@ -108,6 +108,8 @@ def objective(
         conf_matrix,
         conf_matrix,
     )
+    
+    # tn, fp, fn, tp - should we use these standard terms for variable names instead?
     misses, false, fn, hits = (
         conf_matrix[0],
         conf_matrix[1],
