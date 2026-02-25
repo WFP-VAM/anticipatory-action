@@ -162,9 +162,10 @@ def objective(
             result[3] = hits
             result[4] = hit_rate
             result[5] = false_alarm_rate
-            result[6] = successes / (number_actions + EPS)
-            result[7] = failures / (number_actions + EPS)
-            result[8] = return_period
+            result[6] = false_tol
+            result[7] = successes / (number_actions + EPS)
+            result[8] = failures / (number_actions + EPS)
+            result[9] = return_period
 
 
 @guvectorize(
@@ -229,8 +230,8 @@ def brute_force(
     min_value = 1e6
 
     t = np.empty(2, dtype=np.float64)
-    out = np.full(9, np.nan, dtype=np.float64)
-    penalty_array = np.full(9, 1e6, dtype=np.float64)
+    out = np.full(10, np.nan, dtype=np.float64)
+    penalty_array = np.full(10, 1e6, dtype=np.float64)
     conf_matrix = np.zeros(4, dtype=np.int8)
     constraints = np.zeros(5, dtype=np.int8)
 
@@ -431,7 +432,7 @@ def evaluate_grid_metrics(
     )
 
     # Initialize empty placeholders for results from xr.apply_ufunc
-    penalty = xr.DataArray(np.full(9, 1e6, dtype=np.float64), dims=["metric"])
+    penalty = xr.DataArray(np.full(10, 1e6, dtype=np.float64), dims=["metric"])
     conf_matrix = xr.DataArray(np.zeros(4, dtype=np.int8), dims=["metric"])
     constraints = xr.DataArray(np.empty(5, dtype=np.int8), dims=["metric"])
 
@@ -473,7 +474,7 @@ def evaluate_grid_metrics(
             ["metric"],
         ],
         output_core_dims=[["metric"]],
-        output_sizes={"metric": 9},
+        output_sizes={"metric": 10},
         output_dtypes=[np.float64],
         vectorize=True,
         join="outer",
@@ -482,7 +483,7 @@ def evaluate_grid_metrics(
 
     # Assign metric names
     metrics_da = metrics_da.assign_coords(
-        metric=["TN", "FP", "FN", "TP", "HR", "FAR", "SR", "FR", "RP"]
+        metric=["TN", "FP", "FN", "TP", "HR", "FAR", "FPtol", "SR", "FR", "RP"]
     )
 
     return metrics_da
@@ -589,7 +590,7 @@ def evaluate_top_pairs(sub_df, obs, probs_ready, probs_set, params):
         return sel
 
     out = np.empty(9, dtype=np.float64)
-    penalty_array = np.full(9, 1e6, dtype=np.float64)
+    penalty_array = np.full(10, 1e6, dtype=np.float64)
     conf_matrix = np.zeros(4, dtype=np.int8)
     constraints = np.zeros(5, dtype=np.int8)
 
