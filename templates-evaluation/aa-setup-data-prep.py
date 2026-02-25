@@ -40,6 +40,7 @@ pn.extension("tabulator")
 # %% [markdown]
 # ###  Reading functions
 
+
 # %%
 def read_aggregated_probs(path_to_zarr, index):
     fs, _, _ = fsspec.get_fs_token_paths(path_to_zarr)
@@ -137,27 +138,33 @@ DATA_PATH = f"/s3/scratch/amine.barkaoui/aa/data/{COUNTRY.lower()}"
 probs_spi = read_aggregated_probs(f"{DATA_PATH}/zarr/2022", "spi")
 probs_dry = read_aggregated_probs(f"{DATA_PATH}/zarr/2022", "dryspell")
 
-probs = xr.concat([probs_spi, probs_dry], 'index')
+probs = xr.concat([probs_spi, probs_dry], "index")
 
 # %%
 probs
 
 # %%
-intensity_thresholds = {'Normal': -0.44, 'Mild': -0.68, 'Moderate': -0.85, 'Severe': -1}
+intensity_thresholds = {"Normal": -0.44, "Mild": -0.68, "Moderate": -0.85, "Severe": -1}
 
-chirps_spi = read_aggregated_obs(f"{DATA_PATH}/zarr/2022/obs", "spi", intensity_thresholds)
-chirps_dry = read_aggregated_obs(f"{DATA_PATH}/zarr/2022/obs", "dryspell", intensity_thresholds)
+chirps_spi = read_aggregated_obs(
+    f"{DATA_PATH}/zarr/2022/obs", "spi", intensity_thresholds
+)
+chirps_dry = read_aggregated_obs(
+    f"{DATA_PATH}/zarr/2022/obs", "dryspell", intensity_thresholds
+)
 
-chirps_anomaly = xr.concat([chirps_spi, chirps_dry], 'index')
+chirps_anomaly = xr.concat([chirps_spi, chirps_dry], "index")
 
 # %%
 chirps_anomaly
 
 # %%
-roc = pd.concat([
-    pd.read_csv(f"{DATA_PATH}/auc/fbf.districts.roc.spi.2022.csv"),
-    pd.read_csv(f"{DATA_PATH}/auc/fbf.districts.roc.dryspell.2022.csv"),    
-])
+roc = pd.concat(
+    [
+        pd.read_csv(f"{DATA_PATH}/auc/fbf.districts.roc.spi.2022.csv"),
+        pd.read_csv(f"{DATA_PATH}/auc/fbf.districts.roc.dryspell.2022.csv"),
+    ]
+)
 
 # %%
 roc
@@ -188,11 +195,21 @@ plt.show()
 
 # %%
 # Probabilities
-issue_widget = pn.widgets.Select(name="Issue Month", options=sorted(probs.issue.values.tolist()))
-district_widget = pn.widgets.Select(name="District", options=sorted(probs.district.values.tolist()))
-category_widget = pn.widgets.Select(name="Category", options=sorted(probs.category.values.tolist()))
-index_widget = pn.widgets.Select(name="Index", options=sorted(probs.sel(issue=issue_widget.value).index.values.tolist()))
-     
+issue_widget = pn.widgets.Select(
+    name="Issue Month", options=sorted(probs.issue.values.tolist())
+)
+district_widget = pn.widgets.Select(
+    name="District", options=sorted(probs.district.values.tolist())
+)
+category_widget = pn.widgets.Select(
+    name="Category", options=sorted(probs.category.values.tolist())
+)
+index_widget = pn.widgets.Select(
+    name="Index",
+    options=sorted(probs.sel(issue=issue_widget.value).index.values.tolist()),
+)
+
+
 @pn.depends(issue_widget, index_widget, district_widget, category_widget)
 def plot_timeseries(issue, index, district, category):
     sel = probs.sel(issue=issue, index=index, district=district, category=category)
@@ -202,6 +219,7 @@ def plot_timeseries(issue, index, district, category):
 
     return (raw_plot * bc_plot).opts(show_grid=True, legend_position="top_left")
 
+
 ###
 # Here please make sure to select an index within the 7-month leadtime of the issue month
 ###
@@ -209,15 +227,23 @@ def plot_timeseries(issue, index, district, category):
 pn.Column(
     pn.Row(issue_widget, index_widget),
     pn.Row(district_widget, category_widget),
-    plot_timeseries
+    plot_timeseries,
 )
 
 # %%
 # Observations
-district_widget = pn.widgets.Select(name="District", options=sorted(probs.district.values.tolist()))
-category_widget = pn.widgets.Select(name="Category", options=sorted(probs.category.values.tolist()))
-index_widget = pn.widgets.Select(name="Index", options=sorted(probs.sel(issue=issue_widget.value).index.values.tolist()))
-     
+district_widget = pn.widgets.Select(
+    name="District", options=sorted(probs.district.values.tolist())
+)
+category_widget = pn.widgets.Select(
+    name="Category", options=sorted(probs.category.values.tolist())
+)
+index_widget = pn.widgets.Select(
+    name="Index",
+    options=sorted(probs.sel(issue=issue_widget.value).index.values.tolist()),
+)
+
+
 @pn.depends(index_widget, district_widget, category_widget)
 def plot_obs_timeseries(index, district, category):
     sel = chirps_anomaly.sel(index=index, district=district, category=category)
@@ -238,18 +264,20 @@ def plot_obs_timeseries(index, district, category):
     return (line * points).opts(show_grid=True, legend_position="top_left")
 
 
-pn.Column(
-    pn.Row(index_widget, district_widget, category_widget),
-    plot_obs_timeseries
-)
+pn.Column(pn.Row(index_widget, district_widget, category_widget), plot_obs_timeseries)
 
 # %% [markdown]
 # ###  Read triggers data
 
 # %%
-triggers = pd.concat([
-    *[pd.read_csv(f) for f in glob.glob(f"{DATA_PATH}/triggers/triggers_metrics/*")],
-])
+triggers = pd.concat(
+    [
+        *[
+            pd.read_csv(f)
+            for f in glob.glob(f"{DATA_PATH}/triggers/triggers_metrics/*")
+        ],
+    ]
+)
 
 # %%
 triggers
@@ -266,21 +294,22 @@ index_widget = pn.widgets.Select(name="Index", options=index_options)
 district_widget = pn.widgets.Select(name="District", options=district_options)
 category_widget = pn.widgets.Select(name="Category", options=category_options)
 
+
 @pn.depends(
-    index_widget, district_widget, category_widget,
+    index_widget,
+    district_widget,
+    category_widget,
 )
 def filtered_table(index, district, category):
     filtered = triggers[
-        (triggers["index"] == index) &
-        (triggers["district"] == district) &
-        (triggers["category"] == category)
+        (triggers["index"] == index)
+        & (triggers["district"] == district)
+        & (triggers["category"] == category)
     ]
     return pn.widgets.Tabulator(filtered, pagination="local", page_size=10, width=1000)
 
-pn.Column(
-    pn.Row(index_widget, district_widget, category_widget),
-    filtered_table
-)
+
+pn.Column(pn.Row(index_widget, district_widget, category_widget), filtered_table)
 
 # %% [markdown]
 # ### Format to dataframe and save to parquet
@@ -290,42 +319,42 @@ probs_df = probs.to_dataframe().dropna().reset_index()
 chirps_df = chirps_anomaly.to_dataframe().dropna().reset_index()
 
 # %%
-probs_df['index'] = probs_df['index'].str.upper()
-chirps_df['index'] = chirps_df['index'].str.upper()
-triggers['index'] = triggers['index'].str.upper()
+probs_df["index"] = probs_df["index"].str.upper()
+chirps_df["index"] = chirps_df["index"].str.upper()
+triggers["index"] = triggers["index"].str.upper()
 
 # %%
 # Rename time column as year column
-probs_df = probs_df.rename(columns={'time': 'year'})
-chirps_df = chirps_df.rename(columns={'time': 'year'})
+probs_df = probs_df.rename(columns={"time": "year"})
+chirps_df = chirps_df.rename(columns={"time": "year"})
 
 # %%
 # Unscale CHIRPS-based SPI
-chirps_df['val'] = chirps_df.val / 1000
+chirps_df["val"] = chirps_df.val / 1000
 
 # %%
 # Change types
-probs_df['issue'] = probs_df.issue.astype(np.uint8)
-probs_df['year'] = probs_df.year.astype(np.uint16)
-chirps_df['year'] = chirps_df.year.astype(np.uint16)
-chirps_df['bool'] = chirps_df['bool'].astype(bool)
-roc['BC'] = roc.BC.astype(bool)
-roc['issue'] = roc.issue.astype(np.uint8)
+probs_df["issue"] = probs_df.issue.astype(np.uint8)
+probs_df["year"] = probs_df.year.astype(np.uint16)
+chirps_df["year"] = chirps_df.year.astype(np.uint16)
+chirps_df["bool"] = chirps_df["bool"].astype(bool)
+roc["BC"] = roc.BC.astype(bool)
+roc["issue"] = roc.issue.astype(np.uint8)
 
 # %%
-triggers['issue_ready'] = triggers.issue_ready.astype(np.uint8)
-triggers['issue_set'] = triggers.issue_set.astype(np.uint8)
-triggers['lead_time'] = triggers.lead_time.astype(np.uint8)
-triggers['FN'] = triggers.FN.astype(np.uint8)
-triggers['FP'] = triggers.FP.astype(np.uint8)
-triggers['FPtol'] = triggers.FPtol.astype(np.uint8)
-triggers['TN'] = triggers.TN.astype(np.uint8)
-triggers['TP'] = triggers.TP.astype(np.uint8)
-triggers['RP'] = triggers.RP.astype(np.uint8)
+triggers["issue_ready"] = triggers.issue_ready.astype(np.uint8)
+triggers["issue_set"] = triggers.issue_set.astype(np.uint8)
+triggers["lead_time"] = triggers.lead_time.astype(np.uint8)
+triggers["FN"] = triggers.FN.astype(np.uint8)
+triggers["FP"] = triggers.FP.astype(np.uint8)
+triggers["FPtol"] = triggers.FPtol.astype(np.uint8)
+triggers["TN"] = triggers.TN.astype(np.uint8)
+triggers["TP"] = triggers.TP.astype(np.uint8)
+triggers["RP"] = triggers.RP.astype(np.uint8)
 
 # %%
 outdir = "s3://wfp-ops-userdata/amine.barkaoui/aa/data/setup-tool/tza"
-#os.makedirs(outdir, exist_ok=True)
+# os.makedirs(outdir, exist_ok=True)
 
 probs_df.to_parquet(f"{outdir}/probs.parquet", index=False)
 chirps_df.to_parquet(f"{outdir}/obs.parquet", index=False)

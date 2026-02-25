@@ -34,7 +34,6 @@ COPY --from=build --chmod=0755 /app/entrypoint.sh /app/entrypoint.sh
 
 # Copy only necessary project files (excluding .git, data)
 COPY AA ./AA
-COPY config ./config
 
 ENV PYTHONPATH="/app"
 ENV PATH="/app/.pixi/envs/production/bin:$PATH"

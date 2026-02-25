@@ -85,4 +85,4 @@ windows:
     window2: ["DJ", "DJF", "JF", "JFM", "FM", "FMA", "MA", "MAM", "AM"]
   dryspell:
     window1: []
-    window2: ["DJ", "JF", "FM"]
+    window2: []

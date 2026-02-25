@@ -266,10 +266,10 @@ def merge_probabilities_triggers_dashboard(probs, triggers, params, period):
     target_index = f"{params.index.upper()} {period}"
 
     # Drop all rows that do not related to the target_index
-    triggers_merged = triggers_merged[triggers_merged['index']==target_index]
-    
+    triggers_merged = triggers_merged[triggers_merged["index"] == target_index]
+
     for idx, row in triggers_merged.iterrows():
-        if (row.issue_ready == params.issue):
+        if row.issue_ready == params.issue:
             match_filter = (
                 (probs_df["index"] == target_index)
                 & (probs_df["category"] == row.category)
@@ -279,8 +279,8 @@ def merge_probabilities_triggers_dashboard(probs, triggers, params, period):
             if len(matching_probs) > 0:
                 prob_value = matching_probs.prob.values[0]
                 triggers_merged.loc[idx, "prob_ready"] = prob_value
-                
-        elif (row.issue_set == params.issue):
+
+        elif row.issue_set == params.issue:
             match_filter = (
                 (probs_df["index"] == target_index)
                 & (probs_df["category"] == row.category)
@@ -305,7 +305,7 @@ def read_forecasts(area, issue, local_path):
     fs = fsspec.open(local_path).fs
     zmetadata_path = os.path.join(local_path, ".zmetadata")
     data_exists = fs.exists(zmetadata_path)
-    
+
     # Determine the forecast period:
     # - `last_date` is the end of the target time range, extracted from area.datetime_range (e.g., "2024-01-01/2024-12-31")
     # - `forecast_date` is the start of the forecast, set to the 1st of the issue month of the year before `last_date`, as last_date.year = monitoring_year + 1

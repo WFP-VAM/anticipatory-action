@@ -1,16 +1,13 @@
-import pandas as pd
 import argparse
-from AA.helper_fns import validate_prism_dataframe
-from config.params import Params
+
+import pandas as pd
+
+from AA.helpers.utils import validate_prism_dataframe
 
 
-def main(iso3: str, issue_month: int):
+def main(iso3: str):
     # Normalize inputs
     iso3 = iso3.lower()
-    issue_str = f"{issue_month:02d}"
-
-    # Initialize parameters
-    params = Params(iso=iso3.upper(), issue=issue_month, index="SPI")
 
     # Define paths
     base_path = "s3://wfp-ops-userdata"
@@ -29,7 +26,7 @@ def main(iso3: str, issue_month: int):
     print(f"📥 Reading probs pilot data from: {pilot_path}")
     df = pd.read_csv(pilot_path)
     print(f"probs pilot data: {df.columns}")
-    
+
     print("🔗 Concatenating filtered PRISM and pilot data...")
     df_concat = (
         pd.concat(
@@ -63,6 +60,9 @@ def main(iso3: str, issue_month: int):
     window_mapping = {"Window1": "Window 1", "Window2": "Window 2"}
     df_concat["window"] = [window_mapping.get(v, v) for v in df_concat.window.values]
 
+    print("Validating dataframe...")
+    validate_prism_dataframe(df)
+
     print(f"💾 Saving processed data to: {output_path}")
     df_concat.to_csv(output_path, index=False)
 
@@ -72,9 +72,6 @@ def main(iso3: str, issue_month: int):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Process AA probability triggers")
     parser.add_argument("iso3", type=str, help="ISO3 country code (e.g., MOZ)")
-    parser.add_argument(
-        "issue_month", type=int, help="Issue month as integer (e.g., 8 for August)"
-    )
     args = parser.parse_args()
 
     main(args.iso3, args.issue_month)

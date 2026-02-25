@@ -6,7 +6,7 @@ Generates operational outputs for a given country, **issue month**, and indicato
 
 ### Pixi
 ```bash
-pixi run python -m AA.operational <ISO> <ISSUE_MONTH> <SPI/DRYSPELL>
+pixi run python -m AA.cli.operational <ISO> <ISSUE_MONTH> <SPI/DRYSPELL>
 ```
 
 ### Docker
@@ -16,7 +16,7 @@ docker run --rm \
   -e AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} \
   -e AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN} \
   aa-runner:latest \
-  python -m AA.operational <ISO> <ISSUE_MONTH> <SPI/DRYSPELL> \
+  python -m AA.cli.operational <ISO> <ISSUE_MONTH> <SPI/DRYSPELL> \
   --data-path <DATA_PATH> --output-path <OUTPUT_PATH>
 ```
 
@@ -34,4 +34,4 @@ docker run --rm \
 See [Configuration](configuration.md) and [Environments](environment.md) for paths and credentials.
 
 
-:::AA.operational
+:::AA.cli.operational

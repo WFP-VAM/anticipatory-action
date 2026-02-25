@@ -25,8 +25,6 @@ def compute_confusion_matrix(true, pred, out_shape, result):
 
     However, this function avoids the dependency on sklearn and
     allows to use numba in nopython mode.
-
-    Returns an array [true negatives, false positives, false negatives, true positives]
     """
     # TODO move to hip-analysis
     result.fill(0)
@@ -110,6 +108,7 @@ def objective(
         conf_matrix,
         conf_matrix,
     )
+
     # tn, fp, fn, tp - should we use these standard terms for variable names instead?
     misses, false, fn, hits = (
         conf_matrix[0],
@@ -124,10 +123,12 @@ def objective(
 
     else:
         # Compute metrics
-        number_actions = np.sum(prediction) # number of years in which forecast probabilities exceeded the trigger pair
+
+        # Number of years in which forecast probabilities exceeded the trigger pair
+        number_actions = np.sum(prediction)
         # FAR = FP/ (FP + TN). Should this be called false discovery rate instead?
         false_alarm_rate = false / (false + hits + EPS)
-        # num of years with prediction, where obs_val was more favourable than the more lenient tolerance threshold
+        # Num of years with prediction, where obs_val was more favourable than the more lenient tolerance threshold
         false_tol = np.sum(prediction & (obs_val > tolerance))
         # Also known as recall
         hit_rate = np.round(hits / (hits + fn + EPS), 3)
@@ -155,7 +156,7 @@ def objective(
 
         # When we need to retrieve all the metrics
         else:
-            # ["TN", "FP", "FN", "TP", "HR", "FAR", "SR", "FR", "RP"]
+            # ["TN", "FP", "FN", "TP", "HR", "FAR", "FPtol", "SR", "FR", "RP"]
             result[0] = misses
             result[1] = false
             result[2] = fn
