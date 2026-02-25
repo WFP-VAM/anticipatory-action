@@ -17,7 +17,7 @@ monitoring_year: 2025
 calibration_year: 2022
 
 # Minimum length of indicator periods (ON, NDJ, JFMA...)
-min_index_period: 3
+min_index_period: 2
 
 # Maximum length of indicator periods (ON, NDJ, JFMA...)
 max_index_period: 3
@@ -47,8 +47,15 @@ intensity_thresholds:
 
 # Vulnerability class of triggers for each district: general or non-regret (GT or NRT)
 districts_vulnerability: 
-  Longido: "TBD"
+  Handeni: "TBD"
+  Kiteto: "TBD"
   Kondoa: "TBD"
+  Longido: "TBD"
+  Meatu: "TBD"
+  # Micheweni: "TBD"
+  Monduli: "TBD"
+  Same: "TBD"
+  Simanjiro: "TBD"
 
 # Tolerance for thresholds for each category, used to compute false alarm with tolerance
 tolerance:
@@ -74,8 +81,8 @@ non_regret_t:
 # Window definitions for SPI and DRYSPELL indicators
 windows:
   spi:
-    window1: ["OND", "NDJ"]
-    window2: ["DJF", "JFM", "FMA"]
+    window1: ["ON", "OND", "ND", "NDJ"]
+    window2: ["DJ", "DJF", "JF", "JFM", "FM", "FMA", "MA", "MAM", "AM"]
   dryspell:
     window1: []
     window2: []
