@@ -91,6 +91,6 @@ windows:
     window1: ["ON", "ND", "OND", "NDJ"]
     window2: ["DJ", "JF", "FM", "DJF", "JFM", "FMA"]
   dryspell:
-    window1: ["ON", "ND", "OND", "NDJ"]
-    window2: ["DJ", "JF", "FM", "DJF", "JFM", "FMA"]
+    window1: ["ON", "ND"]
+    window2: ["DJ", "JF", "FM"]
 

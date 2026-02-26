@@ -6,58 +6,85 @@
 #       extension: .py
 #       format_name: light
 #       format_version: '1.5'
-#       jupytext_version: 1.15.2
+#       jupytext_version: 1.16.2
 #   kernelspec:
-#     display_name: Python 3 (ipykernel)
+#     display_name: hdc
 #     language: python
 #     name: python3
 # ---
 
 # ### Check *analytical* pipeline using datasets/parameters of interest by comparing results with reference outputs at the district level
 
-# %cd ../
+import os
 
-# +
-import geopandas as gpd
+if os.getcwd().split("\\")[-1] != "anticipatory-action":
+    os.chdir("..")
+print(os.getcwd())
+
 import numpy as np
 import pandas as pd
+import xarray as xr
 import seaborn as sns
+import geopandas as gpd
+import matplotlib.pyplot as plt
+
+from AA.src.params import Params
+from AA.triggers import read_aggregated_probs
 from hip.analysis.analyses.drought import get_accumulation_periods
 
+# Prepare parameters
+
+params = Params(iso="TEST", index="SPI", output_path=".")
+
+# Read data (b-c probabilities, roc scores)
+
+# +
+probs_ref = read_aggregated_probs(
+    f"{params.output_path}/data/{params.iso}/zarr/{params.calibration_year}",
+    params,
+).bc.sortby("category")
+display(probs_ref)
+
+data_of_interest = "xsdba"  # change with output name of dataset of interest
+
+probs_ds = read_aggregated_probs(
+    f"{params.output_path}/data/{params.iso}/{data_of_interest}/zarr/{params.calibration_year}",
+    params,
+).bc.sortby("category")
+display(probs_ds)
+
+# +
+fbfref = pd.read_csv(
+    f"{params.output_path}/data/test/auc/fbf.districts.roc.spi.2022.csv"
+)
+fbfref = fbfref.rename(columns={"AUC_best": "AUC_ref", "BC": "BC_ref"})
+display(fbfref)
+
+data_of_interest = "xsdba"  # change with output name of dataset of interest
+
+fbf = pd.read_csv(
+    f"{params.output_path}/data/test/{data_of_interest}/auc/fbf.districts.roc.spi.2022.csv"
+)
+display(fbf)
 # -
-from AA.helper_fns import read_forecasts_locally, read_observations_locally
-from config.params import Params
 
-# Prepare input data
+# ### Comparison of aggregated probabilities
 
-fc = read_forecasts_locally("data/MOZ/forecast/Moz_SAB_tp_ecmwf_01/*.nc")
+# +
+diff = abs(probs_ref - probs_ds)
+# Convert to dataframe for easier plotting
+df = diff.to_dataframe(name="difference").reset_index()
 
-params = Params(iso="MOZ", index="SPI")
-params.issue = 1
-params.year = 2022
 
-obs = read_observations_locally("data/MOZ/chirps")
+# Or boxplot by one dimension (e.g., by time if you have it)
+sns.boxplot(x="time", y="difference", data=df)
+plt.xticks(rotation=45)
+plt.show()
 
-triggers_df = pd.read_csv(
-    f"data/{params.iso}/outputs/Plots/triggers.aa.python.spi.dryspell.2022.csv"
-)
-gdf = gpd.read_file(
-    f"data/{params.iso}/shapefiles/moz_admbnda_2019_SHP/moz_admbnda_adm2_2019.shp"
-)
 
-accumulation_periods = get_accumulation_periods(
-    fc,
-    params.start_season,
-    params.end_season,
-    params.min_index_period,
-    params.max_index_period,
-)
-accumulation_periods
-period = accumulation_periods["AM"]
+# -
 
-fc = fc.where(fc.time < np.datetime64("2022-07-01T12:00:00.000000000"), drop=True)
-
-# ### Comparison on the full output at the district level
+# ### Comparison of ROC scores at the district level
 
 
 def plot_hist(comparison, title, xlabel, xmin, xmax, s=1, mask_text=False):
@@ -116,30 +143,17 @@ def plot_hist(comparison, title, xlabel, xmin, xmax, s=1, mask_text=False):
         spine.set_visible(False)
 
 
-fbfref = pd.read_csv(
-    "data/MOZ/outputs/Districts_FbF/spi/fbf.districts.roc.spi.2022.txt"
-)
-fbfref.columns = ["district", "category", "AUC_ref", "BC_ref", "Index", "issue"]
-fbfref
-
-# +
-data_of_interest = "blended"  # change with output name of dataset of interest
-
-fbfP = pd.read_csv(
-    "data/MOZ/outputs/Districts_FbF/spi/fbf.districts.roc.spi.2022.{data_of_interest}.txt"
-)
-fbfP
-# -
-
 # Ratio of bias-corrected values in the final output
 
 # Ratio of cases using Bias Correction
-fbfP.BC.sum() / len(fbfP)
+fbf.BC.sum() / len(fbf)
+
+fbfref.BC_ref.sum() / len(fbfref)
 
 # Histogram of difference between full outputs (auc_to_compare - python_reference)
 
 comparison = (
-    fbfP.set_index(["district", "category", "Index", "issue"])
+    fbf.set_index(["district", "category", "Index", "issue"])
     .join(fbfref.set_index(["district", "category", "Index", "issue"]))
     .reset_index()
 )
@@ -148,10 +162,10 @@ comparison["difference"] = comparison.AUC_best - comparison.AUC_ref
 
 plot_hist(
     comparison,
-    title="R/Python AUC (BC and not) difference at the district level",
+    title="AUC (BC and not) difference at the district level",
     xlabel="AUC difference",
-    xmin=-0.5,
-    xmax=0.5,
+    xmin=-0.01,
+    xmax=0.01,
     s=10,
 )
 
@@ -184,7 +198,7 @@ def draw_heatmap(**kwargs):
 
 
 fg = sns.FacetGrid(
-    comparison.loc[(comparison.category == "Severo")], col="district", col_wrap=4
+    comparison.loc[(comparison.category == "Severe")], col="district", col_wrap=4
 )
 fg.map_dataframe(
     draw_heatmap, annot=True, annot_kws={"size": 4}, cbar=True, cmap="RdYlGn", center=0
@@ -194,7 +208,7 @@ fg.fig.suptitle("SEVERE CATEGORY")
 # -
 
 fg = sns.FacetGrid(
-    comparison.loc[(comparison.category == "Moderado")], col="district", col_wrap=4
+    comparison.loc[(comparison.category == "Moderate")], col="district", col_wrap=4
 )
 fg.map_dataframe(
     draw_heatmap, annot=True, annot_kws={"size": 4}, cbar=True, cmap="RdYlGn", center=0
@@ -203,7 +217,7 @@ fg.fig.subplots_adjust(top=0.9)
 fg.fig.suptitle("MODERATE CATEGORY")
 
 fg = sns.FacetGrid(
-    comparison.loc[(comparison.category == "Leve")], col="district", col_wrap=4
+    comparison.loc[(comparison.category == "Mild")], col="district", col_wrap=4
 )
 fg.map_dataframe(
     draw_heatmap, annot=True, annot_kws={"size": 4}, cbar=True, cmap="RdYlGn", center=0
@@ -211,7 +225,7 @@ fg.map_dataframe(
 fg.fig.subplots_adjust(top=0.9)
 fg.fig.suptitle("MILD CATEGORY")
 
-# ### Visualisation of differences for each pair of variables to highlight any systematic difference
+# ### Visualisation of AUC differences for each pair of variables to highlight any systematic difference
 
 # **Average difference**
 

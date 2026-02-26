@@ -82,7 +82,7 @@ non_regret_t:
 windows:
   spi:
     window1: ["ON", "OND", "ND", "NDJ"]
-    window2: ["DJ", "DJF", "JF", "JFM", "FM", "FMA"]
+    window2: ["DJ", "DJF", "JF", "JFM", "FM", "FMA", "MA", "MAM", "AM"]
   dryspell:
     window1: []
-    window2: ["DJ", "JF", "FM"]
+    window2: []

@@ -7,7 +7,7 @@ pixi install --locked
 
 Run workflows:
 ```bash
-pixi run python -m AA.analytical <ISO> <SPI/DRYSPELL>
-pixi run python -m AA.triggers <ISO> <SPI/DRYSPELL> <VULNERABILITY>
-pixi run python -m AA.operational <ISO> <ISSUE_MONTH> <SPI/DRYSPELL>
+pixi run python -m AA.cli.analytical <ISO> <SPI/DRYSPELL>
+pixi run python -m AA.cli.triggers <ISO> <SPI/DRYSPELL> <VULNERABILITY>
+pixi run python -m AA.cli.operational <ISO> <ISSUE_MONTH> <SPI/DRYSPELL>
 ```

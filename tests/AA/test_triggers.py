@@ -21,7 +21,7 @@
 import numpy as np
 import pytest
 
-from AA._triggers_ready_set import find_optimal_triggers
+from AA.helpers._triggers import find_optimal_triggers
 
 # +
 # Skip those tests as the functions used and the expected results need to be updated

@@ -33,18 +33,19 @@ To install [Pixi](https://pixi.sh/latest/getting_started/), follow the official 
 ```bash
 pixi install --locked
 ```
+
 You can now run any of the scripts:
 
 #### 1. Analytical script
 
 ```bash
-pixi run python -m AA.analytical <ISO> <SPI/DRYSPELL>
+pixi run python -m AA.cli.analytical <ISO> <SPI/DRYSPELL>
 ```
 
 #### 2. Triggers script
 
 ```bash
-pixi run python -m AA.triggers <ISO> <SPI/DRYSPELL> <VULNERABILITY>
+pixi run python -m AA.cli.triggers <ISO> <SPI/DRYSPELL> <VULNERABILITY>
 ```
 
 Where `<VULNERABILITY>` is one of:
@@ -60,7 +61,7 @@ After running both SPI and Dryspell triggers, use the notebook `merge-spi-dryspe
 #### 3. Operational script
 
 ```bash
-pixi run python -m AA.operational <ISO> <ISSUE_MONTH> <SPI/DRYSPELL>
+pixi run python -m AA.cli.operational <ISO> <ISSUE_MONTH> <SPI/DRYSPELL>
 ```
 
 ### 📓 Working with Jupytext Notebooks
@@ -158,7 +159,27 @@ This will export the necessary credentials as environment variables:
 - AWS_SECRET_ACCESS_KEY
 - AWS_SESSION_TOKEN
 
-#### 3. Run the workflow in Docker
+#### 3. Provide the AA configuration
+
+The AA pipeline takes configuration only via CLI parameter:
+
+```bash
+--config-json
+```
+
+To load your YAML config and convert it into JSON, use yq:
+
+```bash
+CONFIG_JSON="$(pixi run yq -o=json '.' config/{iso}_config.yaml)"
+```
+
+Replace `{iso}` with the ISO3 country code (e.g., tza).
+
+
+You will pass this directly to the container in the next step.
+
+
+#### 4. Run the workflow in Docker
 
 You can run any module via `docker run`, passing command-line arguments:
 
@@ -169,7 +190,11 @@ docker run --rm \
   -e AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} \
   -e AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN} \
   aa-runner:latest \
-  python -m AA.analytical <ISO> <SPI/DRYSPELL> --data-path <DATA_PATH> --output-path <OUTPUT_PATH>
+  python -m AA.cli.analytical \
+    <ISO> <SPI|DRYSPELL> \
+    --config-json "${CONFIG_JSON}" \
+    --data-path <DATA_PATH> \
+    --output-path <OUTPUT_PATH>
 ```
 
 **Triggers**
@@ -179,7 +204,11 @@ docker run --rm \
   -e AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} \
   -e AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN} \
   aa-runner:latest \
-  python -m AA.triggers <ISO> <SPI/DRYSPELL> <VULNERABILITY> --data-path <DATA_PATH> --output-path <OUTPUT_PATH>
+  python -m AA.cli.triggers \
+    <ISO> <SPI|DRYSPELL> <VULNERABILITY> \
+    --config-json "${CONFIG_JSON}" \
+    --data-path <DATA_PATH> \
+    --output-path <OUTPUT_PATH>
 ```
 
 **Operational**
@@ -189,7 +218,11 @@ docker run --rm \
   -e AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} \
   -e AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN} \
   aa-runner:latest \
-  python -m AA.analytical <ISO> <ISSUE_MONTH> <SPI/DRYSPELL> --data-path <DATA_PATH> --output-path <OUTPUT_PATH>
+  python -m AA.cli.operational \
+    <ISO> <ISSUE_MONTH> <SPI|DRYSPELL> \
+    --config-json "${CONFIG_JSON}" \
+    --data-path <DATA_PATH> \
+    --output-path <OUTPUT_PATH>
 ```
 
 ## Set-up

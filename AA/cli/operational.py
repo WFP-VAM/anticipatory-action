@@ -6,24 +6,18 @@ import warnings
 import click
 import numpy as np
 import pandas as pd
-from hip.analysis.analyses.drought import (
-    compute_probabilities,
-    get_accumulation_periods,
-    run_accumulation_index,
-    run_bias_correction,
-    run_gamma_standardization,
-)
+from hip.analysis.analyses.drought import (compute_probabilities,
+                                           get_accumulation_periods,
+                                           run_accumulation_index,
+                                           run_bias_correction,
+                                           run_gamma_standardization)
 from hip.analysis.aoi.analysis_area import AnalysisArea
 
-from AA.helper_fns import (
-    compute_district_average,
-    merge_probabilities_triggers_dashboard,
-    merge_un_biased_probs,
-    read_forecasts,
-    read_observations,
-    read_triggers,
-)
-from config.params import S3_OPS_DATA_PATH, Params
+from AA.helpers.params import S3_OPS_DATA_PATH, Params
+from AA.helpers.utils import (compute_district_average,
+                              merge_probabilities_triggers_dashboard,
+                              merge_un_biased_probs, read_forecasts,
+                              read_observations, read_triggers)
 
 logging.basicConfig(level="INFO", force=True)
 
@@ -34,6 +28,11 @@ warnings.simplefilter(action="ignore", category=FutureWarning)
 @click.argument("country", required=True, type=str)
 @click.argument("issue", required=True, type=int)
 @click.argument("index", default="SPI")
+@click.option(
+    "--config-json",
+    default=None,
+    help="Optional JSON string with configuration parameters.",
+)
 @click.option(
     "--data-path",
     required=True,
@@ -48,13 +47,14 @@ warnings.simplefilter(action="ignore", category=FutureWarning)
     default=S3_OPS_DATA_PATH,
     help="Root directory for output files. Defaults to data-path if not provided.",
 )
-def run(country, issue, index, data_path, output_path):
+def run(country, issue, index, config_json, data_path, output_path):
     # End to end workflow for a country using pre-stored ECMWF forecasts and CHIRPS
 
     params = Params(
         iso=country,
         issue=issue,
         index=index,
+        config_json=config_json,
         data_path=data_path,
         output_path=output_path,
     )
@@ -137,19 +137,18 @@ def run(country, issue, index, data_path, output_path):
     duplicate_cols = list(merged_db.columns.difference(["prob_ready", "prob_set"]))
     duplicates_count = merged_db.duplicated(subset=duplicate_cols).sum()
     if duplicates_count > 0:
-        raise ValueError(f"Data integrity error: {duplicates_count} duplicate rows found in merged trigger data. "
-                        f"This indicates a problem with the trigger merging process.")
+        raise ValueError(
+            f"Data integrity error: {duplicates_count} duplicate rows found in merged trigger data. "
+            f"This indicates a problem with the trigger merging process."
+        )
 
     # Perform left merge to find rows in triggers_df that don't exist in merged_db
     merge_result = triggers_df.merge(
-        merged_db[duplicate_cols], 
-        on=duplicate_cols, 
-        how='left', 
-        indicator=True
+        merged_db[duplicate_cols], on=duplicate_cols, how="left", indicator=True
     )
 
     # Get only rows that exist in triggers_df but not in merged_db
-    new_rows_from_triggers = triggers_df[merge_result['_merge'] == 'left_only']
+    new_rows_from_triggers = triggers_df[merge_result["_merge"] == "left_only"]
 
     # Append the new rows to merged_db
     if not new_rows_from_triggers.empty:

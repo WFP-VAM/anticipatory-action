@@ -25,8 +25,6 @@ def compute_confusion_matrix(true, pred, out_shape, result):
 
     However, this function avoids the dependency on sklearn and
     allows to use numba in nopython mode.
-
-    Returns an array [true negatives, false positives, false negatives, true positives]
     """
     # TODO move to hip-analysis
     result.fill(0)
@@ -110,6 +108,7 @@ def objective(
         conf_matrix,
         conf_matrix,
     )
+
     # tn, fp, fn, tp - should we use these standard terms for variable names instead?
     misses, false, fn, hits = (
         conf_matrix[0],
@@ -124,10 +123,12 @@ def objective(
 
     else:
         # Compute metrics
-        number_actions = np.sum(prediction) # number of years in which forecast probabilities exceeded the trigger pair
+
+        # Number of years in which forecast probabilities exceeded the trigger pair
+        number_actions = np.sum(prediction)
         # FAR = FP/ (FP + TN). Should this be called false discovery rate instead?
         false_alarm_rate = false / (false + hits + EPS)
-        # num of years with prediction, where obs_val was more favourable than the more lenient tolerance threshold
+        # Num of years with prediction, where obs_val was more favourable than the more lenient tolerance threshold
         false_tol = np.sum(prediction & (obs_val > tolerance))
         # Also known as recall
         hit_rate = np.round(hits / (hits + fn + EPS), 3)
@@ -155,16 +156,17 @@ def objective(
 
         # When we need to retrieve all the metrics
         else:
-            # ["TN", "FP", "FN", "TP", "HR", "FAR", "SR", "FR", "RP"]
+            # ["TN", "FP", "FN", "TP", "HR", "FAR", "FPtol", "SR", "FR", "RP"]
             result[0] = misses
             result[1] = false
             result[2] = fn
             result[3] = hits
             result[4] = hit_rate
             result[5] = false_alarm_rate
-            result[6] = successes / (number_actions + EPS)
-            result[7] = failures / (number_actions + EPS)
-            result[8] = return_period
+            result[6] = false_tol
+            result[7] = successes / (number_actions + EPS)
+            result[8] = failures / (number_actions + EPS)
+            result[9] = return_period
 
 
 @guvectorize(
@@ -229,8 +231,8 @@ def brute_force(
     min_value = 1e6
 
     t = np.empty(2, dtype=np.float64)
-    out = np.full(9, np.nan, dtype=np.float64)
-    penalty_array = np.full(9, 1e6, dtype=np.float64)
+    out = np.full(10, np.nan, dtype=np.float64)
+    penalty_array = np.full(10, 1e6, dtype=np.float64)
     conf_matrix = np.zeros(4, dtype=np.int8)
     constraints = np.zeros(5, dtype=np.int8)
 
@@ -431,7 +433,7 @@ def evaluate_grid_metrics(
     )
 
     # Initialize empty placeholders for results from xr.apply_ufunc
-    penalty = xr.DataArray(np.full(9, 1e6, dtype=np.float64), dims=["metric"])
+    penalty = xr.DataArray(np.full(10, 1e6, dtype=np.float64), dims=["metric"])
     conf_matrix = xr.DataArray(np.zeros(4, dtype=np.int8), dims=["metric"])
     constraints = xr.DataArray(np.empty(5, dtype=np.int8), dims=["metric"])
 
@@ -473,7 +475,7 @@ def evaluate_grid_metrics(
             ["metric"],
         ],
         output_core_dims=[["metric"]],
-        output_sizes={"metric": 9},
+        output_sizes={"metric": 10},
         output_dtypes=[np.float64],
         vectorize=True,
         join="outer",
@@ -482,7 +484,7 @@ def evaluate_grid_metrics(
 
     # Assign metric names
     metrics_da = metrics_da.assign_coords(
-        metric=["TN", "FP", "FN", "TP", "HR", "FAR", "SR", "FR", "RP"]
+        metric=["TN", "FP", "FN", "TP", "HR", "FAR", "FPtol", "SR", "FR", "RP"]
     )
 
     return metrics_da
@@ -589,7 +591,7 @@ def evaluate_top_pairs(sub_df, obs, probs_ready, probs_set, params):
         return sel
 
     out = np.empty(9, dtype=np.float64)
-    penalty_array = np.full(9, 1e6, dtype=np.float64)
+    penalty_array = np.full(10, 1e6, dtype=np.float64)
     conf_matrix = np.zeros(4, dtype=np.int8)
     constraints = np.zeros(5, dtype=np.int8)
 

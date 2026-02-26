@@ -1,4 +1,6 @@
 import datetime
+import json
+import logging
 import os
 from dataclasses import dataclass, field
 
@@ -10,7 +12,7 @@ import yaml
 from numba import types
 from numba.typed import Dict
 
-from AA.helper_fns import read_fbf_districts
+from AA.helpers.utils import read_fbf_districts
 
 DRYSPELL_THRESHOLD = 2.0
 
@@ -24,13 +26,49 @@ AGGREGATES = {
 S3_OPS_DATA_PATH = "s3://wfp-ops-userdata/amine.barkaoui/aa"
 
 
-def load_config(iso):
-    config_file = f"./config/{iso}_config.yaml"
-    if os.path.exists(config_file):
-        with open(config_file, "r") as f:
-            return yaml.safe_load(f)
-    else:
-        raise FileNotFoundError(f"Configuration file for {iso} not found.")
+def load_config(iso: str, cli_json: str | None = None) -> dict:
+    """
+    Load configuration for the given ISO3 code.
+
+    Priority:
+    1) CLI parameter --config-json (must be valid JSON)
+    2) Local file: ./config/{iso}_config.yaml (YAML or JSON)
+    """
+    # --- 1) CLI-supplied JSON ---
+    if cli_json is not None:
+        try:
+            cfg = json.loads(cli_json)
+            if not isinstance(cfg, dict):
+                raise ValueError("--config-json must contain a JSON object.")
+            logging.info("Loaded config from --config-json parameter.")
+            return cfg
+        except json.JSONDecodeError as e:
+            raise ValueError(f"--config-json contains invalid JSON: {e}")
+
+    # --- 2) Fallback to file ---
+    iso_lower = iso.lower()
+    config_path = f"./config/{iso_lower}_config.yaml"
+
+    if not fsspec.open(config_path).fs.exists(config_path):
+        raise FileNotFoundError(
+            f"No config provided via --config-json, and no file exists at {config_path}"
+        )
+
+    with fsspec.open(config_path, mode="rt", encoding="utf-8") as f:
+        text = f.read()
+
+    # Try JSON, then YAML
+    try:
+        cfg = json.loads(text)
+        logging.info("Loaded config from file as JSON.")
+        return cfg
+    except json.JSONDecodeError:
+        try:
+            cfg = yaml.safe_load(text)
+            logging.info("Loaded config from file as YAML.")
+            return cfg
+        except Exception as e:
+            raise ValueError(f"Invalid YAML in {config_path}: {e}")
 
 
 @dataclass
@@ -46,6 +84,8 @@ class Params:
         country ISO code
     index : str
         name of index to process: can be "SPI" or "DRYSPELL"
+    config_json: str
+        optional JSON string with configuration parameters, takes precedence over config file
     issue : int
         issue month: month of interest for operational script
     issue_months : list
@@ -90,6 +130,7 @@ class Params:
         dictionary containing two dictionaries (window1, window2) containing indicators for each window (by province or not)
     save_zarr : bool
         save (and overwrite if exists) ds (obs or probs) for future trigger choice
+
     data_path : str
         data path where to read input data from (should include data folder)
     output_path : str
@@ -98,6 +139,7 @@ class Params:
 
     iso: str
     index: str
+    config_json: str | None = None
     issue: int = None
     issue_months: list = None
     vulnerability: str = None
@@ -127,7 +169,7 @@ class Params:
         self.iso = self.iso.lower()
         self.index = self.index.lower()
 
-        config = load_config(self.iso)
+        config = load_config(self.iso, cli_json=self.config_json)
 
         # Set attributes based on the config file
         for key, value in config.items():
