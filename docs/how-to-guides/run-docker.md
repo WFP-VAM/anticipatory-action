@@ -14,7 +14,7 @@ export AWS_SESSION_TOKEN="XXX"
 
 Convert your YAML config into JSON
 ```bash
-CONFIG_JSON="$(pixi run yq -o=json '.' config/{iso}_config.yaml)"
+CONFIG_JSON="$(pixi run yq -r '.' config/{iso}_config.yaml)"
 ```
 
 Run workflows:
