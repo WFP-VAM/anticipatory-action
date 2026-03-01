@@ -170,7 +170,7 @@ The AA pipeline takes configuration only via CLI parameter:
 To load your YAML config and convert it into JSON, use yq:
 
 ```bash
-CONFIG_JSON="$(pixi run yq -o=json '.' config/{iso}_config.yaml)"
+CONFIG_JSON="$(pixi run yq -r '.' config/{iso}_config.yaml)"
 ```
 
 Replace `{iso}` with the ISO3 country code (e.g., tza).
