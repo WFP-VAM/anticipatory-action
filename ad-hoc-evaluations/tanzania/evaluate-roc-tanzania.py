@@ -19,6 +19,7 @@
 import datetime
 import os
 
+import hip.viz
 import numpy as np
 import xarray as xr
 import xskillscore as xss
