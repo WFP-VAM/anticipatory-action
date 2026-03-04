@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: light
 #       format_version: '1.5'
-#       jupytext_version: 1.17.1
+#       jupytext_version: 1.19.1
 #   kernelspec:
 #     display_name: Python (Pixi)
 #     language: python
@@ -23,9 +23,13 @@
 
 # **Import required libraries and functions**
 
+import os
+if os.getcwd().split("\\")[-1] != "anticipatory-action":
+    os.chdir("..")
+os.getcwd()
+
 # +
 import logging
-import os
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -34,20 +38,16 @@ import xarray as xr
 from hip.analysis.aoi.analysis_area import AnalysisArea
 from IPython.display import Markdown as md
 
-from AA.analytical import run_issue_verification
-from AA.src.params import Params
-from AA.src.utils import get_coverage, read_forecasts, read_observations
-from AA.triggers import run_triggers_selection
-
-if os.getcwd().split("\\")[-1] != "anticipatory-action":
-    os.chdir("..")
-os.getcwd()
+from AA.cli.analytical import run_issue_verification
+from AA.helpers.params import Params
+from AA.helpers.utils import get_coverage, read_forecasts, read_observations
+from AA.cli.triggers import run_triggers_selection
 # -
 
 # **First, please define the country ISO code and the index of interest**
 
 
-country = "MWI"
+country = "ISO"
 index = "SPI"  # 'SPI' or 'DRYSPELL'
 data_path = "."  # current directory (anticipatory-action)
 output_path = "."
@@ -65,7 +65,7 @@ params = Params(iso=country, index=index, data_path=data_path, output_path=outpu
 
 # ### Read data
 
-# Let's start by getting the Zimbabwe shapefile.
+# Let's start by getting the shapefile.
 
 # +
 area = AnalysisArea.from_admin_boundaries(
@@ -97,9 +97,7 @@ observations = read_observations(
 )
 observations
 
-# As with observations, forecasts are easy to read using hip-analysis. When other datasets will be available there, it will also be possible to change these ECMWF forecasts to use another dataset from another source.
-#
-# If your dataset is not available via hip-analysis or if you already have stored locally the forecasts you would like to use, you can edit the path below and forecasts will be read in the analytical loop. Once again, make sure that your coordinates match those of the observations, that your forecasts are daily, and that you have 51 members. The name of the data variable must be 'tp'.
+# If your dataset is already stored locally, you can edit the path below and forecasts will be read in the analytical loop. Once again, make sure that your coordinates match those of the observations, that your forecasts are daily, and that you have 51 members. The name of the data variable must be `tp` for total precipitation.
 
 
 forecasts_folder_path = (
@@ -107,15 +105,15 @@ forecasts_folder_path = (
 )
 
 
-# Congratulations! You've completed the part that requires the most energy during this process. Now all you have to do is run the different cells and check the results!
+# *Congratulations!* You've completed the part that requires the most energy during this process. Now all you have to do is run the different cells and check the results!
 
 # ### Analytical processing
 #
 # The next part contains the analytical phase of the AA process.
 #
-# This calculates the probabilities from the forecasts and the anomalies from the observations for all the issue months and the entire time series in order to measure the ROC score with and without bias correction. Probabilities and anomalies are saved locally, so that they can be reused during the trigger selection phase.
+# This calculates the **probabilities** from the forecasts and the **anomalies (SPI)** from the observations for all the issue months and the entire time series in order to measure the **ROC score** with and without bias correction. Probabilities and anomalies are saved locally, so that they can be reused during the trigger selection phase.
 #
-# *Note1: the next cell can take several hours to run if looping through all issue months, so please make sure before launching it that you have started a new instance of JupyterHub if working on it so it doesn't get interrupted.*
+# *Note1: the next cell can take several hours to run if looping through all issue months.*
 #
 # *Note2: if you want to re-run the workflow for issue months that you have already processed before, please delete the roc scores files in the `auc/split_by_issue` folder for the issue months of interest. Otherwise, the script will directly load the roc scores from the local files.*
 
@@ -129,7 +127,7 @@ os.makedirs(
 # Define empty list for each issue month's ROC score dataframe
 fbf_roc_issues = []
 
-for issue in ["07", "08"]:  # params.issue_months:
+for issue in ["07"]:  # params.issue_months:
     forecasts = read_forecasts(
         area,
         issue,
@@ -156,19 +154,21 @@ display(fbf_roc)  # noqa: F821
 
 # Let's have a look at how the computed probabilities data looks like.
 
-xr.open_zarr(f"{forecasts_folder_path}/07/{params.index} OND/probabilities.zarr")
+xr.open_zarr(f"{forecasts_folder_path}/07/{params.index} ON/probabilities.zarr").load()
 
 # We can also check how the CHIRPS-based anomalies that have been saved look like. They have been used to calculate the roc scores and will be used to select the triggers.
 
-xr.open_zarr(f"{forecasts_folder_path}/obs/{params.index} OND/observations.zarr")
+xr.open_zarr(f"{forecasts_folder_path}/obs/{params.index} ON/observations.zarr").load()
 
 # By running the next cell, you can save the dataframe containing the ROC scores. We commented it here so we don't overwrite the file with all the issue months with a file that only contains a few issue months.
 
 
-fbf_roc.to_csv(
-    f"{params.data_path}/data/{params.iso}/auc/fbf.districts.roc.{params.index}.{params.calibration_year}.csv",
-    index=False,
-)
+# +
+#fbf_roc.to_csv(
+#    f"{params.data_path}/data/{params.iso}/auc/fbf.districts.roc.{params.index}.{params.calibration_year}.csv",
+#    index=False,
+#)
+# -
 
 # Now we can read this dataframe locally to visualize the ROC scores.
 
@@ -202,10 +202,10 @@ plt.show()
 
 # We've now come to the final part: the triggers optimization! All you have to do is execute the next cell and the calculations will take place automatically.
 
-# Let's first define the vulnerability. We will run (if needed for at least one district) the triggers selection for two vulnerability levels: General Triggers & Non-Regret (or Emergency) Triggers.
+# The next cell allows to define that the trigger requirements are not clear at this point. It is still "TBD", so we will compute the metrics for all our candidates.
 
 
-params.load_vulnerability_requirements("GT")  # "NRT", "TBD"
+params.load_vulnerability_requirements("TBD")
 
 
 run_triggers_selection(params)
@@ -213,130 +213,20 @@ run_triggers_selection(params)
 
 # Then, we keep the best pair for each lead time and the 4 best pairs of triggers per window of activation (in terms of Hit Rate first, and Failure Rate then).
 
-# The triggers dataframe has been saved here: `"data/{iso}/triggers/triggers.aa.python.{index}.{calibration_year}.{vulnerability}.csv"`
+# The triggers dataframe has been saved here for each district: `"data/{iso}/triggers/triggers_metrics/triggers_metrics_tbd_{district}.csv"`
+#
+# Then, these dataframes can be explored in order to evaluate the trigger performance and attempt to find suitable triggers in terms of Hit Rate, Success Rate, and False Alarm Ratio.
 
 triggers = pd.read_csv(
-    f"{params.data_path}/data/{params.iso}/triggers/triggers.{params.index}.{params.calibration_year}.{params.vulnerability}.csv",
+    f"{params.data_path}/data/{params.iso}/triggers/triggers_metrics/triggers_metrics_tbd_{params.districts[0]}.csv",
 )
 triggers
 
 
-# ### Get and save final dataframe
+# Great! Now you can go through the trigger selection process: using the set-up tool, or by implementing a simple routine that carries out the filtering and ranking jobs. This type of function should be added soon in the codebase to facilitate this work. The pre-season verification and setup is then complete. 
+#
+# You can therefore proceed with the operational script and process the forecasts when they are ready to produce the alerts.
 
-# Now, you are done with the processing of one index (SPI or DRYSPELL). So you can rerun everything from the beginning with the other index. If you've already done it, you can run the next cell so it will merge all the different outputs to provide you with the very final dataframe that will be used operationally.
-
-# The next cells merge SPI and DRYSPELL for each vulnerability level. So SPI is taken first, and if no SPI is available DRYSPELL is included.
-
-# Read all GT csvs
-if os.path.exists(
-    f"{params.data_path}/data/{params.iso}/triggers/triggers.spi.{params.calibration_year}.GT.csv"
-):
-    spigt = pd.read_csv(
-        f"{params.data_path}/data/{params.iso}/triggers/triggers.spi.{params.calibration_year}.GT.csv"
-    )
-    drygt = pd.read_csv(
-        f"{params.data_path}/data/{params.iso}/triggers/triggers.dryspell.{params.calibration_year}.GT.csv"
-    )
-    trigs_gt = pd.concat([spigt, drygt])
-    trigs_gt["vulnerability"] = "GT"
-
-    # Keep SPI by default and DRYSPELL when not available for GT
-    gt_merged = pd.concat(
-        [
-            wcd.sort_values("index", ascending=False).head(4)
-            for (d, c, w), wcd in trigs_gt.groupby(["district", "category", "window"])
-        ]
-    )
-
-    # Save GT
-    gt_merged.to_csv(
-        f"{params.data_path}/data/{params.iso}/triggers/triggers.spi.dryspell.{params.calibration_year}.GT.csv",
-        index=False,
-    )
-
-# Read all NRT csvs
-if os.path.exists(
-    f"{params.data_path}/data/{params.iso}/triggers/triggers.spi.{params.calibration_year}.NRT.csv"
-):
-    spinrt = pd.read_csv(
-        f"{params.data_path}/data/{params.iso}/triggers/triggers.spi.{params.calibration_year}.NRT.csv"
-    )
-    drynrt = pd.read_csv(
-        f"{params.data_path}/data/{params.iso}/triggers/triggers.dryspell.{params.calibration_year}.NRT.csv"
-    )
-    trigs_nrt = pd.concat([spinrt, drynrt])
-    trigs_nrt["vulnerability"] = "NRT"
-
-    # Keep SPI by default and DRYSPELL when not available for NRT
-    nrt_merged = pd.concat(
-        [
-            wcd.sort_values("index", ascending=False).head(4)
-            for (d, c, w), wcd in trigs_nrt.groupby(["district", "category", "window"])
-        ]
-    )
-
-    # Save NRT
-    nrt_merged.to_csv(
-        f"{params.data_path}/data/{params.iso}/triggers/triggers.spi.dryspell.{params.calibration_year}.NRT.csv",
-        index=False,
-    )
-
-# Now we read dataframes for both vulnerability levels if they exist and merge them according to the vulnerability defined for each district in the config file.
-
-# Read GT and NRT dataframes
-if os.path.exists(
-    f"{params.data_path}/data/{params.iso}/triggers/triggers.spi.dryspell.{params.calibration_year}.GT.csv"
-):
-    gt_merged = pd.read_csv(
-        f"{params.data_path}/data/{params.iso}/triggers/triggers.spi.dryspell.{params.calibration_year}.GT.csv",
-    )
-if os.path.exists(
-    f"{params.data_path}/data/{params.iso}/triggers/triggers.spi.dryspell.{params.calibration_year}.NRT.csv"
-):
-    nrt_merged = pd.read_csv(
-        f"{params.data_path}/data/{params.iso}/triggers/triggers.spi.dryspell.{params.calibration_year}.NRT.csv",
-    )
-
-# Filter vulnerability based on district: merge GT and NRT
-triggers_full = pd.DataFrame()
-for d, v in params.districts_vulnerability.items():
-    if v == "GT":
-        if params.iso == "zwe":
-            tmp = gt_merged.loc[
-                (gt_merged.district == d) & (gt_merged.category == "Moderate")
-            ]
-        else:
-            tmp = gt_merged.loc[gt_merged.district == d]
-        triggers_full = pd.concat([triggers_full, tmp])
-    else:
-        if params.iso == "zwe":
-            tmp = nrt_merged.loc[
-                (nrt_merged.district == d) & (nrt_merged.category == "Normal")
-            ]
-        else:
-            tmp = nrt_merged.loc[nrt_merged.district == d]
-        triggers_full = pd.concat([triggers_full, tmp])
-
-
-# Save final triggers file
-triggers_full.to_csv(
-    f"{params.data_path}/data/{params.iso}/triggers/triggers.final.{params.monitoring_year}.pilots.csv",
-    index=False,
-)
-
-
-triggers_full  # .loc[triggers_full.issue_ready == 6]
-
-# ### Visualize coverage
-
-columns = None
-# columns = ["W1-Mild", "W1-Moderate", "W1-Severe", "W2-Mild", "W2-Moderate", "W2-Severe"]
-# columns = ["W1-Normal", "W2-Normal"]
-get_coverage(triggers_full, triggers_full["district"].sort_values().unique(), columns)
-
-
-# Great! The pre-season verification is complete. You can now proceed with the operational script and process the forecasts when they are ready to produce the alerts.
-
-# Please find the final dataframe here!
+# Please store the final dataframe here!
 #
 # `data/{iso}/triggers/triggers.final.{monitoring_year}.pilots.csv`
