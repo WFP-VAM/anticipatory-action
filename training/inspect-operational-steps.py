@@ -50,8 +50,8 @@ from AA.helpers.params import Params
 # The `config/{country}_config.yaml` file gathers all the parameters used in the operational script and that can be customized. For example, the *monitoring_year*, the list of districts or the intensity levels can be defined in that file.
 
 params = Params(
-    iso="TZA", 
-    issue=7, 
+    iso="ISO", 
+    issue=5, 
     index="SPI",
     data_path = ".",
     output_path = "."

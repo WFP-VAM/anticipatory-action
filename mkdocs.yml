@@ -11,6 +11,7 @@ theme:
 nav:
   - Home: index.md
   - Tutorials:
+      - Getting Started (Training Guide): tutorials/getting-started.md
       - Load forecasts from CDS: tutorials/load-forecasts-from-cds.ipynb
       - Run full verification: tutorials/run-full-verification.ipynb
       - Run operational monitoring: tutorials/run-operational-monitoring.ipynb

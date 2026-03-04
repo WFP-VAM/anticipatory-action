@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: light
 #       format_version: '1.5'
-#       jupytext_version: 1.17.1
+#       jupytext_version: 1.19.1
 #   kernelspec:
 #     display_name: Python (Pixi)
 #     language: python
@@ -23,20 +23,19 @@
 
 # **Import required libraries and functions**
 
-# +
 import os
+if os.getcwd().split("\\")[-1] != "anticipatory-action":
+    os.chdir("..")
+os.getcwd()
 
+# +
 import pandas as pd
 from hip.analysis.analyses.drought import get_accumulation_periods
 from hip.analysis.aoi.analysis_area import AnalysisArea
 
-from AA.operational import run_full_index_pipeline
-from AA.src.params import Params
-from AA.src.utils import read_forecasts, read_observations, read_triggers
-
-if os.getcwd().split("\\")[-1] != "anticipatory-action":
-    os.chdir("..")
-os.getcwd()
+from AA.cli.operational import run_full_index_pipeline
+from AA.helpers.params import Params
+from AA.helpers.utils import read_forecasts, read_observations, read_triggers
 # -
 
 # **First, please define the country ISO code, the issue month and the index of interest**
@@ -45,7 +44,7 @@ os.getcwd()
 country = (
     "ISO"  # Replace with the ISO code of the country you want to run the monitoring for
 )
-issue = 6
+issue = 7
 index = "SPI"  # 'SPI' or 'DRYSPELL'
 data_path = "."  # anticipatory-action directory
 output_path = "."
@@ -190,3 +189,5 @@ merged_db.sort_values(["district", "index", "category"]).to_csv(
     f"{params.data_path}/data/{params.iso}/probs/aa_probabilities_triggers_pilots.csv",
     index=False,
 )
+
+

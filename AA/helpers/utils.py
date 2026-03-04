@@ -333,7 +333,7 @@ def read_forecasts(area, issue, local_path):
     forecasts.attrs["nodata"] = np.nan
     forecasts.chunk({"time": -1}).to_zarr(local_path, mode="w", consolidated=True)
 
-    return persist_with_progress_bar(forecasts)
+    return forecasts
 
 
 def read_observations(area, local_path):
