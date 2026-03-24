@@ -107,6 +107,33 @@ forecasts_folder_path = (
     f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}"
 )
 
+# ### Rasterization visualization
+
+area = AnalysisArea.from_admin_boundaries(
+    iso3=params.iso.upper(),
+    admin_level=2,
+    resolution=0.25,
+    datetime_range=f"1981-01-01/{params.calibration_year}-06-30",
+)
+
+forecasts = read_forecasts(
+    area,
+    "07",
+    f"{forecasts_folder_path}/07/forecasts.zarr",
+)
+
+data = forecasts.isel(time=slice(100, 1200), ensemble=0).mean('time')
+
+data.plot.imshow()
+
+# ALL TOUCHED = FALSE
+zone_ids, zones = area._resolve_zones(data, None, None, False)
+zones.plot.imshow()
+
+# ALL TOUCHED = TRUE
+zone_ids, zones = area._resolve_zones(data, None, None, True)
+zones.plot.imshow()
+
 # ### Analytical processing
 
 # +
@@ -155,7 +182,13 @@ def compute_district_average(da, area):
         )
     else:
         da_grouped = (
-            area.zonal_stats(da, stats=["mean"], zone_ids=None, zones=None)
+            area.zonal_stats(
+                da, 
+                stats=["mean"], 
+                zone_ids=None, 
+                zones=None,
+                all_touched=True,
+            )
             .query("zone != 'Administrative unit not available'")
             .to_xarray()["mean"]
         )
