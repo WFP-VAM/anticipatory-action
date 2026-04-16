@@ -124,11 +124,36 @@ forecasts = read_forecasts(
 
 data = forecasts.isel(time=slice(100, 1200), ensemble=0).mean('time')
 
-data.plot.imshow()
+data = forecasts.sel(latitude=slice(-4.5, -6), longitude=slice(39.5, 40.2))
+
+data.isel(time=-1, ensemble=0).plot.imshow()
+
+micheweni_gdf
 
 # ALL TOUCHED = FALSE
-zone_ids, zones = area._resolve_zones(data, None, None, False)
-zones.plot.imshow()
+zone_ids, zones = area._resolve_zones(data, None, None, True)
+(data.isel(time=-1, ensemble=0).where(zones > -1)).plot.imshow()
+
+# +
+import matplotlib.pyplot as plt
+
+# Extract the raster of interest
+raster = data.isel(time=-1, ensemble=0).where(zones > -1)
+
+# Create figure + axis
+fig, ax = plt.subplots(figsize=(16, 4))
+
+# Plot raster on the axis
+raster.plot.imshow(ax=ax, cmap="viridis")
+
+# Overlay the vector geometry
+micheweni_gdf.boundary.plot(ax=ax, color="red", linewidth=2)
+
+# Optional title
+ax.set_title("Raster with Micheweni Boundary Overlay")
+
+plt.show()
+# -
 
 # ALL TOUCHED = TRUE
 zone_ids, zones = area._resolve_zones(data, None, None, True)
