@@ -195,10 +195,24 @@ class Params:
         if fsspec.open(fbf_districts_path).fs.exists(fbf_districts_path):
             self.fbf_districts_df = read_fbf_districts(fbf_districts_path, self)
 
-        # Check if a custom shapefile is stored in the data folder and read it if exists
+        # Check if a custom shapefile is stored in the data folder and read it if it exists
         shapefile_path = f"{self.data_path}/data/{self.iso}/{self.iso}.geojson"
+
         if fsspec.open(shapefile_path).fs.exists(shapefile_path):
-            self.custom_shapefile = gpd.read_file(shapefile_path).set_index("adm2_name")
+            try:
+                gdf = gpd.read_file(shapefile_path)
+                expected_col = "adm2_name"
+                if expected_col not in gdf.columns:
+                    raise KeyError(
+                        f"Expected column '{expected_col}' not found in custom shapefile. "
+                        f"Available columns: {list(gdf.columns)}"
+                    )
+                self.custom_shapefile = gdf.set_index(expected_col)
+            except Exception as e:
+                raise ValueError(
+                    f"Failed to load custom shapefile for iso='{self.iso}' at {shapefile_path}. "
+                    f"Ensure the file is a valid GeoJSON and contains an '{expected_col}' column."
+                ) from e
 
         # Read the tolerance thresholds and store them as a dict
         self.tolerance = Dict.empty(key_type=types.unicode_type, value_type=types.f8)
