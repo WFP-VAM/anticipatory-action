@@ -4,7 +4,6 @@ on:
     branches:
       - develop
       - main
-      - docker-push # temporary for testing
   workflow_dispatch:
 permissions:
   id-token: write
