@@ -302,14 +302,30 @@ def read_fbf_districts(path_fbf, params):
 
 
 def read_forecasts(area, issue, local_path):
+    """
+    Load ECMWF SEAS5 seasonal forecast data, using a local zarr cache when available.
+
+    Checks the last cached date and fetches only the data from the following day
+    onwards, appending it to the existing cache.
+
+    Args:
+        area: Area object with a `datetime_range` attribute (e.g. "2023-06-01/2024-12-31")
+              and `get_dataset()` method.
+        issue (int): Forecast issue month (1–12).
+        local_path (str): Path to the local zarr store used as a cache.
+
+    Returns:
+        xarray.DataArray: The `tp` variable from the forecast dataset, covering all
+                          timesteps up to `last_date`.
+    """
     fs = fsspec.open(local_path).fs
     zmetadata_path = os.path.join(local_path, ".zmetadata")
     data_exists = fs.exists(zmetadata_path)
 
-    # Determine the forecast period:
-    # - `last_date` is the end of the target time range, extracted from area.datetime_range (e.g., "2024-01-01/2024-12-31")
-    # - `forecast_date` is the start of the forecast, set to the 1st of the issue month of the year before `last_date`, as last_date.year = monitoring_year + 1
-    #   For example, if issue=6 (June) and last_date is 2024-12-31, then forecast_date becomes 2023-06-01
+    # Derive the monitoring window:
+    # - last_date: end of the target range (e.g. 2024-12-31)
+    # - forecast_date: start of the forecast, 1st of the issue month in the prior year
+    #   e.g. issue=6, last_date=2024-12-31 → forecast_date=2023-06-01
     last_date = datetime.datetime.strptime(
         area.datetime_range.split("/")[1], "%Y-%m-%d"
     )
@@ -318,45 +334,104 @@ def read_forecasts(area, issue, local_path):
     if data_exists:
         logging.info("Reading forecasts from precomputed zarr...")
         ds = xr.open_zarr(local_path).tp
-        if np.datetime64(forecast_date) in ds.time.values:
+
+        # Find the day after the last cached date and fetch everything from there
+        last_cached_date = pd.Timestamp(ds.time.values.max()).date()
+        fetch_start = last_cached_date + datetime.timedelta(days=1)
+
+        if fetch_start > last_date.date():
+            logging.info("All forecast data present, returning cached data...")
             return persist_with_progress_bar(ds.sel(time=slice(None, last_date)))
-        else:
-            logging.info("Forecast date missing in zarr, reading from source...")
+
+        logging.info(
+            f"Fetching missing forecasts from {fetch_start} to {last_date.date()}..."
+        )
+        area.datetime_range = f"{fetch_start}/{last_date.date()}"
+        new_data = area.get_dataset(
+            ["ECMWF", f"RFH_FORECASTS_SEAS5_ISSUE{int(issue)}_DAILY"],
+            load_config={"gridded_load_kwargs": {"resampling": "bilinear"}},
+        )
+        new_data.attrs["nodata"] = np.nan
+        new_data.chunk({"time": -1}).to_zarr(local_path, mode="a", append_dim="time")
+
+        # Re-open the zarr to get a consistent view that includes the appended data
+        ds = xr.open_zarr(local_path).tp
+        return persist_with_progress_bar(ds.sel(time=slice(None, last_date)))
+
     else:
-        logging.info("Zarr file not found, reading from source...")
-
-    # Read from source
-    forecasts = area.get_dataset(
-        ["ECMWF", f"RFH_FORECASTS_SEAS5_ISSUE{int(issue)}_DAILY"],
-        load_config={"gridded_load_kwargs": {"resampling": "bilinear"}},
-    )
-    forecasts.attrs["nodata"] = np.nan
-    forecasts.chunk({"time": -1}).to_zarr(local_path, mode="w", consolidated=True)
-
-    return forecasts
+        # No cache exists yet — fetch the full range and write it
+        logging.info("Zarr not found, reading forecasts from source...")
+        area.datetime_range = f"{forecast_date.date()}/{last_date.date()}"
+        forecasts = area.get_dataset(
+            ["ECMWF", f"RFH_FORECASTS_SEAS5_ISSUE{int(issue)}_DAILY"],
+            load_config={"gridded_load_kwargs": {"resampling": "bilinear"}},
+        )
+        forecasts.attrs["nodata"] = np.nan
+        forecasts.chunk({"time": -1}).to_zarr(local_path, mode="w", consolidated=True)
+        return forecasts
 
 
 def read_observations(area, local_path):
+    """
+    Load CHIRPS daily observation data, using a local zarr cache when available.
+    Compares the years present in the cache against those required by `area.datetime_range`
+    and only fetches missing years from the source, then appends them to the cache.
+
+    Args:
+        area: Area object with a `datetime_range` attribute (e.g. "2023-01-01/2024-12-31")
+              and `get_dataset()` / `with_datetime_range()` methods.
+        local_path (str): Path to the local zarr store used as a cache.
+
+    Returns:
+        xarray.DataArray: The `band` variable from the observations dataset,
+                          covering the full requested date range.
+    """
     fs = fsspec.open(local_path).fs
-    if fs.exists(os.path.join(local_path, ".zmetadata")):
-        logging.info("Reading of observations from precomputed zarr...")
-        observations = xr.open_zarr(
-            local_path,
-            consolidated=True,
-        ).band
+    zmetadata_path = os.path.join(local_path, ".zmetadata")
+    data_exists = fs.exists(zmetadata_path)
+
+    # Parse the full requested date range from the area object
+    first_date = datetime.datetime.strptime(
+        area.datetime_range.split("/")[0], "%Y-%m-%d"
+    )
+    last_date = datetime.datetime.strptime(
+        area.datetime_range.split("/")[1], "%Y-%m-%d"
+    )
+
+    if data_exists:
+        logging.info("Reading observations from precomputed zarr...")
+        ds = xr.open_zarr(local_path, consolidated=True).band
+
+        # Find the day after the last cached date and fetch everything from there
+        last_cached_date = pd.Timestamp(ds.time.values.max()).date()
+        fetch_start = last_cached_date + datetime.timedelta(days=1)
+
+        if fetch_start > last_date.date():
+            logging.info("All observation data present, returning cached data...")
+            return persist_with_progress_bar(ds)
+
+        logging.info(
+            f"Fetching missing observations from {fetch_start} to {last_date.date()}..."
+        )
+        area.datetime_range = f"{fetch_start}/{last_date.date()}"
+        new_data = area.get_dataset(
+            ["CHIRPS", "RFH_DAILY"],
+            load_config={"gridded_load_kwargs": {"resampling": "bilinear"}},
+        )
+
+        new_data.to_zarr(local_path, mode="a", append_dim="time")
+        ds = xr.open_zarr(local_path, consolidated=True).band
+        return persist_with_progress_bar(ds)
+
     else:
-        logging.info("Reading of observations from HDC STAC...")
+        # No cache exists yet — fetch the full range and write it
+        logging.info("Reading observations from HDC STAC...")
         observations = area.get_dataset(
             ["CHIRPS", "RFH_DAILY"],
             load_config={"gridded_load_kwargs": {"resampling": "bilinear"}},
         )
-        observations.to_zarr(
-            local_path,
-            mode="w",
-            consolidated=True,
-        )
-
-    return persist_with_progress_bar(observations)
+        observations.to_zarr(local_path, mode="w", consolidated=True)
+        return persist_with_progress_bar(observations)
 
 
 def read_triggers(params):
