@@ -11,7 +11,7 @@ import yaml
 from numba import types
 from numba.typed import Dict
 
-from AA.helpers.utils import read_fbf_districts
+from AA.helpers.read import read_fbf_districts
 
 DRYSPELL_THRESHOLD = 2.0
 
