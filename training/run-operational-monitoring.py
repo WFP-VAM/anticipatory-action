@@ -35,7 +35,7 @@ from hip.analysis.aoi.analysis_area import AnalysisArea
 
 from AA.cli.operational import run_full_index_pipeline
 from AA.helpers.params import Params
-from AA.helpers.utils import read_forecasts, read_observations, read_triggers
+from AA.helpers.read import read_forecasts, read_observations, read_triggers
 # -
 
 # **First, please define the country ISO code, the issue month and the index of interest**

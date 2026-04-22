@@ -16,13 +16,10 @@
 # ### Imports
 
 # %%
-import os
 import fsspec
 import glob
 import s3fs
 import numpy as np
-import hvplot.pandas
-import hvplot.xarray
 import xarray as xr
 import pandas as pd
 import panel as pn
