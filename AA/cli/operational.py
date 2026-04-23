@@ -69,7 +69,7 @@ def run(country, issue, index, config_json, data_path, output_path):
     forecasts = read_forecasts(
         area,
         issue,
-        f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}/{str(issue).zfill(2)}/forecasts.zarr",
+        f"{params.data_path}/{params.iso}/zarr//{str(issue).zfill(2)}/forecasts.zarr",
     )
 
     # Check if the forecast date is in the time coordinate
@@ -85,16 +85,17 @@ def run(country, issue, index, config_json, data_path, output_path):
 
     observations = read_observations(
         area,
-        f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}/obs/observations.zarr",
+        f"{params.data_path}/{params.iso}/zarr/obs/observations.zarr",
     )
     logging.info(
         "Completed reading of observations for the whole %s country", params.iso
     )
-
-    os.makedirs(
-        f"{params.output_path}/data/{params.iso}/probs",
-        exist_ok=True,
-    )
+    
+    if not params.output_path.startswith("s3://"):
+        os.makedirs(
+            f"{params.output_path}/data/{params.iso}/probs",
+            exist_ok=True,
+        )
 
     triggers_df = read_triggers(params)
 
@@ -126,7 +127,7 @@ def run(country, issue, index, config_json, data_path, output_path):
 
     probs_dashboard = pd.concat(probs_df).drop_duplicates()
     probs_dashboard.to_csv(
-        f"{params.output_path}/data/{params.iso}/probs/aa_probabilities_{params.index}_{params.issue}.csv",
+        f"{params.output_path}/{params.iso}/probs/aa_probabilities_{params.index}_{params.issue}.csv",
         index=False,
     )
 
@@ -161,7 +162,7 @@ def run(country, issue, index, config_json, data_path, output_path):
     )
 
     merged_db.sort_values(["district", "index", "category"]).to_csv(
-        f"{params.output_path}/data/{params.iso}/probs/aa_probabilities_triggers_pilots.csv",
+        f"{params.output_path}/{params.iso}/probs/aa_probabilities_triggers_pilots.csv",
         index=False,
     )
 

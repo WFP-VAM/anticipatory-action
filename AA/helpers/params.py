@@ -23,7 +23,8 @@ AGGREGATES = {
     .hdc.algo.lroo(),
 }
 
-S3_OPS_DATA_PATH = "s3://wfp-ops-userdata/amine.barkaoui/aa"
+# Change this to dedicated AA bucket once created
+S3_OPS_DATA_PATH = "s3://wfp-ops-userdata/amine.barkaoui/aa/data/prod"
 
 
 def load_config(iso: str, cli_json: str | None = None) -> dict:
@@ -116,7 +117,7 @@ class Params:
         list of districts for which we want to compute triggers
     indicators: list
         list of indicators for which we want to compute triggers
-    fbf_districts_df : pd.DataFrame
+    roc_df : pd.DataFrame
         dataframe containing information about districts to bias correct
     intensity_thresholds : dict
         thresholds defining different drought intensities used in probabilities computation
@@ -130,7 +131,6 @@ class Params:
         dictionary containing two dictionaries (window1, window2) containing indicators for each window (by province or not)
     save_zarr : bool
         save (and overwrite if exists) ds (obs or probs) for future trigger choice
-
     data_path : str
         data path where to read input data from (should include data folder)
     output_path : str
@@ -155,7 +155,7 @@ class Params:
     hist_anomaly_stop: datetime.datetime = datetime.datetime(2018, 12, 31)
     districts: list = field(init=None)
     indicators: list = field(init=None)
-    fbf_districts_df: pd.DataFrame = field(init=False, default_factory=pd.DataFrame)
+    roc_df: pd.DataFrame = field(init=False, default_factory=pd.DataFrame)
     intensity_thresholds: dict = field(init=None)
     districts_vulnerability: dict = field(init=None)
     tolerance: dict = field(init=False)
@@ -186,9 +186,9 @@ class Params:
         )
 
         # Read fbf roc dataframe if exists for triggers selection
-        fbf_districts_path = f"{self.data_path}/data/{self.iso}/auc/fbf.districts.roc.{self.index}.2022.csv"
-        if fsspec.open(fbf_districts_path).fs.exists(fbf_districts_path):
-            self.fbf_districts_df = read_fbf_districts(fbf_districts_path, self)
+        roc_path = f"{self.data_path}/{self.iso}/auc/roc.{self.index}.csv"
+        if fsspec.open(roc_path).fs.exists(roc_path):
+            self.roc_df = read_fbf_districts(fbf_districts_path, self)
 
         # Read the tolerance thresholds and store them as a dict
         self.tolerance = Dict.empty(key_type=types.unicode_type, value_type=types.f8)

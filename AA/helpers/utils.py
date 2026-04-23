@@ -121,22 +121,22 @@ def compute_district_average(da, area):
 
 
 def merge_un_biased_probs(probs_district, probs_bc_district, params, period_name):
-    # Get fbf_districts data in xarray format
-    fbf_bc = params.fbf_districts_df
-    fbf_bc = fbf_bc.loc[fbf_bc["Index"] == f"{params.index.upper()} {period_name}"]
-    fbf_bc = fbf_bc[["district", "category", "issue", "BC"]]
+    # Get roc_df data in xarray format
+    roc_df = params.roc_df
+    roc_df = roc_df.loc[roc_df["Index"] == f"{params.index.upper()} {period_name}"]
+    roc_df = roc_df[["district", "category", "issue", "BC"]]
 
-    # If params.fbf_districts_df has Portuguese category names, ensure these are English
+    # If params.roc_df has Portuguese category names, ensure these are English
     CATEGORY_TRANSLATIONS = {"Leve": "Mild", "Moderado": "Moderate", "Severo": "Severe"}
-    fbf_bc["category"] = fbf_bc["category"].apply(
+    roc_df["category"] = roc_df["category"].apply(
         lambda x: CATEGORY_TRANSLATIONS.get(x, x)
     )
 
-    fbf_bc_da = fbf_bc.set_index(["district", "category", "issue"]).to_xarray().BC
-    fbf_bc_da = fbf_bc_da.expand_dims(dim={"index": [f"{params.index} {period_name}"]})
+    roc_da = roc_df.set_index(["district", "category", "issue"]).to_xarray().BC
+    roc_da = roc_da.expand_dims(dim={"index": [f"{params.index} {period_name}"]})
 
     # Combination of both probabilities datasets
-    probs_merged = (1 - fbf_bc_da) * probs_district + fbf_bc_da * probs_bc_district
+    probs_merged = (1 - roc_da) * probs_district + roc_da * probs_bc_district
 
     probs_merged = probs_merged.to_dataset(name="prob")
 
@@ -294,11 +294,11 @@ def merge_probabilities_triggers_dashboard(probs, triggers, params, period):
     return probs_df, triggers_merged
 
 
-def read_fbf_districts(path_fbf, params):
-    fbf_districts = pd.read_csv(path_fbf, sep=",")
+def read_roc_file(roc_path, params):
+    roc = pd.read_csv(roc_path, sep=",")
     if params.issue:
-        fbf_districts = fbf_districts.loc[fbf_districts.issue == params.issue]
-    return fbf_districts
+        roc = roc.loc[roc.issue == params.issue]
+    return roc
 
 
 def read_forecasts(area, issue, local_path):
@@ -360,8 +360,8 @@ def read_observations(area, local_path):
 
 
 def read_triggers(params):
-    triggers_path = f"{params.data_path}/data/{params.iso}/probs/aa_probabilities_triggers_pilots.csv"
-    fallback_triggers_path = f"{params.data_path}/data/{params.iso}/triggers/triggers.final.{params.monitoring_year}.pilots.csv"
+    triggers_path = f"{params.data_path}/{params.iso}/probs/aa_probabilities_triggers_pilots.csv"
+    fallback_triggers_path = f"{params.data_path}/{params.iso}/triggers/triggers.final.{params.monitoring_year}.pilots.csv"
 
     if fsspec.open(triggers_path).fs.exists(triggers_path):
         triggers_df = pd.read_csv(triggers_path)

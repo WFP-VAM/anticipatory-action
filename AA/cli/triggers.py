@@ -79,10 +79,7 @@ def run_triggers_selection(params):
         rfh, 0, 0, params.min_index_period, params.max_index_period
     )
 
-    obs = read_aggregated_obs(
-        f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}/obs",
-        params,
-    )
+    obs = read_aggregated_obs(f"{params.data_path}/{params.iso}/zarr/obs", params)
 
     # Filter obs on indicators of interest
     obs = obs.sel(index=params.indicators)
@@ -115,10 +112,7 @@ def run_triggers_selection(params):
         f"Completed reading of aggregated observations for the whole {params.iso.upper()} country"
     )
 
-    probs_ds = read_aggregated_probs(
-        f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}",
-        params,
-    )
+    probs_ds = read_aggregated_probs(f"{params.data_path}/{params.iso}/zarr", params)
     probs = xr.concat(
         [
             merge_un_biased_probs(probs_ds.raw, probs_ds.bc, params, i.split(" ")[-1])
@@ -221,7 +215,7 @@ def run_triggers_selection(params):
     triggers = format_triggers_df_for_dashboard(df_window, params)
 
     triggers.to_csv(
-        f"{params.output_path}/data/{params.iso}/triggers/triggers.{params.index}.{params.calibration_year}.{params.vulnerability}.csv",
+        f"{params.output_path}/{params.iso}/triggers/triggers.{params.index}.{params.vulnerability}.csv",
         index=False,
     )
 
@@ -232,7 +226,7 @@ def run_triggers_selection(params):
 
 def read_aggregated_obs(path_to_zarr, params):
     fs, _, _ = fsspec.get_fs_token_paths(path_to_zarr)
-    list_index_paths = fs.glob(f"{path_to_zarr}/{params.index} *")
+    list_index_paths = fs.glob(f"{path_to_zarr}/{params.index}_*")
 
     # Restore full S3 paths if needed
     if isinstance(fs, s3fs.core.S3FileSystem):
@@ -269,7 +263,7 @@ def read_aggregated_probs(path_to_zarr, params):
     list_index = {}
 
     for iss_path in list_issue_paths:
-        list_index_paths = fs.glob(f"{iss_path}/{params.index} *")
+        list_index_paths = fs.glob(f"{iss_path}/{params.index}_*")
         list_index_raw = [
             fs.sep.join([i, "probabilities.zarr"]) for i in sorted(list_index_paths)
         ]
