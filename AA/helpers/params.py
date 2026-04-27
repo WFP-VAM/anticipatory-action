@@ -9,10 +9,15 @@ import hdc.algo  # noqa: F401
 import numpy as np
 import pandas as pd
 import yaml
+import subprocess
+
 from numba import types
 from numba.typed import Dict
+from collections import OrderedDict
+from dataclasses import fields as dataclass_fields
 
-from AA.helpers.utils import read_fbf_districts
+from AA.helpers.utils import read_roc_file
+
 
 DRYSPELL_THRESHOLD = 2.0
 
@@ -70,6 +75,82 @@ def load_config(iso: str, cli_json: str | None = None) -> dict:
             return cfg
         except Exception as e:
             raise ValueError(f"Invalid YAML in {config_path}: {e}")
+
+
+def get_git_commit_hash():
+    try:
+        return (
+            subprocess.check_output(
+                ["git", "rev-parse", "HEAD"],
+                stderr=subprocess.DEVNULL,
+            )
+            .decode("utf-8")
+            .strip()
+        )
+    except Exception:
+        return None
+
+
+def sanitize_value(v):
+    if callable(v):
+        return None, False
+
+    if isinstance(v, pd.DataFrame):
+        return None, False
+
+    if isinstance(v, Dict):
+        return dict(v), True
+
+    if hasattr(v, "isoformat"):
+        return v.isoformat(), True
+
+    return v, True
+
+
+def ordered_params_dict(params):
+    ordered = OrderedDict()
+
+    for f in dataclass_fields(params):
+        name = f.name
+
+        if not hasattr(params, name):
+            continue
+
+        if name == "config_json":
+            continue
+
+        value = getattr(params, name)
+        clean_value, keep = sanitize_value(value)
+
+        if keep:
+            ordered[name] = clean_value
+
+    return ordered
+
+
+def save_run_config(params, script_name: str):
+    fs, base_path = fsspec.url_to_fs(params.output_path)
+
+    output_dir = os.path.join(base_path, params.iso, "config")
+    fs.makedirs(output_dir, exist_ok=True)
+
+    payload = OrderedDict()
+
+    # ---- metadata first ----
+    payload["git_commit"] = get_git_commit_hash()
+    payload["run_time"] = datetime.datetime.now().isoformat() + "Z"
+
+    # ---- params snapshot in class-definition order ----
+    payload.update(ordered_params_dict(params))
+
+    out_path = os.path.join(output_dir, f"config-{script_name}.json")
+
+    with fs.open(out_path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2)  # IMPORTANT: no sort_keys=True
+
+    logging.info(f"Saved {params.iso} config snapshot for traceability at {out_path}")
+
+    return out_path
 
 
 @dataclass
@@ -188,7 +269,7 @@ class Params:
         # Read fbf roc dataframe if exists for triggers selection
         roc_path = f"{self.data_path}/{self.iso}/auc/roc.{self.index}.csv"
         if fsspec.open(roc_path).fs.exists(roc_path):
-            self.roc_df = read_fbf_districts(fbf_districts_path, self)
+            self.roc_df = read_roc_file(roc_path, self)
 
         # Read the tolerance thresholds and store them as a dict
         self.tolerance = Dict.empty(key_type=types.unicode_type, value_type=types.f8)
@@ -208,7 +289,7 @@ class Params:
             )
         else:
             periods = np.unique(list((set().union(*self.windows.values()))))
-        self.indicators = [self.index + " " + ind for ind in periods]
+        self.indicators = [self.index + "_" + ind for ind in periods]
 
     def get_windows(self, window_type):
         return self.windows.get(window_type, {})

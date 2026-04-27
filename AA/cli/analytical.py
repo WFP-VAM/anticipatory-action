@@ -8,19 +8,20 @@ import fsspec
 import numpy as np
 import pandas as pd
 import xarray as xr
-from hip.analysis.analyses.drought import (compute_probabilities,
-                                           concat_obs_levels,
-                                           get_accumulation_periods,
-                                           run_accumulation_index,
-                                           run_bias_correction,
-                                           run_gamma_standardization)
+from hip.analysis.analyses.drought import (
+    compute_probabilities,
+    concat_obs_levels,
+    get_accumulation_periods,
+    run_accumulation_index,
+    run_bias_correction,
+    run_gamma_standardization,
+)
 from hip.analysis.aoi.analysis_area import AnalysisArea
 from hip.analysis.compute.utils import start_dask
 from hip.analysis.ops._statistics import evaluate_roc_forecasts
 
-from AA.helpers.params import S3_OPS_DATA_PATH, Params
-from AA.helpers.utils import (compute_district_average, read_forecasts,
-                              read_observations)
+from AA.helpers.params import S3_OPS_DATA_PATH, Params, save_run_config
+from AA.helpers.utils import compute_district_average, read_forecasts, read_observations
 
 logging.basicConfig(level="INFO", force=True)
 
@@ -63,6 +64,9 @@ def run(country, index, config_json, data_path, output_path):
         data_path=data_path,
         output_path=output_path,
     )
+
+    # Save config snapshot for traceability
+    save_run_config(params, script_name="analytical")
 
     area = AnalysisArea.from_admin_boundaries(
         iso3=country.upper(),
@@ -116,7 +120,7 @@ def run(country, index, config_json, data_path, output_path):
         index=False,
     )
 
-    logging.info(f"FbF dataframe saved for {country}")
+    logging.info(f"ROC dataframe saved for {country}")
 
 
 def run_issue_verification(forecasts, observations, issue, params, area):
@@ -132,14 +136,14 @@ def run_issue_verification(forecasts, observations, issue, params, area):
         fbf_issue: pandas.DataFrame, dataframe with roc scores for all indexes, districts, categories and a specified issue month
     """
 
-    fbf_path = f"{params.output_path}/{params.iso}/auc/split_by_issue/roc.{params.index}.{issue}.csv"
+    roc_path = f"{params.output_path}/{params.iso}/auc/split_by_issue/roc.{params.index}.{issue}.csv"
 
-    if fsspec.open(fbf_path).fs.exists(fbf_path):
+    if fsspec.open(roc_path).fs.exists(roc_path):
         logging.info(
             f"ROC verification file by district for the issue month {issue} read from disk"
         )
 
-        return pd.read_csv(fbf_path)
+        return pd.read_csv(roc_path)
 
     else:
         # Get accumulation periods (DJ, JF, FM, DJF, JFM...)
@@ -168,7 +172,7 @@ def run_issue_verification(forecasts, observations, issue, params, area):
         fbf_issue["issue"] = int(issue)
 
         fbf_issue.to_csv(
-            fbf_path,
+            roc_path,
             index=False,
         )
 

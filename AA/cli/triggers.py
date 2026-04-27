@@ -7,19 +7,23 @@ import numpy as np
 import pandas as pd
 import s3fs
 import xarray as xr
-from hip.analysis.analyses.drought import (concat_obs_levels,
-                                           get_accumulation_periods)
+from hip.analysis.analyses.drought import concat_obs_levels, get_accumulation_periods
 from hip.analysis.aoi.analysis_area import AnalysisArea
 from hip.analysis.compute.utils import persist_with_progress_bar, start_dask
 
-from AA.helpers._triggers import (filter_triggers_by_window,
-                                  get_window_district,
-                                  run_pilot_districts_metrics,
-                                  run_ready_set_brute_selection)
-from AA.helpers.params import S3_OPS_DATA_PATH, Params
-from AA.helpers.utils import (create_flexible_dataarray,
-                              format_triggers_df_for_dashboard,
-                              merge_un_biased_probs, triggers_da_to_df)
+from AA.helpers._triggers import (
+    filter_triggers_by_window,
+    get_window_district,
+    run_pilot_districts_metrics,
+    run_ready_set_brute_selection,
+)
+from AA.helpers.params import S3_OPS_DATA_PATH, Params, save_run_config
+from AA.helpers.utils import (
+    create_flexible_dataarray,
+    format_triggers_df_for_dashboard,
+    merge_un_biased_probs,
+    triggers_da_to_df,
+)
 
 logging.basicConfig(level="INFO", force=True)
 warnings.simplefilter(action="ignore")
@@ -63,6 +67,9 @@ def run(country, index, vulnerability, config_json, data_path, output_path):
         output_path=output_path,
     )
 
+    # Save config snapshot for traceability
+    save_run_config(params, script_name="triggers")
+
     run_triggers_selection(params)
 
 
@@ -89,7 +96,7 @@ def run_triggers_selection(params):
     # `apply_ufunc` with `guvectorize`. These variables depend on others, but passing
     # a dict to `guvectorize` is impossible.
     obs = obs.assign_coords(
-        lead_time=("index", [periods[i.split(" ")[-1]][0] for i in obs.index.values])
+        lead_time=("index", [periods[i.split("_")[-1]][0] for i in obs.index.values])
     )
     obs = obs.assign_coords(
         tolerance=("category", [params.tolerance[cat] for cat in obs.category.values])
@@ -115,7 +122,7 @@ def run_triggers_selection(params):
     probs_ds = read_aggregated_probs(f"{params.data_path}/{params.iso}/zarr", params)
     probs = xr.concat(
         [
-            merge_un_biased_probs(probs_ds.raw, probs_ds.bc, params, i.split(" ")[-1])
+            merge_un_biased_probs(probs_ds.raw, probs_ds.bc, params, i.split("_")[-1])
             for i in probs_ds.index.values
         ],
         dim="index",

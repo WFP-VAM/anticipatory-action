@@ -123,7 +123,7 @@ def compute_district_average(da, area):
 def merge_un_biased_probs(probs_district, probs_bc_district, params, period_name):
     # Get roc_df data in xarray format
     roc_df = params.roc_df
-    roc_df = roc_df.loc[roc_df["Index"] == f"{params.index.upper()} {period_name}"]
+    roc_df = roc_df.loc[roc_df["Index"] == f"{params.index.upper()}_{period_name}"]
     roc_df = roc_df[["district", "category", "issue", "BC"]]
 
     # If params.roc_df has Portuguese category names, ensure these are English
@@ -133,7 +133,7 @@ def merge_un_biased_probs(probs_district, probs_bc_district, params, period_name
     )
 
     roc_da = roc_df.set_index(["district", "category", "issue"]).to_xarray().BC
-    roc_da = roc_da.expand_dims(dim={"index": [f"{params.index} {period_name}"]})
+    roc_da = roc_da.expand_dims(dim={"index": [f"{params.index}_{period_name}"]})
 
     # Combination of both probabilities datasets
     probs_merged = (1 - roc_da) * probs_district + roc_da * probs_bc_district
@@ -360,7 +360,9 @@ def read_observations(area, local_path):
 
 
 def read_triggers(params):
-    triggers_path = f"{params.data_path}/{params.iso}/probs/aa_probabilities_triggers_pilots.csv"
+    triggers_path = (
+        f"{params.data_path}/{params.iso}/probs/aa_probabilities_triggers_pilots.csv"
+    )
     fallback_triggers_path = f"{params.data_path}/{params.iso}/triggers/triggers.final.{params.monitoring_year}.pilots.csv"
 
     if fsspec.open(triggers_path).fs.exists(triggers_path):

@@ -49,7 +49,6 @@ import cdsapi
 import xarray as xr
 import pandas as pd
 from odc.geo.xr import xr_reproject
-from config.params import Params
 from hip.analysis.aoi.analysis_area import AnalysisArea
 
 # %% [markdown]

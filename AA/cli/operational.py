@@ -6,18 +6,24 @@ import warnings
 import click
 import numpy as np
 import pandas as pd
-from hip.analysis.analyses.drought import (compute_probabilities,
-                                           get_accumulation_periods,
-                                           run_accumulation_index,
-                                           run_bias_correction,
-                                           run_gamma_standardization)
+from hip.analysis.analyses.drought import (
+    compute_probabilities,
+    get_accumulation_periods,
+    run_accumulation_index,
+    run_bias_correction,
+    run_gamma_standardization,
+)
 from hip.analysis.aoi.analysis_area import AnalysisArea
 
-from AA.helpers.params import S3_OPS_DATA_PATH, Params
-from AA.helpers.utils import (compute_district_average,
-                              merge_probabilities_triggers_dashboard,
-                              merge_un_biased_probs, read_forecasts,
-                              read_observations, read_triggers)
+from AA.helpers.params import S3_OPS_DATA_PATH, Params, save_run_config
+from AA.helpers.utils import (
+    compute_district_average,
+    merge_probabilities_triggers_dashboard,
+    merge_un_biased_probs,
+    read_forecasts,
+    read_observations,
+    read_triggers,
+)
 
 logging.basicConfig(level="INFO", force=True)
 
@@ -59,6 +65,9 @@ def run(country, issue, index, config_json, data_path, output_path):
         output_path=output_path,
     )
 
+    # Save config snapshot for traceability
+    save_run_config(params, script_name="operational")
+
     area = AnalysisArea.from_admin_boundaries(
         iso3=country.upper(),
         admin_level=2,
@@ -90,7 +99,7 @@ def run(country, issue, index, config_json, data_path, output_path):
     logging.info(
         "Completed reading of observations for the whole %s country", params.iso
     )
-    
+
     if not params.output_path.startswith("s3://"):
         os.makedirs(
             f"{params.output_path}/data/{params.iso}/probs",

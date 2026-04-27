@@ -24,6 +24,7 @@
 # **Import required libraries and functions**
 
 import os
+
 if os.getcwd().split("\\")[-1] != "anticipatory-action":
     os.chdir("..")
 os.getcwd()
@@ -36,6 +37,7 @@ from hip.analysis.aoi.analysis_area import AnalysisArea
 from AA.cli.operational import run_full_index_pipeline
 from AA.helpers.params import Params
 from AA.helpers.utils import read_forecasts, read_observations, read_triggers
+
 # -
 
 # **First, please define the country ISO code, the issue month and the index of interest**
@@ -46,8 +48,8 @@ country = (
 )
 issue = 7
 index = "SPI"  # 'SPI' or 'DRYSPELL'
-data_path = "."  # anticipatory-action directory
-output_path = "."
+data_path = "./data"  # anticipatory-action directory
+output_path = "./data"
 
 
 # Now, we will configure some parameters. Please feel free to edit the `{country}_config.yaml` file if you need to change the *monitoring_year* or any other relevant parameter.
@@ -89,8 +91,7 @@ gdf
 
 # Observations data reading
 observations = read_observations(
-    area,
-    f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}/obs/observations.zarr",
+    area, f"{params.data_path}/{params.iso}/zarr/obs/observations.zarr"
 )
 
 
@@ -104,7 +105,7 @@ observations = read_observations(
 forecasts = read_forecasts(
     area,
     issue,
-    f"{params.data_path}/data/{params.iso}/zarr/2022/{str(issue).zfill(2)}/forecasts.zarr",
+    f"{params.data_path}/{params.iso}/zarr/{str(issue).zfill(2)}/forecasts.zarr",
 )
 forecasts
 
@@ -180,14 +181,12 @@ merged_db
 
 # Save all probabilities
 probs_dashboard.to_csv(
-    f"{params.data_path}/data/{params.iso}/probs/aa_probabilities_{params.index}_{params.issue}.csv",
+    f"{params.data_path}/{params.iso}/probs/aa_probabilities_{params.index}_{params.issue}.csv",
     index=False,
 )
 
 # Save probabilities merged with triggers
 merged_db.sort_values(["district", "index", "category"]).to_csv(
-    f"{params.data_path}/data/{params.iso}/probs/aa_probabilities_triggers_pilots.csv",
+    f"{params.data_path}/{params.iso}/probs/aa_probabilities_triggers_pilots.csv",
     index=False,
 )
-
-
