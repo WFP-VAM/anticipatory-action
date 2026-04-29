@@ -70,17 +70,16 @@ def read_forecasts(area, issue, local_path):
         ds = xr.open_zarr(local_path).tp
         return persist_with_progress_bar(ds.sel(time=slice(None, last_date)))
 
-    else:
-        # No cache exists yet — fetch the full range and write it
-        logging.info("Zarr not found, reading forecasts from source...")
-        area.datetime_range = f"{forecast_date.date()}/{last_date.date()}"
-        forecasts = area.get_dataset(
-            ["ECMWF", f"RFH_FORECASTS_SEAS5_ISSUE{int(issue)}_DAILY"],
-            load_config={"gridded_load_kwargs": {"resampling": "bilinear"}},
-        )
-        forecasts.attrs["nodata"] = np.nan
-        forecasts.chunk({"time": -1}).to_zarr(local_path, mode="w", consolidated=True)
-        return forecasts
+    # No cache exists yet — fetch the full range and write it
+    logging.info("Zarr not found, reading forecasts from source...")
+    area.datetime_range = f"{forecast_date.date()}/{last_date.date()}"
+    forecasts = area.get_dataset(
+        ["ECMWF", f"RFH_FORECASTS_SEAS5_ISSUE{int(issue)}_DAILY"],
+        load_config={"gridded_load_kwargs": {"resampling": "bilinear"}},
+    )
+    forecasts.attrs["nodata"] = np.nan
+    forecasts.chunk({"time": -1}).to_zarr(local_path, mode="w", consolidated=True)
+    return persist_with_progress_bar(forecasts)
 
 
 def read_observations(area, local_path):
