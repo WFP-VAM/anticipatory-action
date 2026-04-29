@@ -114,7 +114,7 @@ def compute_district_average(da, area):
             da_main = _zonal_stats(da_slice, all_touched=False)
 
             # --- 2) Detect missing districts
-            expected_districts = area.geometry.index.astype(str)
+            expected_districts = area.get_dataset([area.BASE_AREA_DATASET]).index.astype(str)
             present = set(da_main.district.values)
             missing = list(set(expected_districts) - present)
 
@@ -124,9 +124,8 @@ def compute_district_average(da, area):
             # --- 3) Second pass for missing districts only
             da_missing = _zonal_stats(
                 da_slice,
-                zone_ids=missing,
                 all_touched=True,
-            )
+            ).sel(district=missing)
 
             # --- 4) Concatenate
             return xr.concat([da_main, da_missing], dim="district")
@@ -140,7 +139,7 @@ def compute_district_average(da, area):
         da_main = _zonal_stats(da, all_touched=False)
 
         # 2) Detect missing districts
-        expected_districts = area.geometry.index.astype(str)
+        expected_districts = area.get_dataset([area.BASE_AREA_DATASET]).index.astype(str)
         present = set(da_main.district.values)
         missing = list(set(expected_districts) - present)
 
@@ -148,9 +147,8 @@ def compute_district_average(da, area):
             # 3) Second pass for missing districts
             da_missing = _zonal_stats(
                 da,
-                zone_ids=missing,
                 all_touched=True,
-            )
+            ).sel(district=missing)
 
             # 4) Concatenate
             da_grouped = xr.concat([da_main, da_missing], dim="district")
@@ -158,7 +156,6 @@ def compute_district_average(da, area):
             da_grouped = da_main
 
     return da_grouped
- 
 
 
 def merge_un_biased_probs(probs_district, probs_bc_district, params, period_name):
