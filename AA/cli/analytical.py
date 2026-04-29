@@ -8,19 +8,21 @@ import fsspec
 import numpy as np
 import pandas as pd
 import xarray as xr
-from hip.analysis.analyses.drought import (compute_probabilities,
-                                           concat_obs_levels,
-                                           get_accumulation_periods,
-                                           run_accumulation_index,
-                                           run_bias_correction,
-                                           run_gamma_standardization)
+from hip.analysis.analyses.drought import (
+    compute_probabilities,
+    concat_obs_levels,
+    get_accumulation_periods,
+    run_accumulation_index,
+    run_bias_correction,
+    run_gamma_standardization,
+)
 from hip.analysis.aoi.analysis_area import AnalysisArea
 from hip.analysis.compute.utils import start_dask
 from hip.analysis.ops._statistics import evaluate_roc_forecasts
 
 from AA.helpers.params import S3_OPS_DATA_PATH, Params
-from AA.helpers.utils import (compute_district_average, read_forecasts,
-                              read_observations)
+from AA.helpers.read import read_forecasts, read_observations
+from AA.helpers.utils import compute_district_average
 
 logging.basicConfig(level="INFO", force=True)
 
@@ -70,6 +72,10 @@ def run(country, index, config_json, data_path, output_path):
         resolution=0.25,
         datetime_range=f"1981-01-01/{params.calibration_year}-06-30",
     )
+
+    if not params.custom_shapefile.empty:
+        logging.info(f"Using custom shapefile...")
+        area.add_dataset(params.custom_shapefile, [area.BASE_AREA_DATASET])
 
     observations = read_observations(
         area,

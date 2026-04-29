@@ -14,10 +14,10 @@ from hip.analysis.analyses.drought import (compute_probabilities,
 from hip.analysis.aoi.analysis_area import AnalysisArea
 
 from AA.helpers.params import S3_OPS_DATA_PATH, Params
+from AA.helpers.read import read_forecasts, read_observations, read_triggers
 from AA.helpers.utils import (compute_district_average,
                               merge_probabilities_triggers_dashboard,
-                              merge_un_biased_probs, read_forecasts,
-                              read_observations, read_triggers)
+                              merge_un_biased_probs)
 
 logging.basicConfig(level="INFO", force=True)
 
@@ -65,6 +65,10 @@ def run(country, issue, index, config_json, data_path, output_path):
         resolution=0.25,
         datetime_range=f"1981-01-01/{params.monitoring_year + 1}-06-30",
     )
+    
+    if not params.custom_shapefile.empty:
+        logging.info(f"Using custom shapefile...")
+        area.add_dataset(params.custom_shapefile, [area.BASE_AREA_DATASET])
 
     forecasts = read_forecasts(
         area,
@@ -82,7 +86,8 @@ def run(country, issue, index, config_json, data_path, output_path):
         )
 
     logging.info("Completed reading of forecasts for the whole %s country", params.iso)
-
+    
+    area.datetime_range = f"1981-01-01/{params.calibration_year + 1}-06-30"
     observations = read_observations(
         area,
         f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}/obs/observations.zarr",

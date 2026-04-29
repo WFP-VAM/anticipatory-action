@@ -52,6 +52,7 @@ line-length = 88
 
 [tool.ruff.lint]
 # Use default rule set to start with https://docs.astral.sh/ruff/configuration/
+ignore = ["E402", "F821"]
 
 [tool.ruff.format]
 # Use default rule set to start with https://docs.astral.sh/ruff/configuration/

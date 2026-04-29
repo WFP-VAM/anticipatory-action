@@ -24,7 +24,6 @@ os.getcwd()
 # +
 import datetime
 
-import pandas as pd
 from hip.analysis.analyses.drought import (
     compute_probabilities,
     get_accumulation_periods,
