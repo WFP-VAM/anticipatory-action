@@ -21,16 +21,12 @@ if os.getcwd().split("\\")[-1] != "anticipatory-action":
     os.chdir("..")
 print(os.getcwd())
 
-import numpy as np
 import pandas as pd
-import xarray as xr
 import seaborn as sns
-import geopandas as gpd
 import matplotlib.pyplot as plt
 
 from AA.src.params import Params
 from AA.triggers import read_aggregated_probs
-from hip.analysis.analyses.drought import get_accumulation_periods
 
 # Prepare parameters
 

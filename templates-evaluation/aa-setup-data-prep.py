@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.19.1
+#       jupytext_version: 1.16.1
 #   kernelspec:
 #     display_name: hdc
 #     language: python
@@ -16,13 +16,10 @@
 # ### Imports
 
 # %%
-import os
 import fsspec
 import glob
 import s3fs
 import numpy as np
-import hvplot.pandas
-import hvplot.xarray
 import xarray as xr
 import pandas as pd
 import panel as pn
@@ -48,6 +45,7 @@ def read_aggregated_probs(path_to_zarr, index):
         :-1
     ]  # Last one is the `obs` folder.
     list_index = {}
+    list_issue_paths = [l for l in list_issue_paths if l !='/s3/scratch/amine.barkaoui/aa/data/mwi/zarr/2022/02']
 
     for iss_path in list_issue_paths:
         list_index_paths = fs.glob(f"{iss_path}/{index} *")
@@ -126,22 +124,19 @@ def read_aggregated_obs(path_to_zarr, index, intensity_thresholds):
 # ###  Define country and data path
 
 # %%
-COUNTRY = "TZA"
+COUNTRY = "MWI"
 
 # Ideally we would move the aa folder that's in my bucket to a dedicated bucket like for LIA
 DATA_PATH = f"/s3/scratch/amine.barkaoui/aa/data/{COUNTRY.lower()}"
 
-# %% [markdown] jp-MarkdownHeadingCollapsed=true
+# %% [markdown]
 # ### Read indicator analysis data
 
 # %%
 probs_spi = read_aggregated_probs(f"{DATA_PATH}/zarr/2022", "spi")
-probs_dry = read_aggregated_probs(f"{DATA_PATH}/zarr/2022", "dryspell")
+#probs_dry = read_aggregated_probs(f"{DATA_PATH}/zarr/2022", "dryspell")
 
-probs = xr.concat([probs_spi, probs_dry], "index")
-
-# %%
-probs
+probs = xr.concat([probs_spi], 'index') # , probs_dry], "index")
 
 # %%
 intensity_thresholds = {"Normal": -0.44, "Mild": -0.68, "Moderate": -0.85, "Severe": -1}
@@ -149,11 +144,11 @@ intensity_thresholds = {"Normal": -0.44, "Mild": -0.68, "Moderate": -0.85, "Seve
 chirps_spi = read_aggregated_obs(
     f"{DATA_PATH}/zarr/2022/obs", "spi", intensity_thresholds
 )
-chirps_dry = read_aggregated_obs(
-    f"{DATA_PATH}/zarr/2022/obs", "dryspell", intensity_thresholds
-)
+#chirps_dry = read_aggregated_obs(
+#    f"{DATA_PATH}/zarr/2022/obs", "dryspell", intensity_thresholds
+#)
 
-chirps_anomaly = xr.concat([chirps_spi, chirps_dry], "index")
+chirps_anomaly = xr.concat([chirps_spi], "index") #, chirps_dry], "index")
 
 # %%
 chirps_anomaly
@@ -162,7 +157,7 @@ chirps_anomaly
 roc = pd.concat(
     [
         pd.read_csv(f"{DATA_PATH}/auc/fbf.districts.roc.spi.2022.csv"),
-        pd.read_csv(f"{DATA_PATH}/auc/fbf.districts.roc.dryspell.2022.csv"),
+        # pd.read_csv(f"{DATA_PATH}/auc/fbf.districts.roc.dryspell.2022.csv"),
     ]
 )
 
@@ -353,10 +348,49 @@ triggers["TP"] = triggers.TP.astype(np.uint8)
 triggers["RP"] = triggers.RP.astype(np.uint8)
 
 # %%
-outdir = "s3://wfp-ops-userdata/amine.barkaoui/aa/data/setup-tool/tza"
+outdir = f"s3://wfp-ops-userdata/amine.barkaoui/aa/data/setup-tool/{COUNTRY.lower()}"
 # os.makedirs(outdir, exist_ok=True)
 
 probs_df.to_parquet(f"{outdir}/probs.parquet", index=False)
 chirps_df.to_parquet(f"{outdir}/obs.parquet", index=False)
 roc.to_parquet(f"{outdir}/roc.parquet", index=False)
 triggers.to_parquet(f"{outdir}/triggers.parquet", index=False)
+
+# %% [markdown]
+# ### Format and save boundaries
+
+# %%
+from hip.analysis import AnalysisArea
+area = AnalysisArea.from_admin_boundaries(iso3=COUNTRY, admin_level=2)
+shp = area.get_dataset([area.BASE_AREA_DATASET])
+
+# %%
+boundaries = shp.rename(columns={"geometry": "geom"})
+
+# %%
+import geopandas as gpd
+
+from geopandas.array import from_wkb  # vectorized and fast
+
+gdf = gpd.GeoDataFrame(
+    boundaries,
+    geometry=from_wkb(boundaries["geom"]),   # <--- vectorized WKB to geometry
+    crs="EPSG:4326",                 # set the correct CRS if you know it
+)
+
+# %%
+gdf = gdf.drop(columns=["geom"]).rename(columns={"geometry": "geom"})
+
+# %%
+from shapely import make_valid
+
+gdf["geom"] = gdf.geom.apply(make_valid)
+
+# %%
+gdf = gdf.rename(columns={"Name": "ADM2_EN"})
+
+# %%
+gdf['adm1_Code'] = gdf.adm1_Code.astype(np.uint16)
+
+# %%
+gdf.to_parquet("~/boundaries.svg")

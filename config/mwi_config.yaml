@@ -46,14 +46,32 @@ intensity_thresholds:
 
 # Vulnerability class of triggers for each district: general or non-regret (GT or NRT)
 districts_vulnerability: 
+  Balaka: "TBD"
+  Blantyre: "TBD"
+  Chikwawa: "TBD"
+  Chiradzulu: "TBD"
+  Chitipa: "TBD"
+  Dedza: "TBD"
+  Dowa: "TBD"
+  Karonga: "TBD"
   Kasungu: "TBD"
+  Lilongwe: "TBD"
   Machinga: "TBD"
   Mangochi: "TBD"
+  Mchinji: "TBD"
   Mulanje: "TBD"
+  Mzimba: "TBD"
+  Neno: "TBD"
+  Nkhata Bay: "TBD"
+  Nkhotakota: "TBD"
   Nsanje: "TBD"
+  Ntcheu: "TBD"
+  Ntchisi: "TBD"
   Phalombe: "TBD"
+  Rumphi: "TBD"
+  Salima: "TBD"
+  Thyolo: "TBD"
   Zomba: "TBD"
-  
 
 # Tolerance for thresholds for each category, used to compute false alarm with tolerance
 tolerance:
