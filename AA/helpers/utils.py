@@ -9,7 +9,6 @@ PORTUGUESE_CATEGORIES = dict(
     Normal="Normal", Mild="Leve", Moderate="Moderado", Severe="Severo"
 )
 
-
 def create_flexible_dataarray(start_season, end_season):
     # Create the start and end dates
     start_date = datetime.datetime(1990, start_season, 1)
@@ -70,13 +69,9 @@ def triggers_da_to_df(triggers_da, score_da):
 def compute_district_average(da, area):
     """
     Computes zonal statistics on an xarray DataArray for both observations and probabilities.
-
-    Args:
-        da : xarray.DataArray, Input DataArray (can be observations or probabilities).
-        area : hip.analysis.aoi.analysis_area.AnalysisArea: object characterizing the area
-            and admin level of interest.
-    Returns: xarray.DataArray, DataArray with computed district averages.
+    Uses all_touched=False by default, and re-computes missing districts with all_touched=True.
     """
+
     # Ensure consistent time dimension
     if "year" in da.dims:
         da = da.rename({"year": "time"})
@@ -87,33 +82,83 @@ def compute_district_average(da, area):
     # Transpose dims to ensure equality of shapes
     da = da.transpose(..., *groupby_dim, "latitude", "longitude")
 
-    # Compute zonal stats: handle different groupby dimensions lengths
     if len(groupby_dim) > 1:
         raise NotImplementedError(
             "Zonal stats with more than one groupby dimension are not supported."
         )
-    elif len(groupby_dim) == 1:
-        da_grouped = da.groupby(*groupby_dim).map(
-            lambda da: area.zonal_stats(
-                da.squeeze(groupby_dim), stats=["mean"], zone_ids=None, zones=None
+
+    def _zonal_stats(data, *, zone_ids=None, all_touched=False):
+        """Helper that returns a clean DataArray with district dimension."""
+        out = area.zonal_stats(
+            data,
+            stats=["mean"],
+            zone_ids=zone_ids,
+            zones=None,
+            all_touched=all_touched,
+        )
+
+        return (
+            out.query("zone != 'Administrative unit not available'")
+               .to_xarray()["mean"]
+               .rename({"zone": "district"})
+               .assign_coords(district=lambda x: x.district.astype(str))
+        )
+
+    if len(groupby_dim) == 1:
+        gb = list(groupby_dim)[0]
+
+        def _process_group(da_slice):
+            da_slice = da_slice.squeeze(gb)
+
+            # --- 1) First pass: all_touched=False
+            da_main = _zonal_stats(da_slice, all_touched=False)
+
+            # --- 2) Detect missing districts
+            expected_districts = area.geometry.index.astype(str)
+            present = set(da_main.district.values)
+            missing = list(set(expected_districts) - present)
+
+            if not missing:
+                return da_main
+
+            # --- 3) Second pass for missing districts only
+            da_missing = _zonal_stats(
+                da_slice,
+                zone_ids=missing,
+                all_touched=True,
             )
-            .query("zone != 'Administrative unit not available'")
-            .to_xarray()["mean"]
-        )
+
+            # --- 4) Concatenate
+            return xr.concat([da_main, da_missing], dim="district")
+
+        da_grouped = da.groupby(gb).map(_process_group)
+
     else:
-        da_grouped = (
-            area.zonal_stats(da, stats=["mean"], zone_ids=None, zones=None)
-            .query("zone != 'Administrative unit not available'")
-            .to_xarray()["mean"]
-        )
+        # --- No groupby dimension (single DataArray)
 
-    # Rename 'zone' to 'district' for consistency
-    da_grouped = da_grouped.rename({"zone": "district"})
+        # 1) First pass
+        da_main = _zonal_stats(da, all_touched=False)
 
-    # Ensure district is a string type
-    da_grouped["district"] = da_grouped.district.astype(str)
+        # 2) Detect missing districts
+        expected_districts = area.geometry.index.astype(str)
+        present = set(da_main.district.values)
+        missing = list(set(expected_districts) - present)
+
+        if missing:
+            # 3) Second pass for missing districts
+            da_missing = _zonal_stats(
+                da,
+                zone_ids=missing,
+                all_touched=True,
+            )
+
+            # 4) Concatenate
+            da_grouped = xr.concat([da_main, da_missing], dim="district")
+        else:
+            da_grouped = da_main
 
     return da_grouped
+ 
 
 
 def merge_un_biased_probs(probs_district, probs_bc_district, params, period_name):

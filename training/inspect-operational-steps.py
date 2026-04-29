@@ -5,11 +5,11 @@
 #       extension: .py
 #       format_name: light
 #       format_version: '1.5'
-#       jupytext_version: 1.19.1
+#       jupytext_version: 1.16.1
 #   kernelspec:
-#     display_name: Python (Pixi)
+#     display_name: Python (pixi-aa)
 #     language: python
-#     name: pixi-kernel-python3
+#     name: pixi-aa
 # ---
 
 # This notebook is not used operationally or for any validation, its only purpose is to have a clear understanding of the core functions of the AA workflow. The outputs and dimensions of each main step can thus be identified here.
@@ -33,6 +33,7 @@ from hip.analysis.analyses.drought import (
 )
 from hip.analysis.aoi.analysis_area import AnalysisArea
 from AA.helpers.read import read_forecasts, read_observations, read_triggers
+
 from AA.helpers.utils import (
     compute_district_average,
     merge_probabilities_triggers_dashboard,
@@ -46,10 +47,10 @@ from AA.helpers.params import Params
 # The `config/{country}_config.yaml` file gathers all the parameters used in the operational script and that can be customized. For example, the *monitoring_year*, the list of districts or the intensity levels can be defined in that file.
 
 params = Params(
-    iso="ISO", 
-    issue=5, 
+    iso="ZMB", 
+    issue=6, 
     index="SPI",
-    data_path = ".",
+    data_path = "/s3/scratch/amine.barkaoui/aa",
     output_path = "."
 )
 
@@ -96,8 +97,10 @@ observations
 
 # Now that we got all the data we need, let's read the triggers file so we can merge the probabilities with it once we have them.
 
+# + jupyter={"outputs_hidden": true}
 # Read triggers file
 triggers_df = read_triggers(params)
+# -
 
 # **Get accumulation periods covered by the forecasts of the defined issue month**
 
@@ -201,7 +204,115 @@ probabilities_bc
 
 # **Admin-2 level aggregation**
 
+area.get_dataset([area.BASE_AREA_DATASET])
+
+import xarray as xr
+def compute_district_average(da, area):
+    """
+    Computes zonal statistics on an xarray DataArray for both observations and probabilities.
+    Uses all_touched=False by default, and re-computes missing districts with all_touched=True.
+    """
+
+    # Ensure consistent time dimension
+    if "year" in da.dims:
+        da = da.rename({"year": "time"})
+
+    # Determine dimensions to group by (exclude spatial dimensions)
+    groupby_dim = set(da.dims) - {"latitude", "longitude", "time"}
+
+    # Transpose dims to ensure equality of shapes
+    da = da.transpose(..., *groupby_dim, "latitude", "longitude")
+
+    if len(groupby_dim) > 1:
+        raise NotImplementedError(
+            "Zonal stats with more than one groupby dimension are not supported."
+        )
+
+    def _zonal_stats(data, *, zone_ids=None, all_touched=False):
+        """Helper that returns a clean DataArray with district dimension."""
+        out = area.zonal_stats(
+            data,
+            stats=["mean"],
+            zone_ids=zone_ids,
+            zones=None,
+            all_touched=all_touched,
+        )
+
+        return (
+            out.query("zone != 'Administrative unit not available'")
+               .to_xarray()["mean"]
+               .rename({"zone": "district"})
+               .assign_coords(district=lambda x: x.district.astype(str))
+        )
+
+    if len(groupby_dim) == 1:
+        gb = list(groupby_dim)[0]
+
+        def _process_group(da_slice):
+            da_slice = da_slice.squeeze(gb)
+
+            # --- 1) First pass: all_touched=False
+            da_main = _zonal_stats(da_slice, all_touched=False)
+
+            # --- 2) Detect missing districts
+            expected_districts = area.get_dataset([area.BASE_AREA_DATASET]).index.astype(str)
+            present = set(da_main.district.values)
+            missing = list(set(expected_districts) - present)
+
+            if not missing:
+                return da_main
+
+            # --- 3) Second pass for missing districts only
+            da_missing = _zonal_stats(
+                da_slice,
+                all_touched=True,
+            ).sel(district=missing)
+
+            # --- 4) Concatenate
+            return xr.concat([da_main, da_missing], dim="district")
+
+        da_grouped = da.groupby(gb).map(_process_group)
+
+    else:
+        # --- No groupby dimension (single DataArray)
+
+        # 1) First pass
+        da_main = _zonal_stats(da, all_touched=False)
+
+        # 2) Detect missing districts
+        expected_districts = area.get_dataset([area.BASE_AREA_DATASET]).index.astype(str)
+        present = set(da_main.district.values)
+        missing = list(set(expected_districts) - present)
+
+        if missing:
+            # 3) Second pass for missing districts
+            da_missing = _zonal_stats(
+                da,
+                all_touched=True,
+            ).sel(district=missing)
+
+            # 4) Concatenate
+            da_grouped = xr.concat([da_main, da_missing], dim="district")
+        else:
+            da_grouped = da_main
+
+    return da_grouped
+
+
 probs_district = compute_district_average(probabilities, area)
+
+obs_district = compute_district_average(anomaly_obs, area)
+
+probs_district.sortby('district')
+
+probs_ref
+
+obs_district
+
+obs_ref
+
+obs_ref = xr.open_zarr("/s3/scratch/amine.barkaoui/aa/data/zmb/zarr/2022/obs/spi ON/observations.zarr")
+probs_ref = xr.open_zarr("/s3/scratch/amine.barkaoui/aa/data/zmb/zarr/2022/06/spi ON/probabilities.zarr")
 
 probs_bc_district = compute_district_average(probabilities_bc, area)
 
