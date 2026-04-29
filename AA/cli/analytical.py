@@ -24,7 +24,6 @@ from AA.helpers.params import S3_OPS_DATA_PATH, Params
 from AA.helpers.read import read_forecasts, read_observations
 from AA.helpers.utils import compute_district_average
 
-
 logging.basicConfig(level="INFO", force=True)
 
 warnings.simplefilter(action="ignore", category=FutureWarning)
