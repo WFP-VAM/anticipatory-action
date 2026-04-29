@@ -17,6 +17,7 @@
 # **Import required libraries and functions**
 
 import os
+
 if os.getcwd().split("\\")[-1] != "anticipatory-action":
     os.chdir("..")
 os.getcwd()
@@ -41,6 +42,7 @@ from AA.helpers.utils import (
     merge_un_biased_probs,
 )
 from AA.helpers.params import Params
+
 # -
 
 # **Define parameters**
@@ -48,11 +50,11 @@ from AA.helpers.params import Params
 # The `config/{country}_config.yaml` file gathers all the parameters used in the operational script and that can be customized. For example, the *monitoring_year*, the list of districts or the intensity levels can be defined in that file.
 
 params = Params(
-    iso="ISO", 
-    issue=6, 
+    iso="ISO",
+    issue=6,
     index="SPI",
-    data_path = "/s3/scratch/amine.barkaoui/aa",
-    output_path = "."
+    data_path="/s3/scratch/amine.barkaoui/aa",
+    output_path=".",
 )
 
 # **Read shapefile**
@@ -79,7 +81,9 @@ gdf
 
 # +
 # When update is set to False, the downscaled dataset is read from a local folder or a s3 bucket. Otherwise, it is directly read from HDC.
-forecasts_folder_path = f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}"
+forecasts_folder_path = (
+    f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}"
+)
 
 forecasts = read_forecasts(
     area,

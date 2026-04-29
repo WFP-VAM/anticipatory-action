@@ -9,6 +9,7 @@ PORTUGUESE_CATEGORIES = dict(
     Normal="Normal", Mild="Leve", Moderate="Moderado", Severe="Severo"
 )
 
+
 def create_flexible_dataarray(start_season, end_season):
     # Create the start and end dates
     start_date = datetime.datetime(1990, start_season, 1)
@@ -99,9 +100,9 @@ def compute_district_average(da, area):
 
         return (
             out.query("zone != 'Administrative unit not available'")
-               .to_xarray()["mean"]
-               .rename({"zone": "district"})
-               .assign_coords(district=lambda x: x.district.astype(str))
+            .to_xarray()["mean"]
+            .rename({"zone": "district"})
+            .assign_coords(district=lambda x: x.district.astype(str))
         )
 
     if len(groupby_dim) == 1:
@@ -114,7 +115,9 @@ def compute_district_average(da, area):
             da_main = _zonal_stats(da_slice, all_touched=False)
 
             # --- 2) Detect missing districts
-            expected_districts = area.get_dataset([area.BASE_AREA_DATASET]).index.astype(str)
+            expected_districts = area.get_dataset(
+                [area.BASE_AREA_DATASET]
+            ).index.astype(str)
             present = set(da_main.district.values)
             missing = list(set(expected_districts) - present)
 
@@ -139,7 +142,9 @@ def compute_district_average(da, area):
         da_main = _zonal_stats(da, all_touched=False)
 
         # 2) Detect missing districts
-        expected_districts = area.get_dataset([area.BASE_AREA_DATASET]).index.astype(str)
+        expected_districts = area.get_dataset([area.BASE_AREA_DATASET]).index.astype(
+            str
+        )
         present = set(da_main.district.values)
         missing = list(set(expected_districts) - present)
 
