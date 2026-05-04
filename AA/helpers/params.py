@@ -77,6 +77,17 @@ def load_config(iso: str, cli_json: str | None = None) -> dict:
 
 
 def get_git_commit_hash():
+    """
+    Retrieve the current Git commit hash.
+
+    This function attempts to obtain the full SHA hash of the current Git HEAD
+    using the `git rev-parse HEAD` command. It is primarily intended for run
+    traceability and experiment reproducibility.
+
+    Returns:
+        str or None: The Git commit hash if available; otherwise None if Git is
+        unavailable or the current directory is not a Git repository.
+    """
     try:
         return (
             subprocess.check_output(
@@ -91,6 +102,25 @@ def get_git_commit_hash():
 
 
 def sanitize_value(v):
+    """
+    Convert a parameter value into a JSON-serializable form.
+
+    This function determines whether a value should be kept for inclusion in
+    a configuration snapshot and, if so, converts it into a JSON-compatible
+    representation.
+
+    Values that are callable or large, non-serializable objects (e.g.
+    pandas DataFrames) are excluded.
+
+    Args:
+        v: Any Python object representing a parameter value.
+
+    Returns:
+        tuple:
+            - clean_value: A JSON-serializable representation of the value, or None.
+            - keep: Boolean flag indicating whether the value should be included
+              in the configuration snapshot.
+    """
     if callable(v):
         return None, False
 
@@ -107,6 +137,22 @@ def sanitize_value(v):
 
 
 def ordered_params_dict(params):
+    """
+    Extract and sanitize parameters from a dataclass in definition order.
+
+    This function iterates over the fields defined in a dataclass instance,
+    sanitizes each value for JSON serialization, and assembles them into an
+    ordered dictionary preserving the original field order.
+
+    Certain fields (e.g. raw configuration blobs) are explicitly excluded.
+
+    Args:
+        params: A dataclass instance containing run configuration parameters.
+
+    Returns:
+        OrderedDict: An ordered mapping of parameter names to sanitized values,
+        suitable for serialization.
+    """
     ordered = OrderedDict()
 
     for f in dataclass_fields(params):
@@ -128,6 +174,29 @@ def ordered_params_dict(params):
 
 
 def save_run_config(params, script_name: str):
+    """
+    Save a reproducible snapshot of run configuration to persistent storage.
+
+    The configuration snapshot includes:
+      - Git commit hash
+      - Run timestamp
+      - All sanitized dataclass parameters in definition order
+
+    The snapshot is written as a JSON file under:
+        <output_path>/<iso>/config/config-<script_name>.json
+
+    Storage is handled via `fsspec`, allowing support for both local and
+    remote filesystems (e.g. S3).
+
+    Args:
+        params: Dataclass instance containing run parameters. Must provide
+            `output_path` and `iso` attributes.
+        script_name: Name of the calling script, used to uniquely identify
+            the configuration file.
+
+    Returns:
+        str: The full path to the written configuration JSON file.
+    """
     fs, base_path = fsspec.url_to_fs(params.output_path)
 
     output_dir = os.path.join(base_path, params.iso, "config")
@@ -135,19 +204,22 @@ def save_run_config(params, script_name: str):
 
     payload = OrderedDict()
 
-    # ---- metadata first ----
+    # ---- metadata ----
     payload["git_commit"] = get_git_commit_hash()
     payload["run_time"] = datetime.datetime.now().isoformat() + "Z"
 
-    # ---- params snapshot in class-definition order ----
+    # ---- parameters snapshot ----
     payload.update(ordered_params_dict(params))
 
     out_path = os.path.join(output_dir, f"config-{script_name}.json")
 
     with fs.open(out_path, "w", encoding="utf-8") as f:
-        json.dump(payload, f, indent=2)  # IMPORTANT: no sort_keys=True
+        # IMPORTANT: preserve insertion order for traceability
+        json.dump(payload, f, indent=2)
 
-    logging.info(f"Saved {params.iso} config snapshot for traceability at {out_path}")
+    logging.info(
+        f"Saved {params.iso} config snapshot for traceability at {out_path}"
+    )
 
     return out_path
 
