@@ -206,7 +206,7 @@ def save_run_config(params, script_name: str):
 
     # ---- metadata ----
     payload["git_commit"] = get_git_commit_hash()
-    payload["run_time"] = datetime.datetime.now().isoformat() + "Z"
+    payload["run_time"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
     # ---- parameters snapshot ----
     payload.update(ordered_params_dict(params))
