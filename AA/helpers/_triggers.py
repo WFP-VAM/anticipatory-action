@@ -567,7 +567,8 @@ def run_pilot_districts_metrics(obs, probs_ready, probs_set, params):
     )
 
     folder_path = f"{params.output_path}/{params.iso}/triggers/triggers_metrics"
-    os.makedirs(folder_path, exist_ok=True)
+    if not folder_path.startswith("s3://"):
+        os.makedirs(folder_path, exist_ok=True)
 
     districts = params.districts if params.districts else obs.district.values
 
