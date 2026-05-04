@@ -24,6 +24,7 @@
 # **Import required libraries and functions**
 
 import os
+
 if os.getcwd().split("\\")[-1] != "anticipatory-action":
     os.chdir("..")
 os.getcwd()
@@ -42,6 +43,7 @@ from AA.cli.analytical import run_issue_verification
 from AA.helpers.params import Params
 from AA.helpers.read import read_forecasts, read_observations
 from AA.cli.triggers import run_triggers_selection
+
 # -
 
 # **First, please define the country ISO code and the index of interest**
@@ -49,8 +51,8 @@ from AA.cli.triggers import run_triggers_selection
 
 country = "ISO"
 index = "SPI"  # 'SPI' or 'DRYSPELL'
-data_path = "."  # current directory (anticipatory-action)
-output_path = "."
+data_path = "./data"  # current directory (anticipatory-action)
+output_path = "./data"
 
 
 # Now, we will configure some parameters. Please feel free to edit the year of the last season considered. By default, it is equal to 2022. This means that for the purposes of evaluating and selecting triggers, the time series studied will end with the 2021-2022 season. This is the configuration chosen for monitoring the 2023-2024 season.
@@ -63,7 +65,9 @@ output_path = "."
 params = Params(iso=country, index=index, data_path=data_path, output_path=output_path)
 
 
+# + [markdown] jp-MarkdownHeadingCollapsed=true
 # ### Read data
+# -
 
 # Let's start by getting the shapefile.
 
@@ -92,21 +96,19 @@ gdf
 
 # Observations data reading
 observations = read_observations(
-    area,
-    f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}/obs/observations.zarr",
+    area, f"{params.data_path}/{params.iso}/zarr/obs/observations.zarr"
 )
 observations
 
 # If your dataset is already stored locally, you can edit the path below and forecasts will be read in the analytical loop. Once again, make sure that your coordinates match those of the observations, that your forecasts are daily, and that you have 51 members. The name of the data variable must be `tp` for total precipitation.
 
 
-forecasts_folder_path = (
-    f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}"
-)
+forecasts_folder_path = f"{params.data_path}/{params.iso}/zarr"
 
 
 # *Congratulations!* You've completed the part that requires the most energy during this process. Now all you have to do is run the different cells and check the results!
 
+# + [markdown] jp-MarkdownHeadingCollapsed=true
 # ### Analytical processing
 #
 # The next part contains the analytical phase of the AA process.
@@ -119,13 +121,10 @@ forecasts_folder_path = (
 
 # +
 # Create directory for ROC scores df per issue month in case it doesn't exist
-os.makedirs(
-    f"{params.data_path}/data/{params.iso}/auc/split_by_issue",
-    exist_ok=True,
-)
+os.makedirs(f"{params.data_path}/{params.iso}/auc/split_by_issue", exist_ok=True)
 
 # Define empty list for each issue month's ROC score dataframe
-fbf_roc_issues = []
+roc_issues = []
 
 for issue in ["07"]:  # params.issue_months:
     forecasts = read_forecasts(
@@ -135,7 +134,7 @@ for issue in ["07"]:  # params.issue_months:
     )
     logging.info(f"Completed reading of forecasts for the issue month {issue}")
 
-    fbf_roc_issues.append(
+    roc_issues.append(
         run_issue_verification(
             forecasts,
             observations,
@@ -148,32 +147,32 @@ for issue in ["07"]:  # params.issue_months:
         f"Completed analytical process for {params.index.upper()} over {country} country"
     )
 
-fbf_roc = pd.concat(fbf_roc_issues)
-display(fbf_roc)  # noqa: F821
+roc = pd.concat(roc_issues)
+display(roc)  # noqa: F821
 # -
 
 # Let's have a look at how the computed probabilities data looks like.
 
-xr.open_zarr(f"{forecasts_folder_path}/07/{params.index} ON/probabilities.zarr").load()
+xr.open_zarr(f"{forecasts_folder_path}/07/{params.index}_ON/probabilities.zarr").load()
 
 # We can also check how the CHIRPS-based anomalies that have been saved look like. They have been used to calculate the roc scores and will be used to select the triggers.
 
-xr.open_zarr(f"{forecasts_folder_path}/obs/{params.index} ON/observations.zarr").load()
+xr.open_zarr(f"{forecasts_folder_path}/obs/{params.index}_ON/observations.zarr").load()
 
 # By running the next cell, you can save the dataframe containing the ROC scores. We commented it here so we don't overwrite the file with all the issue months with a file that only contains a few issue months.
 
 
 # +
-#fbf_roc.to_csv(
-#    f"{params.data_path}/data/{params.iso}/auc/fbf.districts.roc.{params.index}.{params.calibration_year}.csv",
+# roc.to_csv(
+#    f"{params.output_path}/{params.iso}/auc/roc.{params.index}.csv",
 #    index=False,
-#)
+# )
 # -
 
 # Now we can read this dataframe locally to visualize the ROC scores.
 
 roc = pd.read_csv(
-    f"{params.data_path}/data/{params.iso}/auc/fbf.districts.roc.{params.index}.{params.calibration_year}.csv",
+    f"{params.data_path}/{params.iso}/auc/roc.{params.index}.csv",
 )
 
 # +
@@ -218,12 +217,12 @@ run_triggers_selection(params)
 # Then, these dataframes can be explored in order to evaluate the trigger performance and attempt to find suitable triggers in terms of Hit Rate, Success Rate, and False Alarm Ratio.
 
 triggers = pd.read_csv(
-    f"{params.data_path}/data/{params.iso}/triggers/triggers_metrics/triggers_metrics_tbd_{params.districts[0]}.csv",
+    f"{params.data_path}/{params.iso}/triggers/triggers_metrics/triggers_metrics_tbd_{params.districts[0]}.csv",
 )
 triggers
 
 
-# Great! Now you can go through the trigger selection process: using the set-up tool, or by implementing a simple routine that carries out the filtering and ranking jobs. This type of function should be added soon in the codebase to facilitate this work. The pre-season verification and setup is then complete. 
+# Great! Now you can go through the trigger selection process: using the set-up tool, or by implementing a simple routine that carries out the filtering and ranking jobs. This type of function should be added soon in the codebase to facilitate this work. The pre-season verification and setup is then complete.
 #
 # You can therefore proceed with the operational script and process the forecasts when they are ready to produce the alerts.
 

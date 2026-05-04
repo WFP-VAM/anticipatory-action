@@ -16,7 +16,7 @@ monitoring_year: 2025
 calibration_year: 2022
 
 # Minimum length of indicator periods (ON, NDJ, JFMA...)
-min_index_period: 3
+min_index_period: 2
 
 # Maximum length of indicator periods (ON, NDJ, JFMA...)
 max_index_period: 3
@@ -100,5 +100,5 @@ windows:
     window1: ["OND", "NDJ"]
     window2: ["DJF", "JFM"]
   dryspell:
-    window1: []
-    window2: ["DJ", "JF", "FM"]
+    window1: ["ON", "ND", "DJ"]
+    window2: ["JF", "FM", "MA"]

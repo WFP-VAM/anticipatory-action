@@ -6,14 +6,16 @@ import warnings
 import click
 import numpy as np
 import pandas as pd
-from hip.analysis.analyses.drought import (compute_probabilities,
-                                           get_accumulation_periods,
-                                           run_accumulation_index,
-                                           run_bias_correction,
-                                           run_gamma_standardization)
+from hip.analysis.analyses.drought import (
+    compute_probabilities,
+    get_accumulation_periods,
+    run_accumulation_index,
+    run_bias_correction,
+    run_gamma_standardization,
+)
 from hip.analysis.aoi.analysis_area import AnalysisArea
 
-from AA.helpers.params import S3_OPS_DATA_PATH, Params
+from AA.helpers.params import S3_OPS_DATA_PATH, Params, save_run_config
 from AA.helpers.read import read_forecasts, read_observations, read_triggers
 from AA.helpers.utils import (compute_district_average,
                               merge_probabilities_triggers_dashboard,
@@ -59,6 +61,9 @@ def run(country, issue, index, config_json, data_path, output_path):
         output_path=output_path,
     )
 
+    # Save config snapshot for traceability
+    save_run_config(params, script_name="operational")
+
     area = AnalysisArea.from_admin_boundaries(
         iso3=country.upper(),
         admin_level=2,
@@ -73,7 +78,7 @@ def run(country, issue, index, config_json, data_path, output_path):
     forecasts = read_forecasts(
         area,
         issue,
-        f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}/{str(issue).zfill(2)}/forecasts.zarr",
+        f"{params.data_path}/{params.iso}/zarr/{str(issue).zfill(2)}/forecasts.zarr",
     )
 
     # Check if the forecast date is in the time coordinate
@@ -90,16 +95,17 @@ def run(country, issue, index, config_json, data_path, output_path):
     area.datetime_range = f"1981-01-01/{params.calibration_year + 1}-06-30"
     observations = read_observations(
         area,
-        f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}/obs/observations.zarr",
+        f"{params.data_path}/{params.iso}/zarr/obs/observations.zarr",
     )
     logging.info(
         "Completed reading of observations for the whole %s country", params.iso
     )
 
-    os.makedirs(
-        f"{params.output_path}/data/{params.iso}/probs",
-        exist_ok=True,
-    )
+    if not params.output_path.startswith("s3://"):
+        os.makedirs(
+            f"{params.output_path}/data/{params.iso}/probs",
+            exist_ok=True,
+        )
 
     triggers_df = read_triggers(params)
 
@@ -131,7 +137,7 @@ def run(country, issue, index, config_json, data_path, output_path):
 
     probs_dashboard = pd.concat(probs_df).drop_duplicates()
     probs_dashboard.to_csv(
-        f"{params.output_path}/data/{params.iso}/probs/aa_probabilities_{params.index}_{params.issue}.csv",
+        f"{params.output_path}/{params.iso}/probs/aa_probabilities_{params.index}_{params.issue}.csv",
         index=False,
     )
 
@@ -166,7 +172,7 @@ def run(country, issue, index, config_json, data_path, output_path):
     )
 
     merged_db.sort_values(["district", "index", "category"]).to_csv(
-        f"{params.output_path}/data/{params.iso}/probs/aa_probabilities_triggers_pilots.csv",
+        f"{params.output_path}/{params.iso}/probs/aa_probabilities_triggers_pilots.csv",
         index=False,
     )
 

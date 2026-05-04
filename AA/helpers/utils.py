@@ -1,9 +1,13 @@
 import datetime
 import glob
+import logging
+import os
 
+import fsspec
 import numpy as np
 import pandas as pd
 import xarray as xr
+from hip.analysis.compute.utils import persist_with_progress_bar
 
 PORTUGUESE_CATEGORIES = dict(
     Normal="Normal", Mild="Leve", Moderate="Moderado", Severe="Severo"
@@ -70,74 +74,69 @@ def triggers_da_to_df(triggers_da, score_da):
 def compute_district_average(da, area):
     """
     Computes zonal statistics on an xarray DataArray for both observations and probabilities.
-    Uses all_touched=False by default, and re-computes missing districts with all_touched=True.
+
+    Args:
+        da : xarray.DataArray, Input DataArray (can be observations or probabilities).
+        area : hip.analysis.aoi.analysis_area.AnalysisArea: object characterizing the area
+            and admin level of interest.
+    Returns: xarray.DataArray, DataArray with computed district averages.
     """
     # Ensure consistent time dimension
     if "year" in da.dims:
         da = da.rename({"year": "time"})
+
     # Determine dimensions to group by (exclude spatial dimensions)
     groupby_dim = set(da.dims) - {"latitude", "longitude", "time"}
+
     # Transpose dims to ensure equality of shapes
     da = da.transpose(..., *groupby_dim, "latitude", "longitude")
+
+    # Compute zonal stats: handle different groupby dimensions lengths
     if len(groupby_dim) > 1:
         raise NotImplementedError(
             "Zonal stats with more than one groupby dimension are not supported."
         )
-
-    def _zonal_stats(data, *, zone_ids=None, all_touched=False):
-        """Helper that returns a clean DataArray with district dimension."""
-        out = area.zonal_stats(
-            data,
-            stats=["mean"],
-            zone_ids=zone_ids,
-            zones=None,
-            all_touched=all_touched,
-        )
-        return (
-            out.query("zone != 'Administrative unit not available'")
+    elif len(groupby_dim) == 1:
+        da_grouped = da.groupby(*groupby_dim).map(
+            lambda da: area.zonal_stats(
+                da.squeeze(groupby_dim), stats=["mean"], zone_ids=None, zones=None
+            )
+            .query("zone != 'Administrative unit not available'")
             .to_xarray()["mean"]
-            .rename({"zone": "district"})
-            .assign_coords(district=lambda x: x.district.astype(str))
+        )
+    else:
+        da_grouped = (
+            area.zonal_stats(da, stats=["mean"], zone_ids=None, zones=None)
+            .query("zone != 'Administrative unit not available'")
+            .to_xarray()["mean"]
         )
 
-    expected_districts = set(
-        area.get_dataset([area.BASE_AREA_DATASET]).index.astype(str)
-    )
+    # Rename 'zone' to 'district' for consistency
+    da_grouped = da_grouped.rename({"zone": "district"})
 
-    def _with_fallback(data):
-        da_main = _zonal_stats(data, all_touched=False)
-        missing = list(expected_districts - set(da_main.district.values))
-        if not missing:
-            return da_main
-        da_missing = _zonal_stats(data, all_touched=True).sel(district=missing)
-        return xr.concat([da_main, da_missing], dim="district")
-
-    if len(groupby_dim) == 1:
-        gb = list(groupby_dim)[0]
-        da_grouped = da.groupby(gb).map(lambda s: _with_fallback(s.squeeze(gb)))
-    else:
-        da_grouped = _with_fallback(da)
+    # Ensure district is a string type
+    da_grouped["district"] = da_grouped.district.astype(str)
 
     return da_grouped
 
 
 def merge_un_biased_probs(probs_district, probs_bc_district, params, period_name):
-    # Get fbf_districts data in xarray format
-    fbf_bc = params.fbf_districts_df
-    fbf_bc = fbf_bc.loc[fbf_bc["Index"] == f"{params.index.upper()} {period_name}"]
-    fbf_bc = fbf_bc[["district", "category", "issue", "BC"]]
+    # Get roc_df data in xarray format
+    roc_df = params.roc_df
+    roc_df = roc_df.loc[roc_df["Index"] == f"{params.index.upper()}_{period_name}"]
+    roc_df = roc_df[["district", "category", "issue", "BC"]]
 
-    # If params.fbf_districts_df has Portuguese category names, ensure these are English
+    # If params.roc_df has Portuguese category names, ensure these are English
     CATEGORY_TRANSLATIONS = {"Leve": "Mild", "Moderado": "Moderate", "Severo": "Severe"}
-    fbf_bc["category"] = fbf_bc["category"].apply(
+    roc_df["category"] = roc_df["category"].apply(
         lambda x: CATEGORY_TRANSLATIONS.get(x, x)
     )
 
-    fbf_bc_da = fbf_bc.set_index(["district", "category", "issue"]).to_xarray().BC
-    fbf_bc_da = fbf_bc_da.expand_dims(dim={"index": [f"{params.index} {period_name}"]})
+    roc_da = roc_df.set_index(["district", "category", "issue"]).to_xarray().BC
+    roc_da = roc_da.expand_dims(dim={"index": [f"{params.index}_{period_name}"]})
 
     # Combination of both probabilities datasets
-    probs_merged = (1 - fbf_bc_da) * probs_district + fbf_bc_da * probs_bc_district
+    probs_merged = (1 - roc_da) * probs_district + roc_da * probs_bc_district
 
     probs_merged = probs_merged.to_dataset(name="prob")
 

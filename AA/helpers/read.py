@@ -8,11 +8,11 @@ import xarray as xr
 from hip.analysis.compute.utils import persist_with_progress_bar
 
 
-def read_fbf_districts(path_fbf, params):
-    fbf_districts = pd.read_csv(path_fbf, sep=",")
+def read_roc_file(roc_path, params):
+    roc = pd.read_csv(roc_path, sep=",")
     if params.issue:
-        fbf_districts = fbf_districts.loc[fbf_districts.issue == params.issue]
-    return fbf_districts
+        roc = roc.loc[roc.issue == params.issue]
+    return roc
 
 
 def read_forecasts(area, issue, local_path):

@@ -9,10 +9,15 @@ import numpy as np
 import pandas as pd
 import geopandas as gpd
 import yaml
+import subprocess
+
 from numba import types
 from numba.typed import Dict
+from collections import OrderedDict
+from dataclasses import fields as dataclass_fields
 
-from AA.helpers.read import read_fbf_districts
+from AA.helpers.read import read_roc_file
+
 
 DRYSPELL_THRESHOLD = 2.0
 
@@ -23,7 +28,7 @@ AGGREGATES = {
     .hdc.algo.lroo(),
 }
 
-S3_OPS_DATA_PATH = "s3://wfp-ops-userdata/amine.barkaoui/aa"
+S3_OPS_DATA_PATH = "s3://dev-hip-jobs-ops/anticipatory-action/data/prod"
 
 
 def load_config(iso: str, cli_json: str | None = None) -> dict:
@@ -71,6 +76,154 @@ def load_config(iso: str, cli_json: str | None = None) -> dict:
             raise ValueError(f"Invalid YAML in {config_path}: {e}")
 
 
+def get_git_commit_hash():
+    """
+    Retrieve the current Git commit hash.
+
+    This function attempts to obtain the full SHA hash of the current Git HEAD
+    using the `git rev-parse HEAD` command. It is primarily intended for run
+    traceability and experiment reproducibility.
+
+    Returns:
+        str or None: The Git commit hash if available; otherwise None if Git is
+        unavailable or the current directory is not a Git repository.
+    """
+    try:
+        return (
+            subprocess.check_output(
+                ["git", "rev-parse", "HEAD"],
+                stderr=subprocess.DEVNULL,
+            )
+            .decode("utf-8")
+            .strip()
+        )
+    except Exception:
+        return None
+
+
+def sanitize_value(v):
+    """
+    Convert a parameter value into a JSON-serializable form.
+
+    This function determines whether a value should be kept for inclusion in
+    a configuration snapshot and, if so, converts it into a JSON-compatible
+    representation.
+
+    Values that are callable or large, non-serializable objects (e.g.
+    pandas DataFrames) are excluded.
+
+    Args:
+        v: Any Python object representing a parameter value.
+
+    Returns:
+        tuple:
+            - clean_value: A JSON-serializable representation of the value, or None.
+            - keep: Boolean flag indicating whether the value should be included
+              in the configuration snapshot.
+    """
+    if callable(v):
+        return None, False
+
+    if isinstance(v, pd.DataFrame):
+        return None, False
+
+    if isinstance(v, Dict):
+        return dict(v), True
+
+    if hasattr(v, "isoformat"):
+        return v.isoformat(), True
+
+    return v, True
+
+
+def ordered_params_dict(params):
+    """
+    Extract and sanitize parameters from a dataclass in definition order.
+
+    This function iterates over the fields defined in a dataclass instance,
+    sanitizes each value for JSON serialization, and assembles them into an
+    ordered dictionary preserving the original field order.
+
+    Certain fields (e.g. raw configuration blobs) are explicitly excluded.
+
+    Args:
+        params: A dataclass instance containing run configuration parameters.
+
+    Returns:
+        OrderedDict: An ordered mapping of parameter names to sanitized values,
+        suitable for serialization.
+    """
+    ordered = OrderedDict()
+
+    for f in dataclass_fields(params):
+        name = f.name
+
+        if not hasattr(params, name):
+            continue
+
+        if name == "config_json":
+            continue
+
+        value = getattr(params, name)
+        clean_value, keep = sanitize_value(value)
+
+        if keep:
+            ordered[name] = clean_value
+
+    return ordered
+
+
+def save_run_config(params, script_name: str):
+    """
+    Save a reproducible snapshot of run configuration to persistent storage.
+
+    The configuration snapshot includes:
+      - Git commit hash
+      - Run timestamp
+      - All sanitized dataclass parameters in definition order
+
+    The snapshot is written as a JSON file under:
+        <output_path>/<iso>/config/config-<script_name>.json
+
+    Storage is handled via `fsspec`, allowing support for both local and
+    remote filesystems (e.g. S3).
+
+    Args:
+        params: Dataclass instance containing run parameters. Must provide
+            `output_path` and `iso` attributes.
+        script_name: Name of the calling script, used to uniquely identify
+            the configuration file.
+
+    Returns:
+        str: The full path to the written configuration JSON file.
+    """
+    fs, base_path = fsspec.url_to_fs(params.output_path)
+
+    output_dir = os.path.join(base_path, params.iso, "config")
+    fs.makedirs(output_dir, exist_ok=True)
+
+    payload = OrderedDict()
+
+    # ---- metadata ----
+    payload["git_commit"] = get_git_commit_hash()
+    payload["run_time"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+    # ---- parameters snapshot ----
+    payload.update(ordered_params_dict(params))
+
+    out_path = os.path.join(output_dir, f"config-{script_name}.json")
+
+    with fs.open(out_path, "w", encoding="utf-8") as f:
+        # IMPORTANT: preserve insertion order for traceability
+        json.dump(payload, f, indent=2)
+
+    logging.info(
+        f"Saved {params.iso} config snapshot for traceability at {out_path}"
+    )
+
+    return out_path
+
+
 @dataclass
 class Params:
     """
@@ -116,7 +269,7 @@ class Params:
         list of districts for which we want to compute triggers
     indicators: list
         list of indicators for which we want to compute triggers
-    fbf_districts_df : pd.DataFrame
+    roc_df : pd.DataFrame
         dataframe containing information about districts to bias correct
     custom_shapefile : gpd.GeoDataFrame
         geodataframe with a custom shapefile in case the one in the VAM GeoAPI is not valid
@@ -156,7 +309,7 @@ class Params:
     hist_anomaly_stop: datetime.datetime = datetime.datetime(2018, 12, 31)
     districts: list = field(init=None)
     indicators: list = field(init=None)
-    fbf_districts_df: pd.DataFrame = field(init=False, default_factory=pd.DataFrame)
+    roc_df: pd.DataFrame = field(init=False, default_factory=pd.DataFrame)
     custom_shapefile: gpd.GeoDataFrame = field(
         init=False, default_factory=gpd.GeoDataFrame
     )
@@ -190,9 +343,9 @@ class Params:
         )
 
         # Read fbf roc dataframe if exists for triggers selection
-        fbf_districts_path = f"{self.data_path}/data/{self.iso}/auc/fbf.districts.roc.{self.index}.2022.csv"
-        if fsspec.open(fbf_districts_path).fs.exists(fbf_districts_path):
-            self.fbf_districts_df = read_fbf_districts(fbf_districts_path, self)
+        roc_path = f"{self.data_path}/{self.iso}/auc/roc.{self.index}.csv"
+        if fsspec.open(roc_path).fs.exists(roc_path):
+            self.roc_df = read_roc_file(roc_path, self)
 
         # Check if a custom shapefile is stored in the data folder and read it if it exists
         shapefile_path = f"{self.data_path}/data/{self.iso}/{self.iso}.geojson"
@@ -231,7 +384,7 @@ class Params:
             )
         else:
             periods = np.unique(list((set().union(*self.windows.values()))))
-        self.indicators = [self.index + " " + ind for ind in periods]
+        self.indicators = [self.index + "_" + ind for ind in periods]
 
     def get_windows(self, window_type):
         return self.windows.get(window_type, {})

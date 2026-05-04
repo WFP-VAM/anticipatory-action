@@ -20,7 +20,7 @@ from hip.analysis.aoi.analysis_area import AnalysisArea
 from hip.analysis.compute.utils import start_dask
 from hip.analysis.ops._statistics import evaluate_roc_forecasts
 
-from AA.helpers.params import S3_OPS_DATA_PATH, Params
+from AA.helpers.params import S3_OPS_DATA_PATH, Params, save_run_config
 from AA.helpers.read import read_forecasts, read_observations
 from AA.helpers.utils import compute_district_average
 
@@ -66,6 +66,9 @@ def run(country, index, config_json, data_path, output_path):
         output_path=output_path,
     )
 
+    # Save config snapshot for traceability
+    save_run_config(params, script_name="analytical")
+
     area = AnalysisArea.from_admin_boundaries(
         iso3=country.upper(),
         admin_level=2,
@@ -79,30 +82,31 @@ def run(country, index, config_json, data_path, output_path):
 
     observations = read_observations(
         area,
-        f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}/obs/observations.zarr",
+        f"{params.data_path}/{params.iso}/zarr/obs/observations.zarr",
     )
     logging.info(
         f"Completed reading of observations for the whole {params.iso} country"
     )
 
     # Create directory for ROC scores df per issue month in case it doesn't exist
-    os.makedirs(
-        f"{params.output_path}/data/{params.iso}/auc/split_by_issue",
-        exist_ok=True,
-    )
+    if not params.output_path.startswith("s3://"):
+        os.makedirs(
+            f"{params.output_path}/{params.iso}/auc/split_by_issue",
+            exist_ok=True,
+        )
 
     # Define empty list for each issue month's ROC score dataframe
-    fbf_roc_issues = []
+    roc_issues = []
 
     for issue in params.issue_months:
         forecasts = read_forecasts(
             area,
             issue,
-            f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}/{issue}/forecasts.zarr",
+            f"{params.data_path}/{params.iso}/zarr/{issue}/forecasts.zarr",
         )
         logging.info(f"Completed reading of forecasts for the issue month {issue}")
 
-        fbf_roc_issues.append(
+        roc_issues.append(
             run_issue_verification(
                 forecasts,
                 observations,
@@ -115,13 +119,13 @@ def run(country, index, config_json, data_path, output_path):
             f"Completed analytical process for {params.index.upper()} over {country} country"
         )
 
-    fbf_roc = pd.concat(fbf_roc_issues)
-    fbf_roc.to_csv(
-        f"{params.output_path}/data/{params.iso}/auc/fbf.districts.roc.{params.index}.{params.calibration_year}.csv",
+    roc = pd.concat(roc_issues)
+    roc.to_csv(
+        f"{params.output_path}/{params.iso}/auc/roc.{params.index}.csv",
         index=False,
     )
 
-    logging.info(f"FbF dataframe saved for {country}")
+    logging.info(f"ROC dataframe saved for {country}")
 
 
 def run_issue_verification(forecasts, observations, issue, params, area):
@@ -137,14 +141,14 @@ def run_issue_verification(forecasts, observations, issue, params, area):
         fbf_issue: pandas.DataFrame, dataframe with roc scores for all indexes, districts, categories and a specified issue month
     """
 
-    fbf_path = f"{params.output_path}/data/{params.iso}/auc/split_by_issue/fbf.districts.roc.{params.index}.{params.calibration_year}.{issue}.csv"
+    roc_path = f"{params.output_path}/{params.iso}/auc/split_by_issue/roc.{params.index}.{issue}.csv"
 
-    if fsspec.open(fbf_path).fs.exists(fbf_path):
+    if fsspec.open(roc_path).fs.exists(roc_path):
         logging.info(
-            f"FbF ROC verification by district for the issue month {issue} read from disk"
+            f"ROC verification file by district for the issue month {issue} read from disk"
         )
 
-        return pd.read_csv(fbf_path)
+        return pd.read_csv(roc_path)
 
     else:
         # Get accumulation periods (DJ, JF, FM, DJF, JFM...)
@@ -173,12 +177,12 @@ def run_issue_verification(forecasts, observations, issue, params, area):
         fbf_issue["issue"] = int(issue)
 
         fbf_issue.to_csv(
-            fbf_path,
+            roc_path,
             index=False,
         )
 
         logging.info(
-            f"FbF ROC verification by district for the issue month {issue} done"
+            f"ROC verification file by district for the issue month {issue} completed"
         )
 
         return fbf_issue
@@ -203,8 +207,9 @@ def verify_index_across_districts(
         area: hip.analysis.AnalysisArea object with aoi information
         period_name: str, name of index period (eg "ON")
         period_months: tuple, months of index period (eg (10, 11))
+        issue: str, issue month of forecasts to analyse
     Returns:
-        fbf_issue_df: pandas.DataFrame, dataframe with roc scores for all districts, categories and specified issue month / period
+        roc_df: pandas.DataFrame, dataframe with roc scores for all districts, categories and specified issue month / period
     """
 
     probs, probs_bc, obs_values, obs_bool = calculate_forecast_probabilities(
@@ -237,17 +242,17 @@ def verify_index_across_districts(
     auc_bc_district = compute_district_average(auc_bc, area)
 
     # Choose W/ or W/OUT BC based on AUROC
-    fbf_index_df = get_verification_df(
+    roc_df = get_verification_df(
         auc_district,
         auc_bc_district,
     )
-    fbf_index_df["Index"] = f"{params.index.upper()} {period_name}"
+    roc_df["Index"] = f"{params.index.upper()} {period_name}"
 
     logging.info(
-        f"Completed FbF ROC computation by district for the {params.index.upper()} {period_name} index"
+        f"Completed ROC computation by district for the {params.index.upper()} {period_name} index"
     )
 
-    return fbf_index_df
+    return roc_df
 
 
 def calculate_forecast_probabilities(
@@ -420,9 +425,9 @@ def save_districts_results(
     probs_bc_district["category"] = probs_bc_district["category"].astype(str)
 
     # Define file paths
-    obs_path = f"{params.output_path}/data/{params.iso}/zarr/{params.calibration_year}/obs/{params.index} {period_name}/observations.zarr"
-    probs_path = f"{params.output_path}/data/{params.iso}/zarr/{params.calibration_year}/{issue}/{params.index} {period_name}/probabilities.zarr"
-    probs_bc_path = f"{params.output_path}/data/{params.iso}/zarr/{params.calibration_year}/{issue}/{params.index} {period_name}/probabilities_bc.zarr"
+    obs_path = f"{params.output_path}/{params.iso}/zarr/obs/{params.index}_{period_name}/observations.zarr"
+    probs_path = f"{params.output_path}/{params.iso}/zarr/{issue}/{params.index}_{period_name}/probabilities.zarr"
+    probs_bc_path = f"{params.output_path}/{params.iso}/zarr/{issue}/{params.index}_{period_name}/probabilities_bc.zarr"
 
     obs_district.to_zarr(obs_path, mode="w")
     probs_district.to_zarr(probs_path, mode="w")
