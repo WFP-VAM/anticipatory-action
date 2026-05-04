@@ -78,7 +78,7 @@ def run(country, issue, index, config_json, data_path, output_path):
     forecasts = read_forecasts(
         area,
         issue,
-        f"{params.data_path}/{params.iso}/zarr//{str(issue).zfill(2)}/forecasts.zarr",
+        f"{params.data_path}/{params.iso}/zarr/{str(issue).zfill(2)}/forecasts.zarr",
     )
 
     # Check if the forecast date is in the time coordinate
