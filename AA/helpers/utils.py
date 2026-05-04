@@ -72,17 +72,13 @@ def compute_district_average(da, area):
     Computes zonal statistics on an xarray DataArray for both observations and probabilities.
     Uses all_touched=False by default, and re-computes missing districts with all_touched=True.
     """
-
     # Ensure consistent time dimension
     if "year" in da.dims:
         da = da.rename({"year": "time"})
-
     # Determine dimensions to group by (exclude spatial dimensions)
     groupby_dim = set(da.dims) - {"latitude", "longitude", "time"}
-
     # Transpose dims to ensure equality of shapes
     da = da.transpose(..., *groupby_dim, "latitude", "longitude")
-
     if len(groupby_dim) > 1:
         raise NotImplementedError(
             "Zonal stats with more than one groupby dimension are not supported."
@@ -97,7 +93,6 @@ def compute_district_average(da, area):
             zones=None,
             all_touched=all_touched,
         )
-
         return (
             out.query("zone != 'Administrative unit not available'")
             .to_xarray()["mean"]
@@ -105,60 +100,23 @@ def compute_district_average(da, area):
             .assign_coords(district=lambda x: x.district.astype(str))
         )
 
+    expected_districts = set(
+        area.get_dataset([area.BASE_AREA_DATASET]).index.astype(str)
+    )
+
+    def _with_fallback(data):
+        da_main = _zonal_stats(data, all_touched=False)
+        missing = list(expected_districts - set(da_main.district.values))
+        if not missing:
+            return da_main
+        da_missing = _zonal_stats(data, all_touched=True).sel(district=missing)
+        return xr.concat([da_main, da_missing], dim="district")
+
     if len(groupby_dim) == 1:
         gb = list(groupby_dim)[0]
-
-        def _process_group(da_slice):
-            da_slice = da_slice.squeeze(gb)
-
-            # --- 1) First pass: all_touched=False
-            da_main = _zonal_stats(da_slice, all_touched=False)
-
-            # --- 2) Detect missing districts
-            expected_districts = area.get_dataset(
-                [area.BASE_AREA_DATASET]
-            ).index.astype(str)
-            present = set(da_main.district.values)
-            missing = list(set(expected_districts) - present)
-
-            if not missing:
-                return da_main
-
-            # --- 3) Second pass for missing districts only
-            da_missing = _zonal_stats(
-                da_slice,
-                all_touched=True,
-            ).sel(district=missing)
-
-            # --- 4) Concatenate
-            return xr.concat([da_main, da_missing], dim="district")
-
-        da_grouped = da.groupby(gb).map(_process_group)
-
+        da_grouped = da.groupby(gb).map(lambda s: _with_fallback(s.squeeze(gb)))
     else:
-        # --- No groupby dimension (single DataArray)
-
-        # 1) First pass
-        da_main = _zonal_stats(da, all_touched=False)
-
-        # 2) Detect missing districts
-        expected_districts = area.get_dataset([area.BASE_AREA_DATASET]).index.astype(
-            str
-        )
-        present = set(da_main.district.values)
-        missing = list(set(expected_districts) - present)
-
-        if missing:
-            # 3) Second pass for missing districts
-            da_missing = _zonal_stats(
-                da,
-                all_touched=True,
-            ).sel(district=missing)
-
-            # 4) Concatenate
-            da_grouped = xr.concat([da_main, da_missing], dim="district")
-        else:
-            da_grouped = da_main
+        da_grouped = _with_fallback(da)
 
     return da_grouped
 
