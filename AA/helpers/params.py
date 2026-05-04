@@ -28,8 +28,7 @@ AGGREGATES = {
     .hdc.algo.lroo(),
 }
 
-# Change this to dedicated AA bucket once created
-S3_OPS_DATA_PATH = "s3://wfp-ops-userdata/amine.barkaoui/aa/data/prod"
+S3_OPS_DATA_PATH = "s3://dev-hip-jobs-ops/anticipatory-action/data/prod"
 
 
 def load_config(iso: str, cli_json: str | None = None) -> dict:
