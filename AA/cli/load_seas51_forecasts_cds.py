@@ -1,3 +1,20 @@
+#!/usr/bin/env python3
+# /// script
+# dependencies = [
+#   "cdsapi",
+#   "xarray",
+#   "numpy",
+#   "pandas",
+#   "rioxarray",
+#   "odc-geo",
+#   "rasterio",
+#   "click",
+#   "dask[distributed]",
+#   "zarr",
+#   "netcdf4",
+# ]
+# ///
+
 """
 End-to-end loader for ECMWF SEAS5 / SEAS5.1 daily precipitation forecasts
 using odc.geo.xr_reproject (HIP-compatible semantics).
@@ -34,11 +51,20 @@ USAGE
 Example (test mode, last 3 years, first 5 ensemble members):
 
     python load_seas51_forecasts_cds.py \
+        --country tza \
         --output-dir ./seas5_cache \
         --issue-month 3 \
         --start-year 2024 \
         --end-year 2026
-
+        
+Or if using uv to manage the dependencies:
+    
+    uv run load_seas51_forecasts_cds.py \
+      --country tza \
+      --output-dir ./seas5_cache \
+      --issue-month 3 \
+      --start-year 2024 \
+      --end-year 2026 \
 """
 
 from __future__ import annotations
@@ -62,11 +88,18 @@ from odc.geo.xr import xr_reproject
 from dask.distributed import Client
 
 
+ANALYSIS_AREAS = {
+    "tza": {
+        "bbox": (29.3414, -11.7612, 40.4446, -0.9844),
+    },
+}
+
+
 # ==============================================================================
 # CONFIGURATION
 # ==============================================================================
 
-CACHE_DIR = Path("./seas5_cache") # edit output dir
+CACHE_DIR = Path("./seas5_cache")  # edit output dir
 CACHE_DIR.mkdir(exist_ok=True)
 
 # CDS parameters
@@ -83,10 +116,10 @@ TARGET_RESOLUTION_DEG = 0.25  # degrees
 
 # Large bbox for CDS reads (safe margin around East Africa)
 CDS_BBOX = (
-    20.0,   # min_lon
+    20.0,  # min_lon
     -20.0,  # min_lat
-    55.0,   # max_lon
-    20.0,   # max_lat
+    55.0,  # max_lon
+    20.0,  # max_lat
 )
 
 logging.basicConfig(
@@ -98,6 +131,7 @@ logging.basicConfig(
 # ==============================================================================
 # HELPER FUNCTIONS
 # ==============================================================================
+
 
 def list_issue_years(start_year: int = 1981) -> list[int]:
     """Return all SEAS5 issue years from start_year to present."""
@@ -343,7 +377,7 @@ def download_seas5_issue_year(
                 "5088",
                 "5112",
                 "5136",
-                "5160"
+                "5160",
             ],
             "area": [
                 bbox[3],  # North
@@ -381,9 +415,7 @@ def normalize_seas5_time(ds: xr.Dataset) -> xr.Dataset:
     # ------------------------------------------------------------------
     # Forecast reference time (seconds since Unix epoch)
     # ------------------------------------------------------------------
-    frt = pd.to_datetime(
-        ds.forecast_reference_time.values[0], unit="s"
-    )
+    frt = pd.to_datetime(ds.forecast_reference_time.values[0], unit="s")
 
     # ------------------------------------------------------------------
     # Forecast lead time in HOURS → absolute valid time
@@ -427,16 +459,13 @@ def convert_cumsum_to_daily(tp: xr.DataArray) -> xr.DataArray:
     """
 
     # Convert cumulative to daily using diff grouped by issue
-    tp_daily = tp.groupby("issue").apply(
-        xr.DataArray.diff, dim="time"
-    )
+    tp_daily = tp.groupby("issue").apply(xr.DataArray.diff, dim="time")
 
     # Time correction:
     # - 1 day: accumulation over previous 24 hours
     # - 1 day: shift introduced by diff
     tp_daily["time"] = [
-        pd.to_datetime(t) - pd.Timedelta(2, "d")
-        for t in tp_daily.time.values
+        pd.to_datetime(t) - pd.Timedelta(2, "d") for t in tp_daily.time.values
     ]
 
     # Drop a few trailing dates beyond the expected forecast horizon
@@ -476,16 +505,14 @@ def prepare_for_zarr(tp: xr.DataArray) -> xr.DataArray:
     - Ensure clean encoding
     """
     # Squeeze forecast_reference_tim dim (size 1)
-    tp = tp.squeeze('forecast_reference_time')
-    
+    tp = tp.squeeze("forecast_reference_time")
+
     # Rename ensemble dimension
     if "number" in tp.dims:
         tp = tp.rename({"number": "ensemble"})
 
     # Ensure canonical dimension order
-    tp = tp.transpose(
-        "time", "ensemble", "latitude", "longitude"
-    )
+    tp = tp.transpose("time", "ensemble", "latitude", "longitude")
 
     # Clean encoding (important for Zarr stability)
     tp.encoding.clear()
@@ -536,10 +563,8 @@ def store_forecasts_zarr(
     if "number" in da.dims:
         da = da.rename({"number": "ensemble"})
 
-    da = da.transpose(
-        "time", "ensemble", "latitude", "longitude"
-    )
-    
+    da = da.transpose("time", "ensemble", "latitude", "longitude")
+
     da = da.rename("tp")
 
     # ------------------------------------------------------------------
@@ -547,7 +572,7 @@ def store_forecasts_zarr(
     # ------------------------------------------------------------------
     if chunks is None:
         chunks = {
-            "time": 30,        # ~1 month
+            "time": 30,  # ~1 month
             "ensemble": -1,
             "latitude": -1,
             "longitude": -1,
@@ -578,6 +603,7 @@ def store_forecasts_zarr(
 # ==============================================================================
 # MAIN LOADER
 # ==============================================================================
+
 
 def load_seas5_daily_time_series(
     analysis_bbox: tuple[float, float, float, float],
@@ -621,12 +647,10 @@ def load_seas5_daily_time_series(
         years = years[-3:]  # last 3 years only
 
     for year in years:
-        logging.info(
-            f"Processing year {year} (issue {issue_month:02d})"
-        )
+        logging.info(f"Processing year {year} (issue {issue_month:02d})")
 
         fname = issue_dir / f"seas5_{year}_issue{issue_month:02d}.nc"
-        
+
         # ----------------------------------------------------------
         # Download missing years only
         # ----------------------------------------------------------
@@ -644,7 +668,7 @@ def load_seas5_daily_time_series(
         # Load + normalize time
         # ----------------------------------------------------------
         ds = xr.open_dataset(fname, decode_cf=False)
-        
+
         logging.info("Normalizing SEAS5 time")
         ds = normalize_seas5_time(ds)
 
@@ -710,6 +734,12 @@ def load_seas5_daily_time_series(
 
 @click.command()
 @click.option(
+    "--country",
+    type=str,
+    required=True,
+    help="Country (ISO3 code).",
+)
+@click.option(
     "--output-dir",
     type=click.Path(path_type=Path),
     required=True,
@@ -733,7 +763,9 @@ def load_seas5_daily_time_series(
     required=True,
     help="Last issue year to load.",
 )
-def main(output_dir: Path, issue_month: int, start_year: int, end_year: int):
+def main(
+    country: str, output_dir: Path, issue_month: int, start_year: int, end_year: int
+):
     """
     CLI entry point.
     """
@@ -747,7 +779,7 @@ def main(output_dir: Path, issue_month: int, start_year: int, end_year: int):
     logging.info(f"Dask dashboard: {client.dashboard_link}")
 
     # Tanzania bbox
-    analysis_bbox = (29.3414, -11.7612, 40.4446, -0.9844)
+    analysis_bbox = ANALYSIS_AREAS[country]["bbox"]
 
     global CACHE_DIR
     CACHE_DIR = output_dir
@@ -763,7 +795,7 @@ def main(output_dir: Path, issue_month: int, start_year: int, end_year: int):
         issue_month=issue_month,
         start_year=start_year,
         end_year=end_year,
-        test_mode=False,   # ← KEEP 3 first ensemble members to minimize running time for testing
+        test_mode=False,  # ← KEEP 3 first ensemble members to minimize running time for testing
     )
 
     logging.info("Processing finished successfully")
