@@ -1,13 +1,13 @@
 import datetime
 import json
 import logging
-import os
 from dataclasses import dataclass, field
 
 import fsspec
 import hdc.algo  # noqa: F401
 import numpy as np
 import pandas as pd
+import geopandas as gpd
 import yaml
 import subprocess
 
@@ -16,7 +16,7 @@ from numba.typed import Dict
 from collections import OrderedDict
 from dataclasses import fields as dataclass_fields
 
-from AA.helpers.utils import read_roc_file
+from AA.helpers.read import read_roc_file
 
 
 DRYSPELL_THRESHOLD = 2.0
@@ -200,6 +200,8 @@ class Params:
         list of indicators for which we want to compute triggers
     roc_df : pd.DataFrame
         dataframe containing information about districts to bias correct
+    custom_shapefile : gpd.GeoDataFrame
+        geodataframe with a custom shapefile in case the one in the VAM GeoAPI is not valid
     intensity_thresholds : dict
         thresholds defining different drought intensities used in probabilities computation
     districts_vulnerability : dict
@@ -237,6 +239,9 @@ class Params:
     districts: list = field(init=None)
     indicators: list = field(init=None)
     roc_df: pd.DataFrame = field(init=False, default_factory=pd.DataFrame)
+    custom_shapefile: gpd.GeoDataFrame = field(
+        init=False, default_factory=gpd.GeoDataFrame
+    )
     intensity_thresholds: dict = field(init=None)
     districts_vulnerability: dict = field(init=None)
     tolerance: dict = field(init=False)
@@ -270,6 +275,25 @@ class Params:
         roc_path = f"{self.data_path}/{self.iso}/auc/roc.{self.index}.csv"
         if fsspec.open(roc_path).fs.exists(roc_path):
             self.roc_df = read_roc_file(roc_path, self)
+
+        # Check if a custom shapefile is stored in the data folder and read it if it exists
+        shapefile_path = f"{self.data_path}/data/{self.iso}/{self.iso}.geojson"
+
+        if fsspec.open(shapefile_path).fs.exists(shapefile_path):
+            try:
+                gdf = gpd.read_file(shapefile_path)
+                expected_col = "adm2_name"
+                if expected_col not in gdf.columns:
+                    raise KeyError(
+                        f"Expected column '{expected_col}' not found in custom shapefile. "
+                        f"Available columns: {list(gdf.columns)}"
+                    )
+                self.custom_shapefile = gdf.set_index(expected_col)
+            except Exception as e:
+                raise ValueError(
+                    f"Failed to load custom shapefile for iso='{self.iso}' at {shapefile_path}. "
+                    f"Ensure the file is a valid GeoJSON and contains an '{expected_col}' column."
+                ) from e
 
         # Read the tolerance thresholds and store them as a dict
         self.tolerance = Dict.empty(key_type=types.unicode_type, value_type=types.f8)
