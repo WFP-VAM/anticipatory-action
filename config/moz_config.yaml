@@ -33,10 +33,10 @@ start_season: 10
 end_season: 6
 
 # Start date of historical time series used in anomaly computation
-hist_anomaly_start: null
+hist_anomaly_start: "1991-01-01"
 
 # End date of historical time series used in anomaly computation
-hist_anomaly_stop: "2018-12-31"
+hist_anomaly_stop: "2020-12-31"
 
 # Save (and overwrite if exists) ds (obs or probs) for future trigger choice
 save_zarr: true
