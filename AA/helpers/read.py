@@ -2,6 +2,7 @@ import os
 import datetime
 import fsspec
 import logging
+import numpy as np
 import pandas as pd
 import xarray as xr
 
