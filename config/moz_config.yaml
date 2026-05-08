@@ -30,7 +30,7 @@ max_index_period: 3
 start_season: 10
 
 # Last month of the wet season
-end_season: 6
+end_season: 3
 
 # Start date of historical time series used in anomaly computation
 hist_anomaly_start: "1991-01-01"
