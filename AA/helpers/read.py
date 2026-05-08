@@ -39,12 +39,9 @@ def read_forecasts(area, issue, local_path):
 
     # Derive the monitoring window:
     # - last_date: end of the target range (e.g. 2024-12-31)
-    # - forecast_date: start of the forecast, 1st of the issue month in the prior year
-    #   e.g. issue=6, last_date=2024-12-31 → forecast_date=2023-06-01
     last_date = datetime.datetime.strptime(
         area.datetime_range.split("/")[1], "%Y-%m-%d"
     )
-    forecast_date = datetime.datetime(last_date.year - 1, int(issue), 1)
 
     if data_exists:
         logging.info("Reading forecasts from precomputed zarr...")
@@ -58,7 +55,9 @@ def read_forecasts(area, issue, local_path):
             logging.info("All forecast data present, returning cached data...")
             return persist_with_progress_bar(ds.sel(time=slice(None, last_date)))
 
-        logging.info(f"Fetching missing forecasts from {fetch_start} to {last_date.date()}...")
+        logging.info(
+            f"Fetching missing forecasts from {fetch_start} to {last_date.date()}..."
+        )
         area.datetime_range = f"{fetch_start}/{last_date.date()}"
         new_data = area.get_dataset(
             ["ECMWF", f"RFH_FORECASTS_SEAS5_ISSUE{int(issue)}_DAILY"],
@@ -73,7 +72,6 @@ def read_forecasts(area, issue, local_path):
 
     # No cache exists yet — fetch the full range and write it
     logging.info("Zarr not found, reading forecasts from source...")
-    area.datetime_range = f"{forecast_date.date()}/{last_date.date()}"
     forecasts = area.get_dataset(
         ["ECMWF", f"RFH_FORECASTS_SEAS5_ISSUE{int(issue)}_DAILY"],
         load_config={"gridded_load_kwargs": {"resampling": "bilinear"}},
@@ -119,7 +117,9 @@ def read_observations(area, local_path):
             logging.info("All observation data present, returning cached data...")
             return persist_with_progress_bar(ds)
 
-        logging.info(f"Fetching missing observations from {fetch_start} to {last_date.date()}...")
+        logging.info(
+            f"Fetching missing observations from {fetch_start} to {last_date.date()}..."
+        )
         area.datetime_range = f"{fetch_start}/{last_date.date()}"
         new_data = area.get_dataset(
             ["CHIRPS", "RFH_DAILY"],
