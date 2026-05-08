@@ -74,15 +74,29 @@ def triggers_da_to_df(triggers_da, score_da):
 def compute_district_average(da, area):
     """
     Computes zonal statistics on an xarray DataArray for both observations and probabilities.
-    Uses all_touched=False by default, and re-computes missing districts with all_touched=True.
+    Uses all_touched=False as the primary rasterization strategy.
+    For districts absent from all_touched=False (too small to contain any pixel center),
+    falls back to all_touched=True. Districts that are lost by all_touched=True but present
+    in all_touched=False are always kept from the latter.
+
+    Args:
+        da: xarray DataArray with spatial dimensions (latitude, longitude) and optionally
+            a time dimension and one additional groupby dimension.
+        area: Area object with zonal_stats() and get_dataset() methods.
+
+    Returns:
+        xarray DataArray with a district dimension containing zonal means.
     """
     # Ensure consistent time dimension
     if "year" in da.dims:
         da = da.rename({"year": "time"})
+
     # Determine dimensions to group by (exclude spatial dimensions)
     groupby_dim = set(da.dims) - {"latitude", "longitude", "time"}
+
     # Transpose dims to ensure equality of shapes
     da = da.transpose(..., *groupby_dim, "latitude", "longitude")
+
     if len(groupby_dim) > 1:
         raise NotImplementedError(
             "Zonal stats with more than one groupby dimension are not supported."
@@ -109,12 +123,36 @@ def compute_district_average(da, area):
     )
 
     def _with_fallback(data):
-        da_main = _zonal_stats(data, all_touched=False)
-        missing = list(expected_districts - set(da_main.district.values))
-        if not missing:
-            return da_main
-        da_missing = _zonal_stats(data, all_touched=True).sel(district=missing)
-        return xr.concat([da_main, da_missing], dim="district")
+        da_false = _zonal_stats(data, all_touched=False)
+        da_true = _zonal_stats(data, all_touched=True)
+
+        false_districts = set(da_false.district.values)
+        true_districts = set(da_true.district.values)
+
+        # Districts lost by all_touched=True — always keep all_touched=False values
+        only_in_false = false_districts - true_districts
+        if only_in_false:
+            logging.warning(
+                f"{len(only_in_false)} district(s) lost by all_touched=True, "
+                f"keeping all_touched=False values: {only_in_false}"
+            )
+
+        # Districts completely absent from both rasterizations
+        missing_from_both = expected_districts - false_districts - true_districts
+        if missing_from_both:
+            logging.warning(
+                f"{len(missing_from_both)} district(s) missing from both "
+                f"rasterizations: {missing_from_both}"
+            )
+
+        # Only take from all_touched=True what is strictly absent from all_touched=False
+        # (small districts with no pixel centers inside them)
+        only_in_true = true_districts - false_districts
+        if not only_in_true:
+            return da_false
+
+        da_extra = da_true.sel(district=list(only_in_true))
+        return xr.concat([da_false, da_extra], dim="district")
 
     if len(groupby_dim) == 1:
         gb = list(groupby_dim)[0]
