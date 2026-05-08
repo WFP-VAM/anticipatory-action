@@ -1,4 +1,5 @@
 import os
+import copy
 import datetime
 import fsspec
 import logging
@@ -58,8 +59,9 @@ def read_forecasts(area, issue, local_path):
         logging.info(
             f"Fetching missing forecasts from {fetch_start} to {last_date.date()}..."
         )
-        area.datetime_range = f"{fetch_start}/{last_date.date()}"
-        new_data = area.get_dataset(
+        area_slice = copy.deepcopy(area)
+        area_slice.datetime_range = f"{fetch_start}/{last_date.date()}"
+        new_data = area_slice.get_dataset(
             ["ECMWF", f"RFH_FORECASTS_SEAS5_ISSUE{int(issue)}_DAILY"],
             load_config={"gridded_load_kwargs": {"resampling": "bilinear"}},
         )
