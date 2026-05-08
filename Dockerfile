@@ -1,7 +1,7 @@
 # Inspired by https://pixi.sh/latest/deployment/container/#example-usage
 
 # Build stage
-FROM ghcr.io/prefix-dev/pixi:0.45.0 AS build
+FROM ghcr.io/prefix-dev/pixi:0.68.0 AS build
 
 WORKDIR /app
 
