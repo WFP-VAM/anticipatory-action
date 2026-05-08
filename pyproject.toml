@@ -21,7 +21,7 @@ anticipatory_action = { path = ".", editable = true }
 [tool.pixi.dependencies]
 python = "3.10.*"
 hdc-algo = ">=0.5.3"
-hip-analysis = ">=0.18.0"
+hip-analysis = ">=0.18.1"
 numpy = "<2.0"
 xclim = "0.53.1.*"
 yq = ">=2.10.1,<4"
