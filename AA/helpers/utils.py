@@ -166,7 +166,7 @@ def compute_district_average(da, area):
 def merge_un_biased_probs(probs_district, probs_bc_district, params, period_name):
     # Get roc_df data in xarray format
     roc_df = params.roc_df
-    roc_df = roc_df.loc[roc_df["Index"] == f"{params.index.upper()}_{period_name}"]
+    roc_df = roc_df.loc[roc_df["Index"] == f"{params.index.upper()} {period_name}"]
     roc_df = roc_df[["district", "category", "issue", "BC"]]
 
     # If params.roc_df has Portuguese category names, ensure these are English
