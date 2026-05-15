@@ -40,34 +40,30 @@ def load_config(iso: str, cli_json: str | None = None) -> dict:
     1) CLI parameter --config-json (must be valid JSON)
     2) Local file: ./config/{iso}_config.yaml (YAML or JSON)
     """
-    # --- 0) Transform "" or whitespace → None ---
-    if cli_json is not None:
-        cli_json = cli_json.strip() or None
+    cli_json = cli_json.strip() if cli_json else None
 
-    # --- 1) CLI-supplied JSON ---
     if cli_json is not None:
         try:
             cfg = json.loads(cli_json)
             if not isinstance(cfg, dict):
                 raise ValueError("--config-json must contain a JSON object.")
-            logging.info("Loaded config from --config-json parameter.")
-            return cfg
+            if cfg:  # non-empty dict → use it, skip file
+                logging.info("Loaded config from --config-json parameter.")
+                return cfg
+            # empty dict → fall through to file
+            logging.info("--config-json is empty, falling back to file.")
         except json.JSONDecodeError as e:
             raise ValueError(f"--config-json contains invalid JSON: {e}")
 
-    # --- 2) Fallback to file ---
+    # Fallback to file
     iso_lower = iso.lower()
     config_path = f"./config/{iso_lower}_config.yaml"
-
     if not fsspec.open(config_path).fs.exists(config_path):
         raise FileNotFoundError(
             f"No config provided via --config-json, and no file exists at {config_path}"
         )
-
     with fsspec.open(config_path, mode="rt", encoding="utf-8") as f:
         text = f.read()
-
-    # Try JSON, then YAML
     try:
         cfg = json.loads(text)
         logging.info("Loaded config from file as JSON.")
