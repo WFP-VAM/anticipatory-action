@@ -30,7 +30,7 @@ max_index_period: 3
 start_season: 10
 
 # Last month of the wet season
-end_season: 6
+end_season: 3
 
 # Start date of historical time series used in anomaly computation
 hist_anomaly_start: "1991-01-01"
@@ -49,20 +49,88 @@ intensity_thresholds:
 # Vulnerability class of triggers for each district: general or non-regret (GT or NRT)
 districts_vulnerability: 
   Beitbridge: "TBD"
+  Beitbridge Urban: "TBD"
   Bikita: "TBD"
+  Bindura: "TBD"
   Binga: "TBD"
+  Bubi: "TBD"
+  Buhera: "TBD"
+  Bulawayo: "TBD"
+  Bulilima: "TBD"
+  Centenary: "TBD"
+  Chegutu: "TBD"
+  Chegutu Urban: "TBD"
+  Chikomba: "TBD"
+  Chimanimani: "TBD"
+  Chinhoyi: "TBD"
+  Chipinge: "TBD"
+  Chipinge Urban: "TBD"
   Chiredzi: "TBD"
+  Chirumhanzu: "TBD"
+  Chivi: "TBD"
+  Gokwe North: "TBD"
+  Gokwe South: "TBD"
+  Gokwe South Urban: "TBD"
+  Goromonzi: "TBD"
+  Guruve: "TBD"
+  Gutu: "TBD"
   Gwanda: "TBD"
+  Gweru: "TBD"
+  Gweru Urban: "TBD"
+  Harare: "TBD"
+  Hurungwe: "TBD"
   Hwange: "TBD"
+  Hwange Urban: "TBD"
+  Hwedza: "TBD"
+  Insiza: "TBD"
+  Kadoma Urban: "TBD"
   Kariba: "TBD"
+  Kariba Urban: "TBD"
+  Karoi: "TBD"
+  Kwekwe: "TBD"
+  Lupane: "TBD"
+  Makonde: "TBD"
+  Makoni: "TBD"
+  Mangwe: "TBD"
+  Marondera: "TBD"
+  Marondera Urban: "TBD"
   Masvingo: "TBD"
+  Masvingo Urban: "TBD"
   Matobo: "TBD"
+  Mazowe: "TBD"
+  Mberengwa: "TBD"
   Mbire: "TBD"
+  Mhondoro-Ngezi: "TBD"
   Mount Darwin: "TBD"
   Mudzi: "TBD"
+  Murehwa: "TBD"
+  Mutare: "TBD"
+  Mutare Urban: "TBD"
+  Mutasa: "TBD"
+  Mutoko: "TBD"
+  Mvurwi: "TBD"
   Mwenezi: "TBD"
   Nkayi: "TBD"
+  Nyanga: "TBD"
+  Plumtree: "TBD"
+  Redcliff: "TBD"
+  Rusape: "TBD"
   Rushinga: "TBD"
+  Ruwa: "TBD"
+  Sanyati: "TBD"
+  Seke: "TBD"
+  Shamva: "TBD"
+  Shurugwi: "TBD"
+  Shurugwi Town: "TBD"
+  Tsholotsho: "TBD"
+  Umguza: "TBD"
+  Umzingwane: "TBD"
+  Uzumba Maramba Pfungwe: "TBD" 
+  Victoria Falls: "TBD"
+  Zaka: "TBD"
+  Zvimba: "TBD"
+  Zvishavane: "TBD"
+  Zvishavane Urban: "TBD"
 
 # Tolerance for thresholds for each category, used to compute false alarm with tolerance
 tolerance:
@@ -89,7 +157,7 @@ non_regret_t:
 windows:
   spi:
     window1: ["ON", "ND", "OND", "NDJ"]
-    window2: ["DJ", "JF", "FM", "DJF", "JFM", "FMA"]
+    window2: ["DJ", "JF", "FM", "DJF", "JFM"]
   dryspell:
     window1: ["ON", "ND"]
     window2: ["DJ", "JF", "FM"]
