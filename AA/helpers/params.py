@@ -40,6 +40,10 @@ def load_config(iso: str, cli_json: str | None = None) -> dict:
     1) CLI parameter --config-json (must be valid JSON)
     2) Local file: ./config/{iso}_config.yaml (YAML or JSON)
     """
+    # --- 0) Transform "" or whitespace → None ---
+    if cli_json is not None:
+        cli_json = cli_json.strip() or None
+
     # --- 1) CLI-supplied JSON ---
     if cli_json is not None:
         try:
