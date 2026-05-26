@@ -119,7 +119,9 @@ def read_observations(area, local_path: str, index: str):
         xarray.DataArray: The `band` variable covering the full requested range.
     """
     if index not in INDEX_STORE_MAP:
-        raise ValueError(f"Unknown index '{index}'. Expected one of {list(INDEX_STORE_MAP)}")
+        raise ValueError(
+            f"Unknown index '{index}'. Expected one of {list(INDEX_STORE_MAP)}"
+        )
 
     last_date = datetime.datetime.strptime(
         area.datetime_range.split("/")[1], "%Y-%m-%d"
@@ -156,7 +158,9 @@ def read_observations(area, local_path: str, index: str):
 
         logging.info(
             "Fetching missing %s observations from %s to %s...",
-            index, fetch_start, last_date,
+            index,
+            fetch_start,
+            last_date,
         )
         area.datetime_range = f"{fetch_start}/{last_date}"
         new_data = area.get_dataset(
@@ -170,7 +174,8 @@ def read_observations(area, local_path: str, index: str):
     else:
         logging.info(
             "No cache found — fetching full %s range from HDC STAC (%s)...",
-            index, dataset_key,
+            index,
+            dataset_key,
         )
         observations = area.get_dataset(
             dataset_key,
