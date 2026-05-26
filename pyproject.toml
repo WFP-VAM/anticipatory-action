@@ -21,8 +21,7 @@ anticipatory_action = { path = ".", editable = true }
 [tool.pixi.dependencies]
 python = "3.10.*"
 hdc-algo = ">=0.5.3"
-hip-analysis = ">=0.17.1"
-hip-viz = ">=0.1.0,<0.2"
+hip-analysis = ">=0.18.1"
 numpy = "<2.0"
 xclim = "0.53.1.*"
 yq = ">=2.10.1,<4"
@@ -53,6 +52,7 @@ line-length = 88
 
 [tool.ruff.lint]
 # Use default rule set to start with https://docs.astral.sh/ruff/configuration/
+ignore = ["E402", "F821"]
 
 [tool.ruff.format]
 # Use default rule set to start with https://docs.astral.sh/ruff/configuration/

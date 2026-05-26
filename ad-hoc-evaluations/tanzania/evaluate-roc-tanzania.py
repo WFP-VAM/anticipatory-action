@@ -19,7 +19,6 @@
 import datetime
 import os
 
-import hip.viz
 import numpy as np
 import xarray as xr
 import xskillscore as xss
@@ -173,14 +172,14 @@ for c in auc.category:
         overwrite=True,
     )
 
-    figure = auc.sel(category=c.values).hip.viz.map(
+    figure = auc.sel(category=c.values).plot.imshow(
         title=f"AUC {c.values} {period}", cmap="RdYlGn"
     )
     figure.savefig(
         f"ad-hoc-evaluations/tanzania/outputs/rasters/SPI {period}/{c.values}/auc_{str(c.values).lower()}_{period.lower()}_issue{iss}.png"
     )
 
-    figure = auc_bc.sel(category=c.values).hip.viz.map(
+    figure = auc_bc.sel(category=c.values).plot.imshow(
         title=f"AUC BC {c.values} {period}", cmap="RdYlGn"
     )
     figure.savefig(
@@ -190,12 +189,12 @@ for c in auc.category:
 
 # Without bias correction
 cat = "Moderate"
-auc.sel(category=cat).hip.viz.map(
+auc.sel(category=cat).plot.imshow(
     title=f"AUC {cat} {period}", cmap="RdYlGn"
 )  # .plot.imshow()
 
 # With bias correction
-auc_bc.sel(category=cat).hip.viz.map(title=f"AUC BC {cat} {period}", cmap="RdYlGn")
+auc_bc.sel(category=cat).plot.imshow(title=f"AUC BC {cat} {period}", cmap="RdYlGn")
 
 # LTA
 
@@ -203,14 +202,14 @@ obs_ond = obs_lta.sel(time=datetime.datetime(1970, 12, 1))
 obs_jfm = obs_lta.sel(time=datetime.datetime(1970, 3, 1))
 obs_mam = obs_lta.sel(time=datetime.datetime(1970, 5, 1))
 
-figure = obs_ond.drop_vars("time").hip.viz.map(title="RFH LTA OND", cmap=rxs.cmap)
+figure = obs_ond.drop_vars("time").plot.imshow(title="RFH LTA OND", cmap=rxs.cmap)
 figure.savefig("ad-hoc-evaluations/tanzania/outputs/rasters/SPI OND/rfh_lta_ond.png")
 
-figure = obs_jfm.drop_vars("time").hip.viz.map(title="RFH LTA JFM", cmap=rxs.cmap)
+figure = obs_jfm.drop_vars("time").plot.imshow(title="RFH LTA JFM", cmap=rxs.cmap)
 figure.savefig("ad-hoc-evaluations/tanzania/outputs/rasters/SPI JFM/rfh_lta_jfm.png")
 
 figure
 
-figure = obs_mam.drop_vars("time").hip.viz.map(title="RFH LTA MAM", cmap=rxs.cmap)
+figure = obs_mam.drop_vars("time").plot.imshow(title="RFH LTA MAM", cmap=rxs.cmap)
 figure.savefig("ad-hoc-evaluations/tanzania/outputs/rasters/SPI MAM/rfh_lta_mam.png")
 figure
