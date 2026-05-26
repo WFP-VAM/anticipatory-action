@@ -25,6 +25,7 @@ hip-analysis = ">=1.0.0"
 xclim = "0.53.1.*"
 yq = ">=2.10.1,<4"
 click = "*"
+tqdm = "*"
 
 [tool.pixi.environments]
 test = { features = ["test"], solve-group = "prod" }
