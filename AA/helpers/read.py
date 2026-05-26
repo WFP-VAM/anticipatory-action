@@ -182,7 +182,7 @@ def read_observations(area, local_path: str, index: str):
             load_config={"gridded_load_kwargs": {"resampling": "bilinear"}},
         )
         observations.to_zarr(store_path, mode="w", consolidated=True)
-        return persist_with_progress_bar(observations.band)
+        return persist_with_progress_bar(observations)
 
 
 def read_triggers(params):
