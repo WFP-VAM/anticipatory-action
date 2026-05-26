@@ -108,7 +108,7 @@ forecasts = read_forecasts(
 )
 forecasts
 
-forecasts.isel(ensemble=0).mean("time").hip.viz.map(
+forecasts.isel(ensemble=0).mean("time").plot.imshow(
     title=f"Rainfall forecasts (issue {issue}) average over time for control member"
 )
 

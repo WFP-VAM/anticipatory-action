@@ -134,7 +134,7 @@ da
 # %%
 da.isel(forecast_reference_time=0, forecast_period=0, number=0).rio.write_crs(
     "EPSG:4326"
-).rio.clip(shp.geometry).hip.viz.map(title=f"{date} - 24h leadtime - 1 degree")
+).rio.clip(shp.geometry).plot.imshow(title=f"{date} - 24h leadtime - 1 degree")
 
 # %% [markdown]
 # The following map shows the forecast at a 0.25 degree resolution. This forecast is obtained by reprojecting the native one using the bilinear interpolation method.
@@ -144,9 +144,7 @@ xr_reproject(da, area.geobox, resampling="bilinear").isel(
     forecast_reference_time=0, forecast_period=0, number=0
 ).dropna("latitude", how="all").dropna("longitude", how="all").rio.clip(
     shp.geometry
-).hip.viz.map(
-    title=f"{date} - 24h leadtime - 0.25 degree"
-)
+).plot.imshow(title=f"{date} - 24h leadtime - 0.25 degree")
 
 # %% [markdown]
 # ## 10. Compute Zonal Statistics
@@ -163,7 +161,7 @@ admin_fc = (
     .set_index(["zone", "time"])
 )
 zonal_gdf = area.join_zonal_stats(admin_fc["mean"])
-zonal_gdf.hip.viz.map(
+zonal_gdf.plot.imshow(
     title=f"{date} - 24h leadtime - admin 2", column=date, annotate="Name", legend=True
 )
 

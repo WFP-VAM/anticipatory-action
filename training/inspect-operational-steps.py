@@ -5,11 +5,11 @@
 #       extension: .py
 #       format_name: light
 #       format_version: '1.5'
-#       jupytext_version: 1.16.1
+#       jupytext_version: 1.19.1
 #   kernelspec:
-#     display_name: Python (pixi-aa)
+#     display_name: Python (Pixi)
 #     language: python
-#     name: pixi-aa
+#     name: pixi-kernel-python3
 # ---
 
 # This notebook is not used operationally or for any validation, its only purpose is to have a clear understanding of the core functions of the AA workflow. The outputs and dimensions of each main step can thus be identified here.
@@ -17,7 +17,6 @@
 # **Import required libraries and functions**
 
 import os
-
 if os.getcwd().split("\\")[-1] != "anticipatory-action":
     os.chdir("..")
 os.getcwd()
@@ -42,7 +41,6 @@ from AA.helpers.utils import (
     merge_un_biased_probs,
 )
 from AA.helpers.params import Params
-
 # -
 
 # **Define parameters**
@@ -50,11 +48,11 @@ from AA.helpers.params import Params
 # The `config/{country}_config.yaml` file gathers all the parameters used in the operational script and that can be customized. For example, the *monitoring_year*, the list of districts or the intensity levels can be defined in that file.
 
 params = Params(
-    iso="ISO",
-    issue=6,
+    iso="ISO", 
+    issue=5, 
     index="SPI",
-    data_path="/s3/scratch/amine.barkaoui/aa",
-    output_path=".",
+    data_path = ".",
+    output_path = "."
 )
 
 # **Read shapefile**
@@ -81,9 +79,7 @@ gdf
 
 # +
 # When update is set to False, the downscaled dataset is read from a local folder or a s3 bucket. Otherwise, it is directly read from HDC.
-forecasts_folder_path = (
-    f"{params.data_path}/data/{params.iso}/zarr/{params.calibration_year}"
-)
+forecasts_folder_path = f"{params.data_path}/data/{params.iso}/zarr"
 
 forecasts = read_forecasts(
     area,
@@ -106,10 +102,8 @@ observations
 
 # Now that we got all the data we need, let's read the triggers file so we can merge the probabilities with it once we have them.
 
-# + jupyter={"outputs_hidden": true}
 # Read triggers file
 triggers_df = read_triggers(params)
-# -
 
 # **Get accumulation periods covered by the forecasts of the defined issue month**
 
