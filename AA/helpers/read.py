@@ -165,8 +165,9 @@ def read_observations(area, local_path: str, index: str):
             fetch_start,
             last_date,
         )
-        area.datetime_range = f"{fetch_start}/{last_date}"
-        new_data = area.get_dataset(
+        area_missing = copy.deepcopy(area)
+        area_missing.datetime_range = f"{fetch_start}/{last_date}"
+        new_data = area_missing.get_dataset(
             dataset_key,
             load_config={"gridded_load_kwargs": {"resampling": "bilinear"}},
         )
