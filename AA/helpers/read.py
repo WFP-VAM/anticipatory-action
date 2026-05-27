@@ -90,7 +90,9 @@ def read_forecasts(area, issue, local_path):
         load_config={"gridded_load_kwargs": {"resampling": "bilinear"}},
     )
     forecasts.attrs["nodata"] = np.nan
-    forecasts.chunk({"time": -1}).to_zarr(local_path, mode="w", consolidated=True)
+    forecasts.chunk({"time": -1}).to_zarr(
+        local_path, mode="w", consolidated=True, zarr_version=2
+    )
     return persist_with_progress_bar(forecasts)
 
 
@@ -185,7 +187,7 @@ def read_observations(area, local_path: str, index: str):
             dataset_key,
             load_config={"gridded_load_kwargs": {"resampling": "bilinear"}},
         )
-        observations.to_zarr(store_path, mode="w", consolidated=True)
+        observations.to_zarr(store_path, mode="w", consolidated=True, zarr_version=2)
         return persist_with_progress_bar(observations)
 
 
