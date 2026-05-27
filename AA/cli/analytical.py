@@ -430,9 +430,9 @@ def save_districts_results(
     probs_path = f"{params.output_path}/{params.iso}/zarr/{issue}/{params.index}_{period_name}/probabilities.zarr"
     probs_bc_path = f"{params.output_path}/{params.iso}/zarr/{issue}/{params.index}_{period_name}/probabilities_bc.zarr"
 
-    obs_district.to_zarr(obs_path, mode="w")
-    probs_district.to_zarr(probs_path, mode="w")
-    probs_bc_district.to_zarr(probs_bc_path, mode="w")
+    obs_district.to_zarr(obs_path, mode="w", zarr_version=2)
+    probs_district.to_zarr(probs_path, mode="w", zarr_version=2)
+    probs_bc_district.to_zarr(probs_bc_path, mode="w", zarr_version=2)
 
 
 if __name__ == "__main__":
