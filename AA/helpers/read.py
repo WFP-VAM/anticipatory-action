@@ -62,7 +62,8 @@ def read_forecasts(area, issue, local_path):
         last_cached_date = pd.Timestamp(ds.time.values.max()).date()
         fetch_start = last_cached_date + datetime.timedelta(days=1)
 
-        if fetch_start > last_date.date():
+        gap_days = (last_date.date() - last_cached_date).days
+        if fetch_start > last_date.date() or gap_days < 150:
             logging.info("All forecast data present, returning cached data...")
             return persist_with_progress_bar(ds.sel(time=slice(None, last_date)))
 
@@ -143,7 +144,9 @@ def read_observations(area, local_path: str, index: str):
     # ------------------------------------------------------------------ #
     store_name, dataset_key = INDEX_STORE_MAP[index]
     store_path = os.path.join(local_path, store_name)
-    data_exists = fs.exists(os.path.join(store_path, ".zmetadata"))
+    data_exists = fs.exists(os.path.join(store_path, ".zmetadata")) or fs.exists(
+        os.path.join(store_path, "zarr.json")
+    )
 
     if data_exists:
         logging.info("Reading %s observations from cached zarr: %s", index, store_path)
