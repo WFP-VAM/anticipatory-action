@@ -90,7 +90,9 @@ gdf
 
 # Observations data reading
 observations = read_observations(
-    area, f"{params.data_path}/{params.iso}/zarr/obs/observations.zarr"
+    area,
+    f"{params.data_path}/{params.iso}/zarr/obs",
+    params.index,
 )
 
 

@@ -82,7 +82,8 @@ def run(country, index, config_json, data_path, output_path):
 
     observations = read_observations(
         area,
-        f"{params.data_path}/{params.iso}/zarr/obs/observations.zarr",
+        f"{params.data_path}/{params.iso}/zarr/obs",
+        params.index,
     )
     logging.info(
         f"Completed reading of observations for the whole {params.iso} country"

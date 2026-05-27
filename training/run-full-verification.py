@@ -1,11 +1,11 @@
 # ---
 # jupyter:
 #   jupytext:
-#     formats: ipynb,py:light
+#     formats: ipynb,py:percent
 #     text_representation:
 #       extension: .py
-#       format_name: light
-#       format_version: '1.5'
+#       format_name: percent
+#       format_version: '1.3'
 #       jupytext_version: 1.19.1
 #   kernelspec:
 #     display_name: Python (Pixi)
@@ -13,23 +13,28 @@
 #     name: pixi-kernel-python3
 # ---
 
+# %% [markdown]
 # ## Run full AA drought verification
 #
 # #### (can be used for a more user-friendly experience or for training purposes)
 #
 # This notebook is intended to be self-sufficient for executing the entire workflow operationally ahead of the season and get the triggers using specific parameters and specific datasets. It is designed to be interactive, and does not require any direct interaction with another file, except for the configuration file. This will therefore be the main front-end for Anticipatory Action analysts.
 
+# %% [markdown]
 # If you have not downloaded the data yet, please download it from the link you should have received by email.
 
+# %% [markdown]
 # **Import required libraries and functions**
 
+# %%
 import os
 
+# %%
 if os.getcwd().split("\\")[-1] != "anticipatory-action":
     os.chdir("..")
 os.getcwd()
 
-# +
+# %%
 import logging
 
 import matplotlib.pyplot as plt
@@ -44,17 +49,19 @@ from AA.helpers.params import Params
 from AA.helpers.read import read_forecasts, read_observations
 from AA.cli.triggers import run_triggers_selection
 
-# -
 
+# %% [markdown]
 # **First, please define the country ISO code and the index of interest**
 
 
+# %%
 country = "ISO"
 index = "SPI"  # 'SPI' or 'DRYSPELL'
 data_path = "./data"  # current directory (anticipatory-action)
 output_path = "./data"
 
 
+# %% [markdown]
 # Now, we will configure some parameters. Please feel free to edit the year of the last season considered. By default, it is equal to 2022. This means that for the purposes of evaluating and selecting triggers, the time series studied will end with the 2021-2022 season. This is the configuration chosen for monitoring the 2023-2024 season.
 #
 # Please also have a look at the `config/{iso}_config.yaml` file that contains all the defined parameters that are used in this workflow.
@@ -62,16 +69,17 @@ output_path = "./data"
 # *Note: if you change a parameter or a dataset, please make sure to manage correctly the different output paths so you don't overwrite previous results.*
 
 
+# %%
 params = Params(iso=country, index=index, data_path=data_path, output_path=output_path)
 
 
-# + [markdown] jp-MarkdownHeadingCollapsed=true
+# %% [markdown] jp-MarkdownHeadingCollapsed=true
 # ### Read data
-# -
 
+# %% [markdown]
 # Let's start by getting the shapefile.
 
-# +
+# %%
 area = AnalysisArea.from_admin_boundaries(
     iso3=params.iso.upper(),
     admin_level=2,
@@ -81,9 +89,9 @@ area = AnalysisArea.from_admin_boundaries(
 
 gdf = area.get_dataset([area.BASE_AREA_DATASET])
 gdf
-# -
 
 
+# %% [markdown]
 # The next cell reads the observations dataset. Please run it directly if you have the data stored in the specified path or have access to HDC.
 #
 #
@@ -94,21 +102,27 @@ gdf
 # If you want to read another dataset, that will be possible soon by specifying your key as an argument. For now, it is accessible via hip-analysis (see this [doc](https://wfp-vam.github.io/hip-analysis/reference/datasources/) to explore all the available datasets), but you need to replace the product name (*rfh_daily*) with the substitute product name in `AA.helper_fns.read_observations`.
 
 
+# %%
 # Observations data reading
 observations = read_observations(
-    area, f"{params.data_path}/{params.iso}/zarr/obs/observations.zarr"
+    area,
+    f"{params.data_path}/{params.iso}/zarr/obs",
+    params.index,
 )
 observations
 
+# %% [markdown]
 # If your dataset is already stored locally, you can edit the path below and forecasts will be read in the analytical loop. Once again, make sure that your coordinates match those of the observations, that your forecasts are daily, and that you have 51 members. The name of the data variable must be `tp` for total precipitation.
 
 
+# %%
 forecasts_folder_path = f"{params.data_path}/{params.iso}/zarr"
 
 
+# %% [markdown]
 # *Congratulations!* You've completed the part that requires the most energy during this process. Now all you have to do is run the different cells and check the results!
 
-# + [markdown] jp-MarkdownHeadingCollapsed=true
+# %% [markdown] jp-MarkdownHeadingCollapsed=true
 # ### Analytical processing
 #
 # The next part contains the analytical phase of the AA process.
@@ -119,7 +133,7 @@ forecasts_folder_path = f"{params.data_path}/{params.iso}/zarr"
 #
 # *Note2: if you want to re-run the workflow for issue months that you have already processed before, please delete the roc scores files in the `auc/split_by_issue` folder for the issue months of interest. Otherwise, the script will directly load the roc scores from the local files.*
 
-# +
+# %%
 # Create directory for ROC scores df per issue month in case it doesn't exist
 os.makedirs(f"{params.data_path}/{params.iso}/auc/split_by_issue", exist_ok=True)
 
@@ -149,33 +163,38 @@ for issue in ["07"]:  # params.issue_months:
 
 roc = pd.concat(roc_issues)
 display(roc)  # noqa: F821
-# -
 
+# %% [markdown]
 # Let's have a look at how the computed probabilities data looks like.
 
+# %%
 xr.open_zarr(f"{forecasts_folder_path}/07/{params.index}_ON/probabilities.zarr").load()
 
+# %% [markdown]
 # We can also check how the CHIRPS-based anomalies that have been saved look like. They have been used to calculate the roc scores and will be used to select the triggers.
 
+# %%
 xr.open_zarr(f"{forecasts_folder_path}/obs/{params.index}_ON/observations.zarr").load()
 
+# %% [markdown]
 # By running the next cell, you can save the dataframe containing the ROC scores. We commented it here so we don't overwrite the file with all the issue months with a file that only contains a few issue months.
 
 
-# +
+# %%
 # roc.to_csv(
 #    f"{params.output_path}/{params.iso}/auc/roc.{params.index}.csv",
 #    index=False,
 # )
-# -
 
+# %% [markdown]
 # Now we can read this dataframe locally to visualize the ROC scores.
 
+# %%
 roc = pd.read_csv(
     f"{params.data_path}/{params.iso}/auc/roc.{params.index}.csv",
 )
 
-# +
+# %%
 display(  # noqa: F821
     md(
         f"This roc file shows {round(100 * roc.BC.sum() / len(roc), 1)} % of bias-corrected values."
@@ -195,37 +214,46 @@ plt.title("AUC_best Scores Heatmap - Moderate")
 plt.xlabel("District")
 plt.ylabel("Index")
 plt.show()
-# -
 
+# %% [markdown]
 # ### Triggers selection
 
+# %% [markdown]
 # We've now come to the final part: the triggers optimization! All you have to do is execute the next cell and the calculations will take place automatically.
 
+# %% [markdown]
 # The next cell allows to define that the trigger requirements are not clear at this point. It is still "TBD", so we will compute the metrics for all our candidates.
 
 
+# %%
 params.load_vulnerability_requirements("TBD")
 
 
+# %%
 run_triggers_selection(params)
 
 
+# %% [markdown]
 # Then, we keep the best pair for each lead time and the 4 best pairs of triggers per window of activation (in terms of Hit Rate first, and Failure Rate then).
 
+# %% [markdown]
 # The triggers dataframe has been saved here for each district: `"data/{iso}/triggers/triggers_metrics/triggers_metrics_tbd_{district}.csv"`
 #
 # Then, these dataframes can be explored in order to evaluate the trigger performance and attempt to find suitable triggers in terms of Hit Rate, Success Rate, and False Alarm Ratio.
 
+# %%
 triggers = pd.read_csv(
     f"{params.data_path}/{params.iso}/triggers/triggers_metrics/triggers_metrics_tbd_{params.districts[0]}.csv",
 )
 triggers
 
 
+# %% [markdown]
 # Great! Now you can go through the trigger selection process: using the set-up tool, or by implementing a simple routine that carries out the filtering and ranking jobs. This type of function should be added soon in the codebase to facilitate this work. The pre-season verification and setup is then complete.
 #
 # You can therefore proceed with the operational script and process the forecasts when they are ready to produce the alerts.
 
+# %% [markdown]
 # Please store the final dataframe here!
 #
 # `data/{iso}/triggers/triggers.final.{monitoring_year}.pilots.csv`

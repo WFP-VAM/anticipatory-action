@@ -22,9 +22,9 @@ anticipatory_action = { path = ".", editable = true }
 python = "3.11.*"
 hdc-algo = ">=0.5.3"
 hip-analysis = ">=1.0.0"
-xclim = "0.53.1.*"
 yq = ">=2.10.1,<4"
 click = "*"
+boto3 = "*"
 tqdm = "*"
 
 [tool.pixi.environments]
