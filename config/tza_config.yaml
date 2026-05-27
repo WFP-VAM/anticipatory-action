@@ -27,7 +27,7 @@ max_index_period: 3
 start_season: 10
 
 # Last month of the wet season
-end_season: 5
+end_season: 3
 
 # Start date of historical time series used in anomaly computation
 hist_anomaly_start: "1991-01-01"
@@ -83,7 +83,7 @@ non_regret_t:
 windows:
   spi:
     window1: ["ON", "OND", "ND", "NDJ"]
-    window2: ["DJ", "DJF", "JF", "JFM", "FM", "FMA", "MA", "MAM", "AM"]
+    window2: ["DJ", "DJF", "JF", "JFM", "FM"]
   dryspell:
     window1: []
     window2: []

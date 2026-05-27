@@ -1,5 +1,6 @@
 # Issue month: months corresponding to the forecasts used for monitoring
 issue_months:
+  - "05"
   - "06"
   - "07"
   - "08"
@@ -8,6 +9,7 @@ issue_months:
   - "11"
   - "12"
   - "01"
+  - "02"
 
 # First year of season to monitor operationally (e.g. 2024 for 2024/2025 season)
 monitoring_year: 2026
@@ -25,7 +27,7 @@ max_index_period: 3
 start_season: 10
 
 # Last month of the wet season
-end_season: 6
+end_season: 3
 
 # Start date of historical time series used in anomaly computation
 hist_anomaly_start: "1991-01-01"
@@ -97,8 +99,8 @@ non_regret_t:
 # Window definitions for SPI and DRYSPELL indicators
 windows:
   spi:
-    window1: ["OND", "NDJ"]
-    window2: ["DJF", "JFM"]
+    window1: ["ON", "ND", "DJ", "OND", "NDJ"]
+    window2: ["JF", "FM", "DJF", "JFM"]
   dryspell:
     window1: ["ON", "ND", "DJ"]
-    window2: ["JF", "FM", "MA"]
+    window2: ["JF", "FM"]
