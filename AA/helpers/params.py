@@ -349,7 +349,7 @@ class Params:
             self.roc_df = read_roc_file(roc_path, self)
 
         # Check if a custom shapefile is stored in the data folder and read it if it exists
-        shapefile_path = f"{self.data_path}/data/{self.iso}/{self.iso}.geojson"
+        shapefile_path = f"{self.data_path}/{self.iso}/{self.iso}.geojson"
 
         if fsspec.open(shapefile_path).fs.exists(shapefile_path):
             try:
