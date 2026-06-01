@@ -70,7 +70,7 @@ def run(country, issue, index, config_json, data_path, output_path):
         iso3=country.upper(),
         admin_level=2,
         resolution=0.25,
-        datetime_range=f"1981-01-01/{params.monitoring_year + 1}-06-30",
+        datetime_range=f"1981-01-01/{params.monitoring_year + 1}-{str(params.end_season).zfill(2)}-30",
     )
 
     if not params.custom_shapefile.empty:
