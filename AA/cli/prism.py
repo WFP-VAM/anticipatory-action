@@ -1,31 +1,26 @@
 import argparse
-
 import pandas as pd
-
 from AA.helpers.utils import validate_prism_dataframe
+from AA.helpers.params import S3_OPS_DATA_PATH
 
 
 def main(iso3: str):
     # Normalize inputs
     iso3 = iso3.lower()
 
-    # Define paths
-    base_path = "s3://wfp-ops-userdata"
-    prism_path = (
-        f"{base_path}/public-share/aa/staging/aa_probabilities_triggers_{iso3}.csv"
-    )
-    pilot_path = f"{base_path}/amine.barkaoui/aa/data/{iso3}/probs/aa_probabilities_triggers_pilots.csv"
-    output_path = prism_path  # Overwrite the original
+    # Define paths (PRISM PATH TO BE UPDATED ONCE CONFIRMED)
+    prism_path = f"s3://wfp-ops-userdata/public-share/aa/staging/aa_probabilities_triggers_{iso3}.csv"
+    pilot_path = f"{S3_OPS_DATA_PATH}/{iso3}/probs/aa_probabilities_triggers_pilots.csv"
 
     print(f"📥 Reading PRISM data from: {prism_path}")
     prism_df = pd.read_csv(prism_path)
-    print(f"prism_df: {prism_df.columns}")
+    print(f"prism_df columns: {prism_df.columns.tolist()}")
     if "Unnamed: 0" in prism_df.columns:
         prism_df = prism_df.drop("Unnamed: 0", axis=1)
 
     print(f"📥 Reading probs pilot data from: {pilot_path}")
     df = pd.read_csv(pilot_path)
-    print(f"probs pilot data: {df.columns}")
+    print(f"probs pilot data columns: {df.columns.tolist()}")
 
     print("🔗 Concatenating filtered PRISM and pilot data...")
     df_concat = (
@@ -61,17 +56,16 @@ def main(iso3: str):
     df_concat["window"] = [window_mapping.get(v, v) for v in df_concat.window.values]
 
     print("Validating dataframe...")
-    validate_prism_dataframe(df)
+    validate_prism_dataframe(df_concat)  # Fixed: was validating `df` instead of `df_concat`
 
-    print(f"💾 Saving processed data to: {output_path}")
-    df_concat.to_csv(output_path, index=False)
+    print(f"💾 Saving processed data to: {prism_path}")
+    df_concat.to_csv(prism_path, index=False)
 
     print("✅ Processing complete.")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Process AA probability triggers")
-    parser.add_argument("iso3", type=str, help="ISO3 country code (e.g., MOZ)")
+    parser = argparse.ArgumentParser(description="Update PRISM with latest AA probabilities")
+    parser.add_argument("iso3", type=str, help="ISO3 country code (e.g., moz)")
     args = parser.parse_args()
-
-    main(args.iso3, args.issue_month)
+    main(args.iso3)
