@@ -29,7 +29,7 @@ AGGREGATES = {
     .hdc.algo.lroo(),
 }
 
-S3_OPS_DATA_PATH = "s3://dev-hip-jobs-ops/anticipatory-action/data/prod"
+S3_OPS_DATA_PATH = "s3://dev-hip-anticipatory-action/prod"
 
 
 def load_config(iso: str, cli_json: str | None = None) -> dict:
