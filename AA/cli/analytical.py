@@ -421,6 +421,10 @@ def save_districts_results(
     probs_district = compute_district_average(probabilities, area)
     probs_bc_district = compute_district_average(probabilities_bc, area)
 
+    # Apply country-specific post-processing to district-aggregated observations
+    # (e.g. propagating values across administrative boundary inconsistencies)
+    obs_district = post_process_aggregated_observations(obs_district, params.iso)
+
     # Convert the 'category' coordinate to string type
     probs_district["category"] = probs_district["category"].astype(str)
     probs_bc_district["category"] = probs_bc_district["category"].astype(str)

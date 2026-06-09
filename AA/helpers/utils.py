@@ -163,6 +163,14 @@ def compute_district_average(da, area):
     return da_grouped
 
 
+def post_process_aggregated_observations(ds, iso):
+    """Post-process district-aggregated observations. Currently patches Wete → Micheweni for TZA."""
+    if iso == "tza":
+        ds = ds.copy()
+        ds.loc[dict(district="Micheweni")] = ds.sel(district="Wete")
+    return ds
+
+
 def merge_un_biased_probs(probs_district, probs_bc_district, params, period_name):
     # Get roc_df data in xarray format
     roc_df = params.roc_df
