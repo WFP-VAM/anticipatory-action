@@ -6,11 +6,11 @@
 #       extension: .py
 #       format_name: light
 #       format_version: '1.5'
-#       jupytext_version: 1.16.1
+#       jupytext_version: 1.19.3
 #   kernelspec:
-#     display_name: Python (pixi-aa)
+#     display_name: 'Python (pixi: aa-env)'
 #     language: python
-#     name: pixi-aa
+#     name: aa-env
 # ---
 
 # ## Run full AA drought verification
@@ -38,6 +38,7 @@ from IPython.display import Markdown as md
 from analysis_area import AnalysisArea
 
 import os
+
 if os.getcwd().split("/")[-1] != "anticipatory-action":
     os.chdir("../../..")
 os.getcwd()
@@ -48,6 +49,7 @@ from AA.cli.triggers import run_triggers_selection
 # -
 
 from hip.analysis import __version__
+
 __version__
 
 # **First, please define the country ISO code and the index of interest**
@@ -55,7 +57,9 @@ __version__
 
 country = "TZA"
 index = "SPI"  # 'SPI' or 'DRYSPELL'
-data_path = "s3://wfp-ops-userdata/amine.barkaoui/aa"  # current directory (anticipatory-action)
+data_path = (
+    "s3://wfp-ops-userdata/amine.barkaoui/aa"  # current directory (anticipatory-action)
+)
 output_path = "s3://wfp-ops-userdata/amine.barkaoui/aa"
 
 
@@ -83,7 +87,7 @@ area = AnalysisArea.from_admin_boundaries(
 
 gdf = area.get_dataset([area.BASE_AREA_DATASET])
 
-micheweni_gdf = gdf.loc[['Micheweni']]
+micheweni_gdf = gdf.loc[["Micheweni"]]
 
 area.add_dataset(micheweni_gdf, [area.BASE_AREA_DATASET])
 
@@ -122,7 +126,7 @@ forecasts = read_forecasts(
     f"{forecasts_folder_path}/07/forecasts.zarr",
 )
 
-data = forecasts.isel(time=slice(100, 1200), ensemble=0).mean('time')
+data = forecasts.isel(time=slice(100, 1200), ensemble=0).mean("time")
 
 data = forecasts.sel(latitude=slice(-4.5, -6), longitude=slice(39.5, 40.2))
 
@@ -159,6 +163,31 @@ plt.show()
 zone_ids, zones = area._resolve_zones(data, None, None, True)
 zones.plot.imshow()
 
+# ### Rasterization of observations
+
+area.datetime_range = "2020-01-01/2020-12-31"
+ch3 = area.get_dataset(["HDC", "chirps_dekad"])
+
+df = area.zonal_stats(ch3.isel(time=-1), all_touched=True)
+
+da = area._resolve_zones(ch3.isel(time=-1), all_touched=True)
+
+# exclude nodata zone
+import numpy as np
+
+zone_rast = da[1]
+zone_numbers = np.unique(zone_rast)[np.unique(zone_rast) >= 0]
+
+np.argmax(np.int8(gdf.Name.values == "Micheweni"))  # 102
+
+gdf.Name.values[103]
+
+zone_rast.sel(latitude=slice(-4.7, -5.2), longitude=slice(39.2, 40.2)).plot.imshow()
+
+ch3.sel(latitude=slice(-4.8, -5.1), longitude=slice(39.6, 39.9)).isel(
+    time=-1
+).band.plot.imshow()
+
 # ### Analytical processing
 
 # +
@@ -167,6 +196,7 @@ import fsspec
 from hip.analysis.ops._statistics import evaluate_roc_forecasts
 from hip.analysis.analyses.drought import get_accumulation_periods
 from AA.cli.analytical import calculate_forecast_probabilities, get_verification_df
+
 
 def compute_district_average(da, area):
     """
@@ -196,9 +226,9 @@ def compute_district_average(da, area):
     elif len(groupby_dim) == 1:
         da_grouped = da.groupby(*groupby_dim).map(
             lambda da: area.zonal_stats(
-                da.squeeze(groupby_dim), 
-                stats=["mean"], 
-                zone_ids=None, 
+                da.squeeze(groupby_dim),
+                stats=["mean"],
+                zone_ids=None,
                 zones=None,
                 all_touched=True,
             )
@@ -208,9 +238,9 @@ def compute_district_average(da, area):
     else:
         da_grouped = (
             area.zonal_stats(
-                da, 
-                stats=["mean"], 
-                zone_ids=None, 
+                da,
+                stats=["mean"],
+                zone_ids=None,
                 zones=None,
                 all_touched=True,
             )
@@ -253,7 +283,7 @@ def save_districts_results(
     obs_district.to_zarr(obs_path, mode="w")
     probs_district.to_zarr(probs_path, mode="w")
     probs_bc_district.to_zarr(probs_bc_path, mode="w")
-    
+
 
 def verify_index_across_districts(
     forecasts,
@@ -319,6 +349,7 @@ def verify_index_across_districts(
     )
 
     return fbf_index_df
+
 
 def run_issue_verification(forecasts, observations, issue, params, area):
     """
@@ -392,7 +423,7 @@ for issue in params.issue_months:
         issue,
         f"{forecasts_folder_path}/{issue}/forecasts.zarr",
     )
-    
+
     forecasts = forecasts.sel(latitude=slice(-4.5, -6), longitude=slice(39.5, 40.2))
 
     logging.info(f"Completed reading of forecasts for the issue month {issue}")
@@ -417,20 +448,24 @@ display(fbf_roc)  # noqa: F821
 
 # Let's have a look at how the computed probabilities data looks like.
 
-xr.open_zarr(f"{forecasts_folder_path}/07/{params.index} ON/probabilities_micheweni.zarr").load()
+xr.open_zarr(
+    f"{forecasts_folder_path}/07/{params.index} ON/probabilities_micheweni.zarr"
+).load()
 
 # We can also check how the CHIRPS-based anomalies that have been saved look like. They have been used to calculate the roc scores and will be used to select the triggers.
 
-xr.open_zarr(f"{forecasts_folder_path}/obs/{params.index} ON/observations_micheweni.zarr").load()
+xr.open_zarr(
+    f"{forecasts_folder_path}/obs/{params.index} ON/observations_micheweni.zarr"
+).load()
 
 # By running the next cell, you can save the dataframe containing the ROC scores. We commented it here so we don't overwrite the file with all the issue months with a file that only contains a few issue months.
 
 
 # +
-#fbf_roc.to_csv(
+# fbf_roc.to_csv(
 #    f"{params.data_path}/data/{params.iso}/auc/fbf.districts.roc.{params.index}.{params.calibration_year}.micheweni.csv",
 #    index=False,
-#)
+# )
 # -
 
 # Now we can read this dataframe locally to visualize the ROC scores.
@@ -449,7 +484,7 @@ display(roc)  # noqa: F821
 
 # Filter to include only 'AUC_best' scores and pivot the table
 roc_pivot = roc.loc[
-    (roc.district.isin(['Micheweni'])) & (roc.category.isin(["Moderate"]))
+    (roc.district.isin(["Micheweni"])) & (roc.category.isin(["Moderate"]))
 ].pivot_table(values="AUC_best", index="Index", columns="district")
 
 # Plot the heatmap
@@ -475,12 +510,15 @@ params.load_vulnerability_requirements("TBD")
 import s3fs
 import numpy as np
 from tqdm import tqdm
-from hip.analysis.analyses.drought import (concat_obs_levels,
-                                           get_accumulation_periods)
-from AA.helpers.utils import (create_flexible_dataarray,
-                              format_triggers_df_for_dashboard,
-                              merge_un_biased_probs, triggers_da_to_df)
+from hip.analysis.analyses.drought import concat_obs_levels, get_accumulation_periods
+from AA.helpers.utils import (
+    create_flexible_dataarray,
+    format_triggers_df_for_dashboard,
+    merge_un_biased_probs,
+    triggers_da_to_df,
+)
 from AA.helpers._triggers import run_pilot_districts_metrics
+
 
 def read_aggregated_probs(path_to_zarr, params):
     fs, _, _ = fsspec.get_fs_token_paths(path_to_zarr)
@@ -492,10 +530,12 @@ def read_aggregated_probs(path_to_zarr, params):
     for iss_path in list_issue_paths:
         list_index_paths = fs.glob(f"{iss_path}/{params.index} *")
         list_index_raw = [
-            fs.sep.join([i, "probabilities_micheweni.zarr"]) for i in sorted(list_index_paths)
+            fs.sep.join([i, "probabilities_micheweni.zarr"])
+            for i in sorted(list_index_paths)
         ]
         list_index_bc = [
-            fs.sep.join([i, "probabilities_bc_micheweni.zarr"]) for i in sorted(list_index_paths)
+            fs.sep.join([i, "probabilities_bc_micheweni.zarr"])
+            for i in sorted(list_index_paths)
         ]
         index_names = [i.split(fs.sep)[-1] for i in sorted(list_index_paths)]
 
@@ -528,6 +568,7 @@ def read_aggregated_probs(path_to_zarr, params):
         list_index[int(iss_path.split(fs.sep)[-1])] = ds_index
 
     return xr.concat(list_index.values(), dim=pd.Index(list_index.keys(), name="issue"))
+
 
 def run_triggers_selection(params):
     area = AnalysisArea.from_admin_boundaries(
@@ -694,11 +735,11 @@ def run_triggers_selection(params):
 
 
 # +
-params.districts = ['Micheweni']
+params.districts = ["Micheweni"]
 
 fbf_districts_path = f"{params.data_path}/data/{params.iso}/auc/fbf.districts.roc.{params.index}.2022.micheweni.csv"
 params.fbf_districts_df = pd.read_csv(fbf_districts_path)
-    
+
 run_triggers_selection(params)
 # -
 
@@ -713,4 +754,3 @@ triggers = pd.read_csv(
     f"{params.data_path}/data/{params.iso}/triggers/triggers_metrics/triggers_metrics_tbd_{params.districts[0]}.csv",
 )
 triggers
-
