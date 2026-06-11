@@ -38,7 +38,7 @@ You need to make sure your local copy of the repository is up to date. To do thi
 
 Once done, your GitHub Desktop should look like this:
 
-![GitHub Desktop — no local changes](docs/screenshots/Screenshot_2026-06-11_130244.png)
+![GitHub Desktop — no local changes](../docs/screenshots/Screenshot_2026-06-11_130244.png)
 
 
 ---
