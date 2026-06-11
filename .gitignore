@@ -29,7 +29,6 @@ MANIFEST
 # Data
 data/
 *.zarr/
-*.png
 *.tif
 *.kml
 *.json
