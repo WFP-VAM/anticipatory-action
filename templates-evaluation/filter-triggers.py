@@ -28,9 +28,12 @@ from datetime import datetime
 
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 from IPython.display import HTML, display
 
 warnings.filterwarnings("ignore")
+
+# %cd ..
 
 # %% [markdown]
 # ## Country configurations
@@ -43,18 +46,18 @@ CONFIGS = {
         districts=["Longido", "Monduli", "Same", "Simanjiro", "Micheweni"],
         # Performance thresholds
         min_hr=0.50,
-        max_far=5.0,
-        min_sr=0.55,
+        max_far=1,
+        min_sr=0.5,
         min_rp=5,
         category="Moderate",
         # Keys = indicator name (must match triggers_metrics files),
         # values = latest allowed issue_set month.
         indicators={
-            "spi_ON": 9,
-            "spi_OND": 9,
-            "spi_ND": 9,
-            "spi_NDJ": 9,
-            "spi_DJ": 9,
+            "spi_ON": 10,
+            "spi_OND": 10,
+            "spi_ND": 10,
+            "spi_NDJ": 10,
+            "spi_DJ": 10,
         },
         n_triggers=1,
         season="2025-26",
@@ -63,7 +66,7 @@ CONFIGS = {
     ),
     "ZMB": dict(
         # Set to None to load all districts from params
-        districts=["Chirundu", "Gwembe"],
+        districts=None,
         min_hr=0.55,
         max_far=0.45,
         min_sr=0.65,
@@ -81,7 +84,7 @@ CONFIGS = {
     ),
 }
 
-# %% [markdown]
+# %% [markdown] jp-MarkdownHeadingCollapsed=true
 # ## Active configuration
 #
 # Change `ISO` here to switch countries. Everything else is read from `CONFIGS`.
@@ -102,7 +105,7 @@ SEASON = cfg["season"]
 WINDOW = cfg["window"]
 VULNERABILITY = cfg["vulnerability"]
 
-# %% [markdown]
+# %% [markdown] jp-MarkdownHeadingCollapsed=true
 # ## Trigger ranking helpers
 
 
@@ -186,8 +189,6 @@ def fbeta_trigger_selection(df, group=None, beta=1, n_triggers=1):
 # ## Load and filter trigger metrics
 
 # %%
-# %cd ../..
-
 from AA.helpers.params import Params
 
 params = Params(iso=ISO, index="SPI")
@@ -196,10 +197,8 @@ if DISTRICTS is None:
     DISTRICTS = params.districts
 
 # Output path — matches the primary location that read_triggers() checks:
-#   {data_path}/data/{iso}/probs/aa_probabilities_triggers_pilots.csv
-OUTPUT_PATH = (
-    f"{params.data_path}/data/{ISO.lower()}/probs/aa_probabilities_triggers_pilots.csv"
-)
+#   {output_path}/data/{iso}/triggers/triggers.final.{params.monitoring_year}.pilots.csv
+OUTPUT_PATH = f"{params.output_path}/data/{ISO.lower()}/triggers/triggers.final.{params.monitoring_year}.pilots.csv"
 
 indicator_list = list(INDICATORS.keys())
 issue_max_map = INDICATORS
@@ -207,7 +206,7 @@ issue_max_map = INDICATORS
 records = []
 missing_districts = []
 
-for district in DISTRICTS:
+for district in tqdm(DISTRICTS):
     path = (
         f"s3://dev-hip-anticipatory-action/prod/{ISO.lower()}/triggers/"
         f"triggers_metrics/triggers_metrics_tbd_{district}.csv"
@@ -344,53 +343,6 @@ print(
     f"\nDistricts with ≥1 trigger: {(cov_by_idx.sum(axis=1) > 0).sum()} / {len(cov_by_idx)}"
 )
 
-# %% [markdown]
-# ### Map: districts with / without coverage
-
-# %%
-import geopandas as gpd
-import matplotlib.pyplot as plt
-
-gdf = gpd.read_file(
-    f"/s3/scratch/amine.barkaoui/aa/data/{ISO.lower()}/{ISO.lower()}.geojson"
-)
-
-covered = set(final["district"].unique())
-requested = set(DISTRICTS)
-
-
-def _classify(name):
-    if name in (requested - covered):
-        return "missing"
-    elif name in covered:
-        return "covered"
-    return "other"
-
-
-gdf["status"] = gdf["adm2_name"].apply(_classify)
-
-fig, ax = plt.subplots(figsize=(10, 10))
-gdf.plot(ax=ax, color="lightgrey", edgecolor="black", linewidth=0.3)
-gdf[gdf["status"] == "covered"].plot(
-    ax=ax, color="#4CAF50", edgecolor="black", linewidth=0.5, label="Covered"
-)
-gdf[gdf["status"] == "missing"].plot(
-    ax=ax, color="#E53935", edgecolor="black", linewidth=0.7, label="No trigger found"
-)
-
-for _, row in gdf[gdf["status"] == "missing"].iterrows():
-    ax.annotate(
-        row["adm2_name"],
-        xy=(row.geometry.centroid.x, row.geometry.centroid.y),
-        fontsize=8,
-        ha="center",
-    )
-
-ax.set_title(f"{ISO} – Trigger Coverage ({WINDOW} / {CATEGORY})", fontsize=14)
-ax.axis("off")
-ax.legend()
-plt.tight_layout()
-plt.show()
 
 # %% [markdown]
 # ## Format output for operational use
@@ -473,16 +425,16 @@ output = format_operational_output(final, SEASON, WINDOW, VULNERABILITY)
 output
 
 # %% [markdown]
-# ## Save
-
-# %%
-output.to_csv(OUTPUT_PATH, index=False)
-print(f"Saved {len(output)} rows to:\n  {OUTPUT_PATH}")
-
-# %% [markdown]
 # ## Optional: validate with PRISM schema
 
 # %%
 from AA.helpers.utils import validate_prism_dataframe
 
 validate_prism_dataframe(output)
+
+# %% [markdown]
+# ## Save
+
+# %%
+output.to_csv(OUTPUT_PATH, index=False)
+print(f"Saved {len(output)} rows to:\n  {OUTPUT_PATH}")
