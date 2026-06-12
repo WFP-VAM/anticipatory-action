@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: light
 #       format_version: '1.5'
-#       jupytext_version: 1.19.1
+#       jupytext_version: 1.19.3
 #   kernelspec:
 #     display_name: Python (Pixi)
 #     language: python
@@ -45,7 +45,7 @@ from AA.helpers.read import read_forecasts, read_observations, read_triggers
 country = (
     "ISO"  # Replace with the ISO code of the country you want to run the monitoring for
 )
-issue = 7
+issue = 6
 index = "SPI"  # 'SPI' or 'DRYSPELL'
 data_path = "./data"  # anticipatory-action directory
 output_path = "./data"
@@ -110,9 +110,8 @@ forecasts = read_forecasts(
 )
 forecasts
 
-forecasts.isel(ensemble=0).mean("time").plot.imshow(
-    title=f"Rainfall forecasts (issue {issue}) average over time for control member"
-)
+# Rainfall forecasts averaged over time for control member
+forecasts.isel(ensemble=0).mean("time").plot.imshow()
 
 
 # Now that we got all the data we need, let's read the triggers file so we can merge the probabilities with it once we have them. This triggers file corresponds to the output of the `run-full-verification` notebook if we're in the first monitoring month. Then, we read the merged dataframe that already contains the probabilities from the previous months so we add the new probabilities to the existing merged dataframe.
