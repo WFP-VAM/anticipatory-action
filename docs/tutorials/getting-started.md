@@ -38,7 +38,7 @@ You need to make sure your local copy of the repository is up to date. To do thi
 
 Once done, your GitHub Desktop should look like this:
 
-![GitHub Desktop — no local changes](../../docs/screenshots/Screenshot_2026-06-11_130244.png)
+![GitHub Desktop — no local changes](../screenshots/Screenshot_2026-06-11_130244.png)
 
 
 ## 2. Create the *pixi* environment <a class="anchor" id="chapter2"></a>
@@ -130,7 +130,7 @@ pixi run jupyter lab
 
 Once the Jupyter Lab window is open, please right-click on the notebook you want to open, select *Open with* > *Jupyter Notebook*.
 
-![Jupytext](../../docs/screenshots/Screenshot_2026-06-12_114439.png)
+![Jupytext](../screenshots/Screenshot_2026-06-12_114439.png)
 
 Before getting your hands dirty, a few tips about Jupyter Lab:
 
