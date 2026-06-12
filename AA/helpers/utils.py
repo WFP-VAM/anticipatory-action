@@ -301,7 +301,7 @@ def merge_probabilities_triggers_dashboard(probs, triggers, params, period):
     # Format probabilities
     probs_df = probs.to_dataframe().reset_index()
     probs_df["prob"] = [np.round(p, 2) for p in probs_df.prob.values]
-    probs_df["index"] = probs_df["index"].str.upper()
+    probs_df["index"] = probs_df["index"].str.replace("_", " ").str.upper()
     probs_df["aggregation"] = np.repeat(
         f"{params.index.upper()} {len(period)}", len(probs_df)
     )
