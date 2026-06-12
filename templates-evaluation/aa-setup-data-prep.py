@@ -5,33 +5,29 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.1
+#       jupytext_version: 1.19.3
 #   kernelspec:
-#     display_name: hdc
+#     display_name: 'Python (pixi: aa-env)'
 #     language: python
-#     name: conda-env-hdc-py
+#     name: aa-env
 # ---
 
 # %% [markdown]
 # ### Imports
 
 # %%
+import duckdb
 import fsspec
 import glob
 import s3fs
 import numpy as np
 import xarray as xr
 import pandas as pd
-import panel as pn
-import holoviews as hv
-import seaborn as sns
 import matplotlib.pyplot as plt
 
+from tqdm import tqdm
 from IPython.display import Markdown as md
 from hip.analysis.analyses.drought import concat_obs_levels
-
-pn.extension()
-pn.extension("tabulator")
 
 
 # %% [markdown]
@@ -41,14 +37,16 @@ pn.extension("tabulator")
 # %%
 def read_aggregated_probs(path_to_zarr, index):
     fs, _, _ = fsspec.get_fs_token_paths(path_to_zarr)
+    fs.invalidate_cache()
     list_issue_paths = sorted(fs.glob(f"{path_to_zarr}/*"))[
         :-1
     ]  # Last one is the `obs` folder.
     list_index = {}
-    list_issue_paths = [l for l in list_issue_paths if l !='/s3/scratch/amine.barkaoui/aa/data/mwi/zarr/2022/02']
 
     for iss_path in list_issue_paths:
-        list_index_paths = fs.glob(f"{iss_path}/{index} *")
+        list_index_paths = fs.glob(f"{iss_path}/{index}_*")
+        if list_index_paths == []:
+            continue
         list_index_raw = [
             fs.sep.join([i, "probabilities.zarr"]) for i in sorted(list_index_paths)
         ]
@@ -91,7 +89,8 @@ def read_aggregated_probs(path_to_zarr, index):
 # %%
 def read_aggregated_obs(path_to_zarr, index, intensity_thresholds):
     fs, _, _ = fsspec.get_fs_token_paths(path_to_zarr)
-    list_index_paths = fs.glob(f"{path_to_zarr}/{index} *")
+    fs.invalidate_cache()
+    list_index_paths = fs.glob(f"{path_to_zarr}/{index}_*")
 
     # Restore full S3 paths if needed
     if isinstance(fs, s3fs.core.S3FileSystem):
@@ -127,186 +126,139 @@ def read_aggregated_obs(path_to_zarr, index, intensity_thresholds):
 COUNTRY = "MWI"
 
 # Ideally we would move the aa folder that's in my bucket to a dedicated bucket like for LIA
-DATA_PATH = f"/s3/scratch/amine.barkaoui/aa/data/{COUNTRY.lower()}"
+DATA_PATH = f"s3://dev-hip-anticipatory-action/prod/{COUNTRY.lower()}"
 
-# %% [markdown]
+# %% [markdown] jp-MarkdownHeadingCollapsed=true
 # ### Read indicator analysis data
 
 # %%
-probs_spi = read_aggregated_probs(f"{DATA_PATH}/zarr/2022", "spi")
-#probs_dry = read_aggregated_probs(f"{DATA_PATH}/zarr/2022", "dryspell")
+probs_spi = read_aggregated_probs(f"{DATA_PATH}/zarr", "spi")
+probs_dry = read_aggregated_probs(f"{DATA_PATH}/zarr", "dryspell")
 
-probs = xr.concat([probs_spi], 'index') # , probs_dry], "index")
+probs = xr.concat([probs_spi, probs_dry], "index")
+
+# %%
+probs_spi = read_aggregated_probs(f"{DATA_PATH}/zarr", "spi")
+
+probs = xr.concat([probs_spi], "index")
 
 # %%
 intensity_thresholds = {"Normal": -0.44, "Mild": -0.68, "Moderate": -0.85, "Severe": -1}
 
-chirps_spi = read_aggregated_obs(
-    f"{DATA_PATH}/zarr/2022/obs", "spi", intensity_thresholds
+chirps_spi = read_aggregated_obs(f"{DATA_PATH}/zarr/obs", "spi", intensity_thresholds)
+chirps_dry = read_aggregated_obs(
+    f"{DATA_PATH}/zarr/obs", "dryspell", intensity_thresholds
 )
-#chirps_dry = read_aggregated_obs(
-#    f"{DATA_PATH}/zarr/2022/obs", "dryspell", intensity_thresholds
-#)
 
-chirps_anomaly = xr.concat([chirps_spi], "index") #, chirps_dry], "index")
+chirps_anomaly = xr.concat([chirps_spi, chirps_dry], "index")
 
 # %%
-chirps_anomaly
+intensity_thresholds = {"Normal": -0.44, "Mild": -0.68, "Moderate": -0.85, "Severe": -1}
+
+chirps_spi = read_aggregated_obs(f"{DATA_PATH}/zarr/obs", "spi", intensity_thresholds)
+
+chirps_anomaly = xr.concat([chirps_spi], "index")
 
 # %%
 roc = pd.concat(
     [
-        pd.read_csv(f"{DATA_PATH}/auc/fbf.districts.roc.spi.2022.csv"),
-        # pd.read_csv(f"{DATA_PATH}/auc/fbf.districts.roc.dryspell.2022.csv"),
+        pd.read_csv(f"{DATA_PATH}/auc/roc.spi.csv"),
+        pd.read_csv(f"{DATA_PATH}/auc/roc.dryspell.csv"),
     ]
 )
 
 # %%
-roc
+roc = pd.concat(
+    [
+        pd.read_csv(f"{DATA_PATH}/auc/roc.spi.csv"),
+    ]
+)
 
 # %% [markdown] jp-MarkdownHeadingCollapsed=true
-# ### Visualize indicator performance analysis
-
-# %%
-# ROC scores
-display(
-    md(
-        f"**This roc file shows {round(100 * roc.BC.sum() / len(roc), 1)} % of bias-corrected values.**"
-    )
-)
-display(roc)
-
-# Filter to include only 'AUC_best' scores and pivot the table
-roc_pivot = roc.pivot_table(values="AUC_best", index="Index", columns="district")
-
-# Plot the heatmap
-plt.figure(figsize=(10, 8))
-sns.heatmap(roc_pivot, annot=False, cmap="YlGnBu", cbar_kws={"label": "AUC_best"})
-plt.title("AUC_best Scores Heatmap - Below Normal")
-plt.xlabel("District")
-plt.ylabel("Index")
-plt.title("ROC scores (best between raw and bc)")
-plt.show()
-
-# %%
-# Probabilities
-issue_widget = pn.widgets.Select(
-    name="Issue Month", options=sorted(probs.issue.values.tolist())
-)
-district_widget = pn.widgets.Select(
-    name="District", options=sorted(probs.district.values.tolist())
-)
-category_widget = pn.widgets.Select(
-    name="Category", options=sorted(probs.category.values.tolist())
-)
-index_widget = pn.widgets.Select(
-    name="Index",
-    options=sorted(probs.sel(issue=issue_widget.value).index.values.tolist()),
-)
-
-
-@pn.depends(issue_widget, index_widget, district_widget, category_widget)
-def plot_timeseries(issue, index, district, category):
-    sel = probs.sel(issue=issue, index=index, district=district, category=category)
-
-    raw_plot = sel["raw"].hvplot(label="Raw", color="blue")
-    bc_plot = sel["bc"].hvplot(label="Bias-Corrected", color="green")
-
-    return (raw_plot * bc_plot).opts(show_grid=True, legend_position="top_left")
-
-
-###
-# Here please make sure to select an index within the 7-month leadtime of the issue month
-###
-
-pn.Column(
-    pn.Row(issue_widget, index_widget),
-    pn.Row(district_widget, category_widget),
-    plot_timeseries,
-)
-
-# %%
-# Observations
-district_widget = pn.widgets.Select(
-    name="District", options=sorted(probs.district.values.tolist())
-)
-category_widget = pn.widgets.Select(
-    name="Category", options=sorted(probs.category.values.tolist())
-)
-index_widget = pn.widgets.Select(
-    name="Index",
-    options=sorted(probs.sel(issue=issue_widget.value).index.values.tolist()),
-)
-
-
-@pn.depends(index_widget, district_widget, category_widget)
-def plot_obs_timeseries(index, district, category):
-    sel = chirps_anomaly.sel(index=index, district=district, category=category)
-    df = sel[["val", "bool"]].to_dataframe().reset_index()
-
-    line = df.hvplot.line(x="time", y="val", color="blue", label="val")
-
-    points_df = df[df["bool"] == 1]
-    points = points_df.hvplot.scatter(
-        x="time", y="val", color="red", size=10, marker="o", label="bool=1"
-    )
-
-    threshold = intensity_thresholds.get(category, None) * 1000
-    if threshold is not None:
-        hline = hv.HLine(threshold).opts(color="red", line_dash="dashed", line_width=2)
-        return (line * points * hline).opts(show_grid=True, legend_position="top_left")
-
-    return (line * points).opts(show_grid=True, legend_position="top_left")
-
-
-pn.Column(pn.Row(index_widget, district_widget, category_widget), plot_obs_timeseries)
-
-# %% [markdown]
 # ###  Read triggers data
 
+# %% jupyter={"source_hidden": true}
+MOZ_DISTRICTS = [
+    "Cahora_Bassa",
+    "Caia",
+    "Changara",
+    "Chemba",
+    "Chibabava",
+    "Chibuto",
+    "Chicualacuala",
+    "Chigubo",
+    "Chiure",
+    "Chiuta",
+    "Cidade_Da_Beira",
+    "Doa",
+    "Funhalouro",
+    "Govuro",
+    "Guija",
+    "Guro",
+    "Homoine",
+    "Jangamo",
+    "Mabalane",
+    "Mabote",
+    "Machanga",
+    "Machaze",
+    "Macossa",
+    "Magoe",
+    "Magude",
+    "Mapai",
+    "Marara",
+    "Massangena",
+    "Massinga",
+    "Massingir",
+    "Moamba",
+    "Muanza",
+    "Mutarara",
+    "Namuno",
+    "Panda",
+    "Tambara",
+]
+
 # %%
+MWI_DISTRICTS = roc.district.unique()
+
+# %%
+DISTRICTS = MOZ_DISTRICTS if COUNTRY == "MOZ" else MWI_DISTRICTS
+
+# %% jupyter={"outputs_hidden": true}
+fs, _, _ = fsspec.get_fs_token_paths(f"{DATA_PATH}/triggers/triggers_metrics_spi")
+fs.invalidate_cache()
+
+spi_triggers_paths = [
+    f"{DATA_PATH}/triggers/triggers_metrics_spi/triggers_metrics_tbd_{d}.csv"
+    for d in MOZ_DISTRICTS
+]
+dry_triggers_paths = [
+    f"{DATA_PATH}/triggers/triggers_metrics_dryspell/triggers_metrics_tbd_{d}.csv"
+    for d in MOZ_DISTRICTS
+]
+
 triggers = pd.concat(
     [
-        *[
-            pd.read_csv(f)
-            for f in glob.glob(f"{DATA_PATH}/triggers/triggers_metrics/*")
-        ],
+        *[pd.read_csv(f"s3://{f}") for f in tqdm(spi_triggers_paths)],
+        *[pd.read_csv(f"s3://{f}") for f in tqdm(dry_triggers_paths)],
     ]
 )
 
 # %%
-triggers
+fs, _, _ = fsspec.get_fs_token_paths(f"{DATA_PATH}/triggers/triggers_metrics")
+fs.invalidate_cache()
+
+spi_triggers_paths = [
+    f"{DATA_PATH}/triggers/triggers_metrics/triggers_metrics_tbd_{d}.csv"
+    for d in DISTRICTS
+]
+
+triggers = pd.concat(
+    [
+        *[pd.read_csv(f"s3://{f}") for f in tqdm(spi_triggers_paths)],
+    ]
+)
 
 # %% [markdown] jp-MarkdownHeadingCollapsed=true
-# ### Visualize trigger metrics
-
-# %%
-index_options = sorted(triggers["index"].unique())
-district_options = sorted(triggers["district"].unique())
-category_options = sorted(triggers["category"].unique())
-
-index_widget = pn.widgets.Select(name="Index", options=index_options)
-district_widget = pn.widgets.Select(name="District", options=district_options)
-category_widget = pn.widgets.Select(name="Category", options=category_options)
-
-
-@pn.depends(
-    index_widget,
-    district_widget,
-    category_widget,
-)
-def filtered_table(index, district, category):
-    filtered = triggers[
-        (triggers["index"] == index)
-        & (triggers["district"] == district)
-        & (triggers["category"] == category)
-    ]
-    return pn.widgets.Tabulator(filtered, pagination="local", page_size=10, width=1000)
-
-
-pn.Column(pn.Row(index_widget, district_widget, category_widget), filtered_table)
-
-# %% [markdown]
 # ### Format to dataframe and save to parquet
 
 # %%
@@ -348,8 +300,20 @@ triggers["TP"] = triggers.TP.astype(np.uint8)
 triggers["RP"] = triggers.RP.astype(np.uint8)
 
 # %%
-outdir = f"s3://wfp-ops-userdata/amine.barkaoui/aa/data/setup-tool/{COUNTRY.lower()}"
-# os.makedirs(outdir, exist_ok=True)
+probs_df["index"] = probs_df["index"].str.replace("_", " ")
+probs_df["district"] = probs_df["district"].str.replace("_", " ")
+
+chirps_df["index"] = chirps_df["index"].str.replace("_", " ")
+chirps_df["district"] = chirps_df["district"].str.replace("_", " ")
+
+roc["Index"] = roc["Index"].str.replace("_", " ")
+roc["district"] = roc["district"].str.replace("_", " ")
+
+triggers["index"] = triggers["index"].str.replace("_", " ")
+triggers["district"] = triggers["district"].str.replace("_", " ")
+
+# %%
+outdir = f"s3://dev-hip-anticipatory-action/prod/{COUNTRY.lower()}/setup-tool"
 
 probs_df.to_parquet(f"{outdir}/probs.parquet", index=False)
 chirps_df.to_parquet(f"{outdir}/obs.parquet", index=False)
@@ -360,37 +324,55 @@ triggers.to_parquet(f"{outdir}/triggers.parquet", index=False)
 # ### Format and save boundaries
 
 # %%
-from hip.analysis import AnalysisArea
-area = AnalysisArea.from_admin_boundaries(iso3=COUNTRY, admin_level=2)
-shp = area.get_dataset([area.BASE_AREA_DATASET])
+import tempfile, json
+import duckdb, geopandas as gpd
+from hip.analysis.data._read import get_admin_shapes
+
+gdf = get_admin_shapes(COUNTRY, admin_level=2)  # or hip.analysis.data._read equivalent
 
 # %%
-boundaries = shp.rename(columns={"geometry": "geom"})
+from shapely.validation import make_valid
+
+gdf["geometry"] = gdf["geometry"].apply(make_valid)
 
 # %%
-import geopandas as gpd
+# Write GeoJSON to temp file so DuckDB can read it via ST_Read
+with tempfile.NamedTemporaryFile(suffix=".geojson", mode="w", delete=False) as f:
+    f.write(gdf.to_json())
+    tmp_path = f.name
 
-from geopandas.array import from_wkb  # vectorized and fast
-
-gdf = gpd.GeoDataFrame(
-    boundaries,
-    geometry=from_wkb(boundaries["geom"]),   # <--- vectorized WKB to geometry
-    crs="EPSG:4326",                 # set the correct CRS if you know it
-)
+adm2_col = "Name"
 
 # %%
-gdf = gdf.drop(columns=["geom"]).rename(columns={"geometry": "geom"})
+conn = duckdb.connect()
+conn.sql("INSTALL SPATIAL; LOAD spatial")
+conn.sql(f"CREATE TABLE boundaries AS SELECT * FROM ST_Read('{tmp_path}')")
 
 # %%
-from shapely import make_valid
-
-gdf["geom"] = gdf.geom.apply(make_valid)
+conn.sql("describe boundaries")
 
 # %%
-gdf = gdf.rename(columns={"Name": "ADM2_EN"})
+# Rename the country-specific name column to a canonical ADM2_EN
+if adm2_col != "ADM2_EN":
+    conn.sql(f"ALTER TABLE boundaries RENAME COLUMN {adm2_col} TO ADM2_EN")
+
+# Cast BIGINT columns to INTEGER
+query = conn.sql("""
+    SELECT string_agg(
+        CASE WHEN type = 'BIGINT'
+            THEN 'CAST(' || name || ' AS INTEGER) AS ' || name
+        ELSE name END, ', ')
+    FROM pragma_table_info('boundaries')
+""").fetchone()[0]
+conn.sql(f"CREATE OR REPLACE TABLE boundaries AS SELECT {query} FROM boundaries")
 
 # %%
-gdf['adm1_Code'] = gdf.adm1_Code.astype(np.uint16)
+out = f"boundaries.parquet"
+conn.sql(f"COPY boundaries TO '{out}' (FORMAT 'parquet')")
+
+s3_path = f"s3://dev-hip-anticipatory-action/prod/{COUNTRY.lower()}/setup-tool/boundaries.parquet"
+os.system(f"aws s3 cp {out} {s3_path}")
+os.remove(out)
+os.remove(tmp_path)
 
 # %%
-gdf.to_parquet("~/boundaries.svg")
