@@ -3,6 +3,7 @@ import copy
 import datetime
 import fsspec
 import logging
+import warnings
 import numpy as np
 import pandas as pd
 import xarray as xr
@@ -54,6 +55,8 @@ def read_forecasts(area, issue, local_path):
         area.datetime_range.split("/")[1], "%Y-%m-%d"
     )
 
+    is_local = not local_path.startswith("s3://")
+
     if data_exists:
         logging.info("Reading forecasts from precomputed zarr...")
         ds = xr.open_zarr(local_path).tp
@@ -63,6 +66,16 @@ def read_forecasts(area, issue, local_path):
         fetch_start = last_cached_date + datetime.timedelta(days=1)
 
         gap_days = (last_date.date() - last_cached_date).days
+
+        # Skip fetching when local
+        if is_local:
+            if fetch_start <= last_date.date():
+                warnings.warn(
+                    f"Missing forecast data from {fetch_start} to {last_date.date()} "
+                    "(skipping fetch because path is local)."
+                )
+            return persist_with_progress_bar(ds.sel(time=slice(None, last_date)))
+
         if fetch_start > last_date.date() or gap_days < 150:
             logging.info("All forecast data present, returning cached data...")
             return persist_with_progress_bar(ds.sel(time=slice(None, last_date)))
@@ -84,6 +97,11 @@ def read_forecasts(area, issue, local_path):
         return persist_with_progress_bar(ds.sel(time=slice(None, last_date)))
 
     # No cache exists yet — fetch the full range and write it
+    if is_local:
+        raise RuntimeError(
+            "Zarr not found and fetching is disabled because the path is local."
+        )
+
     logging.info("Zarr not found, reading forecasts from source...")
     forecasts = area.get_dataset(
         ["ECMWF", f"RFH_FORECASTS_SEAS5_ISSUE{int(issue)}_DAILY"],
@@ -130,6 +148,8 @@ def read_observations(area, local_path: str, index: str):
         area.datetime_range.split("/")[1], "%Y-%m-%d"
     ).date()
 
+    is_local = not local_path.startswith("s3://")
+
     # ------------------------------------------------------------------ #
     # 1. Blended store takes priority regardless of index                  #
     # ------------------------------------------------------------------ #
@@ -157,6 +177,15 @@ def read_observations(area, local_path: str, index: str):
         last_cached_date = pd.Timestamp(ds.time.values.max()).date()
         fetch_start = last_cached_date + datetime.timedelta(days=1)
 
+        # Skip fetching when local
+        if is_local:
+            if fetch_start <= last_date:
+                warnings.warn(
+                    f"Missing {index} observations from {fetch_start} to {last_date} "
+                    "(skipping fetch because path is local)."
+                )
+            return persist_with_progress_bar(ds)
+
         if fetch_start > last_date:
             logging.info("Cache is up to date, returning cached data...")
             return persist_with_progress_bar(ds)
@@ -178,6 +207,11 @@ def read_observations(area, local_path: str, index: str):
         return persist_with_progress_bar(ds)
 
     else:
+        if is_local:
+            raise RuntimeError(
+                "No observation cache found and fetching is disabled because the path is local."
+            )
+
         logging.info(
             "No cache found — fetching full %s range from HDC STAC (%s)...",
             index,
@@ -193,7 +227,7 @@ def read_observations(area, local_path: str, index: str):
 
 def read_triggers(params):
     triggers_path = f"{params.data_path}/data/{params.iso}/probs/aa_probabilities_triggers_pilots.csv"
-    fallback_triggers_path = f"{params.data_path}/data/{params.iso}/triggers/triggers.final.{params.monitoring_year}.pilots.csv"
+    fallback_triggers_path = f"{params.data_path}/{params.iso}/triggers/triggers.final.{params.monitoring_year}.pilots.csv"
 
     if fsspec.open(triggers_path).fs.exists(triggers_path):
         triggers_df = pd.read_csv(triggers_path)

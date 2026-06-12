@@ -39,7 +39,6 @@ import logging
 
 import matplotlib.pyplot as plt
 import pandas as pd
-import seaborn as sns
 import xarray as xr
 from hip.analysis.aoi.analysis_area import AnalysisArea
 from IPython.display import Markdown as md
@@ -48,7 +47,6 @@ from AA.cli.analytical import run_issue_verification
 from AA.helpers.params import Params
 from AA.helpers.read import read_forecasts, read_observations
 from AA.cli.triggers import run_triggers_selection
-
 
 # %% [markdown]
 # **First, please define the country ISO code and the index of interest**
@@ -73,7 +71,7 @@ output_path = "./data"
 params = Params(iso=country, index=index, data_path=data_path, output_path=output_path)
 
 
-# %% [markdown] jp-MarkdownHeadingCollapsed=true
+# %% [markdown]
 # ### Read data
 
 # %% [markdown]
@@ -84,8 +82,12 @@ area = AnalysisArea.from_admin_boundaries(
     iso3=params.iso.upper(),
     admin_level=2,
     resolution=0.25,
-    datetime_range=f"1981-01-01/{params.calibration_year}-06-30",
+    datetime_range=f"1981-01-01/{params.calibration_year}-{str(params.end_season).zfill(2)}-30",
 )
+
+if not params.custom_shapefile.empty:
+    logging.info(f"Using custom shapefile...")
+    area.add_dataset(params.custom_shapefile, [area.BASE_AREA_DATASET])
 
 gdf = area.get_dataset([area.BASE_AREA_DATASET])
 gdf
@@ -122,7 +124,7 @@ forecasts_folder_path = f"{params.data_path}/{params.iso}/zarr"
 # %% [markdown]
 # *Congratulations!* You've completed the part that requires the most energy during this process. Now all you have to do is run the different cells and check the results!
 
-# %% [markdown] jp-MarkdownHeadingCollapsed=true
+# %% [markdown]
 # ### Analytical processing
 #
 # The next part contains the analytical phase of the AA process.
@@ -133,17 +135,18 @@ forecasts_folder_path = f"{params.data_path}/{params.iso}/zarr"
 #
 # *Note2: if you want to re-run the workflow for issue months that you have already processed before, please delete the roc scores files in the `auc/split_by_issue` folder for the issue months of interest. Otherwise, the script will directly load the roc scores from the local files.*
 
-# %%
+# %% jupyter={"outputs_hidden": true}
 # Create directory for ROC scores df per issue month in case it doesn't exist
-os.makedirs(f"{params.data_path}/{params.iso}/auc/split_by_issue", exist_ok=True)
+if not params.output_path.startswith("s3"):
+    os.makedirs(f"{params.data_path}/{params.iso}/auc/split_by_issue", exist_ok=True)
 
 # Define empty list for each issue month's ROC score dataframe
 roc_issues = []
 
-for issue in ["07"]:  # params.issue_months:
+for issue in ["05"]:  # params.issue_months
     forecasts = read_forecasts(
         area,
-        issue,
+        int(issue),
         f"{forecasts_folder_path}/{issue}/forecasts.zarr",
     )
     logging.info(f"Completed reading of forecasts for the issue month {issue}")
@@ -168,7 +171,7 @@ display(roc)  # noqa: F821
 # Let's have a look at how the computed probabilities data looks like.
 
 # %%
-xr.open_zarr(f"{forecasts_folder_path}/07/{params.index}_ON/probabilities.zarr").load()
+xr.open_zarr(f"{forecasts_folder_path}/07/{params.index}_ON/probabilities.zarr")
 
 # %% [markdown]
 # We can also check how the CHIRPS-based anomalies that have been saved look like. They have been used to calculate the roc scores and will be used to select the triggers.
@@ -181,10 +184,10 @@ xr.open_zarr(f"{forecasts_folder_path}/obs/{params.index}_ON/observations.zarr")
 
 
 # %%
-# roc.to_csv(
-#    f"{params.output_path}/{params.iso}/auc/roc.{params.index}.csv",
-#    index=False,
-# )
+roc.to_csv(
+    f"{params.output_path}/{params.iso}/auc/roc.{params.index}.csv",
+    index=False,
+)
 
 # %% [markdown]
 # Now we can read this dataframe locally to visualize the ROC scores.
