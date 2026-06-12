@@ -107,7 +107,9 @@ gdf
 # %%
 # Observations data reading
 observations = read_observations(
-    area, f"{params.data_path}/{params.iso}/zarr/obs", params.index,
+    area,
+    f"{params.data_path}/{params.iso}/zarr/obs",
+    params.index,
 )
 observations
 
@@ -141,7 +143,7 @@ if not params.output_path.startswith("s3"):
 # Define empty list for each issue month's ROC score dataframe
 roc_issues = []
 
-for issue in ["05"]: # params.issue_months
+for issue in ["05"]:  # params.issue_months
     forecasts = read_forecasts(
         area,
         int(issue),
@@ -183,8 +185,8 @@ xr.open_zarr(f"{forecasts_folder_path}/obs/{params.index}_ON/observations.zarr")
 
 # %%
 roc.to_csv(
-   f"{params.output_path}/{params.iso}/auc/roc.{params.index}.csv",
-   index=False,
+    f"{params.output_path}/{params.iso}/auc/roc.{params.index}.csv",
+    index=False,
 )
 
 # %% [markdown]
