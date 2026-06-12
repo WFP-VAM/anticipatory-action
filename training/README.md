@@ -126,6 +126,8 @@ If you want to work on these notebooks, please open the **Windows PowerShell** p
 
 Once the Jupyter Lab window is open, please right-click on the notebook you want to open, select *Open with* > *Jupyter Notebook*.
 
+![Jupytext](../docs/screenshots/Screenshot_2026-06-12_114439.png)
+
 Before getting your hands dirty, a few tips about Jupyter Lab:
 
 * press `+` to add a cell of code or press "a" (above) or "b" (below) once a cell is selected
@@ -135,3 +137,4 @@ Before getting your hands dirty, a few tips about Jupyter Lab:
 * open a terminal / a new file by clicking on the blue "+" at the top-left of the window
 * each time you update code in an external file, you need to restart the kernel using the loop icon
 * each time you restart the kernel, you need to rerun each cell of your notebook
+
