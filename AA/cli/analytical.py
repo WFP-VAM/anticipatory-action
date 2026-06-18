@@ -22,7 +22,10 @@ from hip.analysis.ops._statistics import evaluate_roc_forecasts
 
 from AA.helpers.params import S3_OPS_DATA_PATH, Params, save_run_config
 from AA.helpers.read import read_forecasts, read_observations
-from AA.helpers.utils import compute_district_average
+from AA.helpers.utils import (
+    compute_district_average,
+    post_process_aggregated_observations,
+)
 
 logging.basicConfig(level="INFO", force=True)
 
