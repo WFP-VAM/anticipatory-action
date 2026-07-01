@@ -9,7 +9,7 @@ def main(iso3: str):
     iso3 = iso3.lower()
 
     # Define paths (PRISM PATH TO BE UPDATED ONCE CONFIRMED)
-    prism_path = f"s3://wfp-ops-userdata/public-share/aa/staging/aa_probabilities_triggers_{iso3}.csv"
+    prism_path = f"s3://hip-workshop-sharing-public-eu-central-1-485262375119/anticipatory-action/{iso3}/prism/aa_probabilities_triggers_{iso3}.csv"
     pilot_path = f"{S3_OPS_DATA_PATH}/{iso3}/probs/aa_probabilities_triggers_pilots.csv"
 
     print(f"📥 Reading PRISM data from: {prism_path}")
@@ -26,7 +26,7 @@ def main(iso3: str):
     df_concat = (
         pd.concat(
             [
-                prism_df.loc[prism_df.season.isin(["2024-25", "2023-24"])],
+                prism_df.loc[prism_df.season.isin(["2025-26", "2024-25", "2023-24"])],
                 df,
             ]
         )
