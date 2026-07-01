@@ -8,9 +8,9 @@
 #       format_version: '1.5'
 #       jupytext_version: 1.19.3
 #   kernelspec:
-#     display_name: Python (Pixi)
+#     display_name: 'Python (pixi: aa-env)'
 #     language: python
-#     name: pixi-kernel-python3
+#     name: aa-env
 # ---
 
 # ## Run AA operational monitoring script
@@ -80,29 +80,10 @@ gdf
 # -
 
 
-# The next cell reads the observations dataset. Please run it directly if you have the data stored in the specified path or have access to HDC.
-#
-#
-# *Note:*
-#
-# If you previously ran the `run-full-verification` notebook, you probably already have the dataset stored locally. In that case, you can give its path as an argument to `read_observations`.
+# Forecasts are easy to read using hip-analysis, called within the `read_forecasts` function. A caching system allows you not to read the data from HDC in case you already have it stored locally. 
 
 
-# Observations data reading
-observations = read_observations(
-    area,
-    f"{params.data_path}/{params.iso}/zarr/obs",
-    params.index,
-)
-
-
-# As with observations, forecasts are easy to read using hip-analysis, called within the `read_forecasts` function.
-#
-# Please note the *update* parameter that allows to re-load the data from HDC in order to get the latest updates. This means that if you are running this for the second time, you can set this parameter to **False**, so the data is read directly from the local file system.
-#
-# For training purposes, we will also keep this parameter as False in order to avoid dealing with HDC credentials.
-
-
+# Downscaled ECMWF forecasts data reading
 forecasts = read_forecasts(
     area,
     issue,
@@ -112,6 +93,23 @@ forecasts
 
 # Rainfall forecasts averaged over time for control member
 forecasts.isel(ensemble=0).mean("time").plot.imshow()
+
+
+# The next cell reads the observations dataset. Please run it directly if you have the data stored in the specified path or have access to HDC.
+#
+#
+# *Note:*
+#
+# If you previously ran the `run-full-verification` notebook, you probably already have the dataset stored locally. In that case, you can give its path as an argument to `read_observations`.
+
+
+# Observations data reading
+area.datetime_range = f"1981-01-01/{params.calibration_year}-{str(params.end_season).zfill(2)}-30"
+observations = read_observations(
+    area,
+    f"{params.data_path}/{params.iso}/zarr/obs",
+    params.index,
+)
 
 
 # Now that we got all the data we need, let's read the triggers file so we can merge the probabilities with it once we have them. This triggers file corresponds to the output of the `run-full-verification` notebook if we're in the first monitoring month. Then, we read the merged dataframe that already contains the probabilities from the previous months so we add the new probabilities to the existing merged dataframe.
@@ -168,11 +166,36 @@ probs_df, merged_df = zip(*probs_merged_dataframes)
 
 probs_dashboard = pd.concat(probs_df).drop_duplicates()
 
-merged_db = pd.concat(merged_df).sort_values(["prob_ready", "prob_set"])
-merged_db = merged_db.drop_duplicates(
-    merged_db.columns.difference(["prob_ready", "prob_set"]), keep="first"
+merged_db = pd.concat(merged_df)
+merged_db = merged_db.sort_values(["prob_ready", "prob_set"])
+
+# Check for duplicates and raise error if found
+duplicate_cols = list(merged_db.columns.difference(["prob_ready", "prob_set"]))
+duplicates_count = merged_db.duplicated(subset=duplicate_cols).sum()
+if duplicates_count > 0:
+    raise ValueError(
+        f"Data integrity error: {duplicates_count} duplicate rows found in merged trigger data. "
+        f"This indicates a problem with the trigger merging process."
+    )
+
+# Perform left merge to find rows in triggers_df that don't exist in merged_db
+merge_result = triggers_df.merge(
+    merged_db[duplicate_cols], on=duplicate_cols, how="left", indicator=True
 )
-merged_db = merged_db.sort_values(["district", "index", "category"])
+
+# Get only rows that exist in triggers_df but not in merged_db
+new_rows_from_triggers = triggers_df[merge_result["_merge"] == "left_only"]
+
+# Append the new rows to merged_db
+if not new_rows_from_triggers.empty:
+    merged_db = pd.concat([merged_db, new_rows_from_triggers], ignore_index=True)
+
+# Assert that final merged_db has same number of rows as original triggers_df
+assert len(merged_db) == len(triggers_df), (
+    f"Data integrity error: Final merged_db has {len(merged_db)} rows but original "
+    f"triggers_df has {len(triggers_df)} rows. Expected them to be equal."
+)
+
 merged_db
 # -
 
