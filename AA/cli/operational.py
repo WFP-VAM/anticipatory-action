@@ -94,7 +94,7 @@ def run(country, issue, index, config_json, data_path, output_path):
 
     logging.info("Completed reading of forecasts for the whole %s country", params.iso)
 
-    area.datetime_range = f"1981-01-01/{params.calibration_year + 1}-06-30"
+    area.datetime_range = f"1981-01-01/{params.calibration_year}-{str(params.end_season).zfill(2)}-30"
     observations = read_observations(
         area,
         f"{params.data_path}/{params.iso}/zarr/obs",

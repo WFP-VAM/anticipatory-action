@@ -62,21 +62,21 @@ def read_forecasts(area, issue, local_path):
         ds = xr.open_zarr(local_path).tp
 
         # Find the day after the last cached date and fetch everything from there
-        last_cached_date = pd.Timestamp(ds.time.values.max()).date()
+        last_cached_date = pd.Timestamp(ds.time.values.max())
         fetch_start = last_cached_date + datetime.timedelta(days=1)
 
-        gap_days = (last_date.date() - last_cached_date).days
+        gap_days = (last_date - last_cached_date).days
 
         # Skip fetching when local
         if is_local:
-            if fetch_start <= last_date.date():
+            if fetch_start <= last_date:
                 warnings.warn(
                     f"Missing forecast data from {fetch_start} to {last_date.date()} "
                     "(skipping fetch because path is local)."
                 )
             return persist_with_progress_bar(ds.sel(time=slice(None, last_date)))
 
-        if fetch_start > last_date.date() or gap_days < 150:
+        if fetch_start > last_date or gap_days < 150:
             logging.info("All forecast data present, returning cached data...")
             return persist_with_progress_bar(ds.sel(time=slice(None, last_date)))
 
@@ -84,12 +84,15 @@ def read_forecasts(area, issue, local_path):
             f"Fetching missing forecasts from {fetch_start} to {last_date.date()}..."
         )
         area_slice = copy.deepcopy(area)
-        area_slice.datetime_range = f"{fetch_start}/{last_date.date()}"
+        area_slice.datetime_range = f"{fetch_start.date()}/{last_date.date()}"
         new_data = area_slice.get_dataset(
             ["ECMWF", f"RFH_FORECASTS_SEAS5_ISSUE{int(issue)}_DAILY"],
             load_config={"gridded_load_kwargs": {"resampling": "bilinear"}},
         )
         new_data.attrs["nodata"] = np.nan
+
+        new_data = new_data.sel(time=new_data.time > last_cached_date)
+
         new_data.chunk({"time": -1}).to_zarr(local_path, mode="a", append_dim="time")
 
         # Re-open the zarr to get a consistent view that includes the appended data
@@ -226,7 +229,7 @@ def read_observations(area, local_path: str, index: str):
 
 
 def read_triggers(params):
-    triggers_path = f"{params.data_path}/data/{params.iso}/probs/aa_probabilities_triggers_pilots.csv"
+    triggers_path = f"{params.data_path}/{params.iso}/probs/aa_probabilities_triggers_pilots.csv"
     fallback_triggers_path = f"{params.data_path}/{params.iso}/triggers/triggers.final.{params.monitoring_year}.pilots.csv"
 
     if fsspec.open(triggers_path).fs.exists(triggers_path):
