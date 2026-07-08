@@ -94,7 +94,9 @@ def run(country, issue, index, config_json, data_path, output_path):
 
     logging.info("Completed reading of forecasts for the whole %s country", params.iso)
 
-    area.datetime_range = f"1981-01-01/{params.calibration_year}-{str(params.end_season).zfill(2)}-30"
+    area.datetime_range = (
+        f"1981-01-01/{params.calibration_year}-{str(params.end_season).zfill(2)}-30"
+    )
     observations = read_observations(
         area,
         f"{params.data_path}/{params.iso}/zarr/obs",
@@ -178,6 +180,20 @@ def run(country, issue, index, config_json, data_path, output_path):
         f"{params.output_path}/{params.iso}/probs/aa_probabilities_triggers_pilots.csv",
         index=False,
     )
+
+    if params.output_path.startswith("s3://"):
+        public_path = (
+            f"s3://hip-workshop-sharing-public-eu-central-1-485262375119/"
+            f"anticipatory-action/{params.iso}/probs/aa_probabilities_triggers_pilots.csv"
+        )
+        merged_db.sort_values(["district", "index", "category"]).to_csv(
+            public_path,
+            index=False,
+        )
+        logging.info(
+            "Also saved dashboard-formatted dataframe to public sharing bucket: %s",
+            public_path,
+        )
 
     logging.info("Dashboard-formatted dataframe saved for %s", country)
 
