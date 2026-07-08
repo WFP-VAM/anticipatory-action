@@ -177,7 +177,8 @@ def read_observations(area, local_path: str, index: str):
         logging.info("Reading %s observations from cached zarr: %s", index, store_path)
         ds = xr.open_zarr(store_path, consolidated=True).band
 
-        last_cached_date = pd.Timestamp(ds.time.values.max()).date()
+        last_cached_ts = pd.Timestamp(ds.time.values.max())
+        last_cached_date = last_cached_ts.date()
         fetch_start = last_cached_date + datetime.timedelta(days=1)
 
         # Skip fetching when local
@@ -205,7 +206,14 @@ def read_observations(area, local_path: str, index: str):
             dataset_key,
             load_config={"gridded_load_kwargs": {"resampling": "bilinear"}},
         )
-        new_data.to_zarr(store_path, mode="a", append_dim="time")
+
+        new_data = new_data.sel(time=new_data.time > last_cached_ts)
+
+        if new_data.time.size > 0:
+            new_data.to_zarr(store_path, mode="a", append_dim="time")
+        else:
+            logging.info("No new observations to append.")
+
         ds = xr.open_zarr(store_path, consolidated=True).band
         return persist_with_progress_bar(ds)
 
@@ -229,7 +237,9 @@ def read_observations(area, local_path: str, index: str):
 
 
 def read_triggers(params):
-    triggers_path = f"{params.data_path}/{params.iso}/probs/aa_probabilities_triggers_pilots.csv"
+    triggers_path = (
+        f"{params.data_path}/{params.iso}/probs/aa_probabilities_triggers_pilots.csv"
+    )
     fallback_triggers_path = f"{params.data_path}/{params.iso}/triggers/triggers.final.{params.monitoring_year}.pilots.csv"
 
     if fsspec.open(triggers_path).fs.exists(triggers_path):
