@@ -164,10 +164,39 @@ def compute_district_average(da, area):
 
 
 def post_process_aggregated_observations(ds, iso):
-    """Post-process district-aggregated observations. Currently patches Wete → Micheweni for TZA."""
+    """
+    Post-process district-aggregated observations.
+
+    Tanzania-specific fix:
+    Wete and Micheweni are smaller than a single 0.25° observation pixel.
+    Their rasterized zones frequently contain only NaN values, while the
+    overlapping valid observation pixel is assigned to Chake Chake during
+    rasterization. When Wete/Micheweni are missing and Chake Chake is
+    available, use Chake Chake as a proxy.
+    """
     if iso == "tza":
         ds = ds.copy()
-        ds.loc[dict(district="Micheweni")] = ds.sel(district="Wete")
+
+        chake = ds.sel(district="Chake Chake")
+        wete = ds.sel(district="Wete")
+        micheweni = ds.sel(district="Micheweni")
+
+        # Sanity check: only fill when both districts are missing and
+        # Chake Chake has data.
+        fill_mask = wete.isnull() & micheweni.isnull() & chake.notnull()
+
+        ds.loc[dict(district="Wete")] = xr.where(
+            fill_mask,
+            chake,
+            wete,
+        )
+
+        ds.loc[dict(district="Micheweni")] = xr.where(
+            fill_mask,
+            chake,
+            micheweni,
+        )
+
     return ds
 
 
