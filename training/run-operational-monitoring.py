@@ -213,3 +213,20 @@ merged_db.sort_values(["district", "index", "category"]).to_csv(
     f"{params.data_path}/{params.iso}/probs/aa_probabilities_triggers_pilots.csv",
     index=False,
 )
+
+# ### Update PRISM dashboard (local copy only — does not touch the shared PRISM bucket)
+# NOTE: this notebook only ran with params.index = <SPI or DRYSPELL, whichever this run used>.
+# If the PRISM dashboard needs both indicators updated, re-run the whole notebook (or at least
+# this cell) once per index — with params.index set to "SPI" and again to "DRYSPELL" — so that
+# both sets of probabilities/triggers get merged into the local PRISM copy below.
+from AA.helpers.prism import update_prism_dashboard
+
+local_prism_path = (
+    f"{params.data_path}/{params.iso}/prism/aa_probabilities_triggers_{params.iso}.csv"
+)
+
+merged_prism_df = update_prism_dashboard(
+    params.iso,
+    sorted_merged_db,
+    write_path=local_prism_path,
+)
