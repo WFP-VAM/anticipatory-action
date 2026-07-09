@@ -6,11 +6,11 @@
 #       extension: .py
 #       format_name: light
 #       format_version: '1.5'
-#       jupytext_version: 1.19.3
+#       jupytext_version: 1.19.4
 #   kernelspec:
-#     display_name: 'Python (pixi: aa-env)'
+#     display_name: Python (Pixi)
 #     language: python
-#     name: aa-env
+#     name: pixi-kernel-python3
 # ---
 
 # ## Run AA operational monitoring script
@@ -45,7 +45,7 @@ from AA.helpers.read import read_forecasts, read_observations, read_triggers
 country = (
     "ISO"  # Replace with the ISO code of the country you want to run the monitoring for
 )
-issue = 6
+issue = 7
 index = "SPI"  # 'SPI' or 'DRYSPELL'
 data_path = "./data"  # anticipatory-action directory
 output_path = "./data"
@@ -80,7 +80,7 @@ gdf
 # -
 
 
-# Forecasts are easy to read using hip-analysis, called within the `read_forecasts` function. A caching system allows you not to read the data from HDC in case you already have it stored locally. 
+# Forecasts are easy to read using hip-analysis, called within the `read_forecasts` function. A caching system allows you not to read the data from HDC in case you already have it stored locally.
 
 
 # Downscaled ECMWF forecasts data reading
@@ -104,7 +104,9 @@ forecasts.isel(ensemble=0).mean("time").plot.imshow()
 
 
 # Observations data reading
-area.datetime_range = f"1981-01-01/{params.calibration_year}-{str(params.end_season).zfill(2)}-30"
+area.datetime_range = (
+    f"1981-01-01/{params.calibration_year}-{str(params.end_season).zfill(2)}-30"
+)
 observations = read_observations(
     area,
     f"{params.data_path}/{params.iso}/zarr/obs",
@@ -143,6 +145,7 @@ accumulation_periods
 # Now we know which periods we will be computing the drought probabilities on. And this will be done in the next cell, by calling the `run_full_index_pipeline` function on each of them. That function derives the accumulation, the anomaly, performs the bias correction and obtains the probabilities.
 
 
+# + jupyter={"outputs_hidden": true}
 # Compute probabilities for each accumulation period
 probs_merged_dataframes = [
     run_full_index_pipeline(
@@ -156,6 +159,7 @@ probs_merged_dataframes = [
     )
     for period_name, period_months in accumulation_periods.items()
 ]
+# -
 
 
 # We reorganise the dataframes and we are ready to save them.
@@ -215,10 +219,11 @@ merged_db.sort_values(["district", "index", "category"]).to_csv(
 )
 
 # ### Update PRISM dashboard (local copy only — does not touch the shared PRISM bucket)
+#
 # NOTE: this notebook only ran with params.index = <SPI or DRYSPELL, whichever this run used>.
-# If the PRISM dashboard needs both indicators updated, re-run the whole notebook (or at least
-# this cell) once per index — with params.index set to "SPI" and again to "DRYSPELL" — so that
-# both sets of probabilities/triggers get merged into the local PRISM copy below.
+#
+# If the PRISM dashboard needs both indicators updated, re-run the whole notebook (or at least this cell) once per index — with params.index set to "SPI" and again to "DRYSPELL" — so that both sets of probabilities/triggers get merged into the local PRISM copy below.
+
 from AA.helpers.prism import update_prism_dashboard
 
 local_prism_path = (
@@ -227,6 +232,7 @@ local_prism_path = (
 
 merged_prism_df = update_prism_dashboard(
     params.iso,
-    sorted_merged_db,
-    write_path=local_prism_path,
+    merged_db,
+    read_path=local_prism_path,  # read from local copy — no S3 access
+    write_path=local_prism_path,  # write back to the same local file
 )

@@ -13,7 +13,9 @@ def main(iso3: str):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Update PRISM with latest AA probabilities")
+    parser = argparse.ArgumentParser(
+        description="Update PRISM with latest AA probabilities"
+    )
     parser.add_argument("iso3", type=str, help="ISO3 country code (e.g., moz)")
     args = parser.parse_args()
     main(args.iso3)
