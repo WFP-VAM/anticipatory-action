@@ -49,6 +49,7 @@ intensity_thresholds:
 districts_vulnerability: 
   Balaka: "TBD"
   Blantyre: "TBD"
+  Blantyre City: "TBD"
   Chikwawa: "TBD"
   Chiradzulu: "TBD"
   Chitipa: "TBD"
@@ -63,6 +64,7 @@ districts_vulnerability:
   Mangochi: "TBD"
   Mchinji: "TBD"
   Mulanje: "TBD"
+  Mwanza: "TBD"
   Mzimba: "TBD"
   Mzuzu City: "TBD"
   Neno: "TBD"
