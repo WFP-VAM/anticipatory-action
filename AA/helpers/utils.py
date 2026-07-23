@@ -78,25 +78,23 @@ def compute_district_average(da, area):
     For districts absent from all_touched=False (too small to contain any pixel center),
     falls back to all_touched=True. Districts that are lost by all_touched=True but present
     in all_touched=False are always kept from the latter.
-
+    Districts still missing from both (e.g. their only candidate pixel is won by a
+    neighboring zone) are rescued by rasterizing that district's geometry alone,
+    with no competing zones, over a clipped bbox.
     Args:
         da: xarray DataArray with spatial dimensions (latitude, longitude) and optionally
             a time dimension and one additional groupby dimension.
         area: Area object with zonal_stats() and get_dataset() methods.
-
     Returns:
         xarray DataArray with a district dimension containing zonal means.
     """
     # Ensure consistent time dimension
     if "year" in da.dims:
         da = da.rename({"year": "time"})
-
     # Determine dimensions to group by (exclude spatial dimensions)
     groupby_dim = set(da.dims) - {"latitude", "longitude", "time"}
-
     # Transpose dims to ensure equality of shapes
     da = da.transpose(..., *groupby_dim, "latitude", "longitude")
-
     if len(groupby_dim) > 1:
         raise NotImplementedError(
             "Zonal stats with more than one groupby dimension are not supported."
@@ -122,10 +120,104 @@ def compute_district_average(da, area):
         area.get_dataset([area.BASE_AREA_DATASET]).index.astype(str)
     )
 
+    def _rasterize_single_district(data_clip, geom, all_touched=True):
+        """Rasterize a single district geometry onto data_clip's grid, with
+        value 0 where covered and -1 (nodata) elsewhere — no other district
+        competes for any pixel."""
+        from rasterio.features import rasterize
+        from rasterio.transform import from_origin
+
+        lat = data_clip.latitude.values
+        lon = data_clip.longitude.values
+        lat_res = abs(lat[1] - lat[0])
+        lon_res = abs(lon[1] - lon[0])
+        lat_desc = lat[0] > lat[-1]
+
+        west = lon.min() - lon_res / 2
+        north = (lat[0] if lat_desc else lat[-1]) + lat_res / 2
+        transform = from_origin(west, north, lon_res, lat_res)
+
+        lat_for_burn = lat if lat_desc else lat[::-1]
+        burned = rasterize(
+            [(geom, 0)],
+            out_shape=(len(lat_for_burn), len(lon)),
+            transform=transform,
+            fill=-1,
+            all_touched=all_touched,
+            dtype="int32",
+        )
+        if not lat_desc:
+            burned = burned[::-1, :]
+
+        return xr.DataArray(
+            burned,
+            coords={"latitude": lat, "longitude": lon},
+            dims=["latitude", "longitude"],
+        )
+
+    def _rescue_missing_districts(data, missing_districts):
+        """
+        For districts missing from both all_touched=False and all_touched=True
+        rasterizations (typically small districts whose only candidate pixel
+        was assigned to a neighboring zone), recompute by rasterizing that
+        district's geometry alone onto a clipped bbox, so no neighboring
+        district can compete for the shared pixel.
+        """
+        gdf = area.get_dataset([area.BASE_AREA_DATASET])
+        results = []
+        for district in missing_districts:
+            geom = gdf.loc[district].geometry
+            minx, miny, maxx, maxy = geom.bounds
+
+            lat_res = abs(data.latitude.values[1] - data.latitude.values[0])
+            lon_res = abs(data.longitude.values[1] - data.longitude.values[0])
+            pad_lat, pad_lon = lat_res * 1.5, lon_res * 1.5
+
+            lat_desc = data.latitude.values[0] > data.latitude.values[-1]
+            lat_slice = (
+                slice(maxy + pad_lat, miny - pad_lat)
+                if lat_desc
+                else slice(miny - pad_lat, maxy + pad_lat)
+            )
+            lon_slice = slice(minx - pad_lon, maxx + pad_lon)
+
+            data_clip = data.sel(latitude=lat_slice, longitude=lon_slice)
+            if data_clip.latitude.size == 0 or data_clip.longitude.size == 0:
+                logging.warning(
+                    f"District '{district}': clipped bbox has no pixels, skipping rescue."
+                )
+                continue
+
+            zones_da = _rasterize_single_district(data_clip, geom, all_touched=True)
+            if not bool((zones_da == 0).any()):
+                logging.warning(
+                    f"District '{district}': geometry doesn't touch any pixel "
+                    f"even with all_touched=True, skipping rescue."
+                )
+                continue
+
+            out = area.zonal_stats(
+                data_clip,
+                stats=["mean"],
+                zone_ids=[district],
+                zones=zones_da,  # pre-built, single-district — bypasses _resolve_zones
+                all_touched=True,
+            )
+            da_rescued = (
+                out.query("zone != 'Administrative unit not available'")
+                .to_xarray()["mean"]
+                .rename({"zone": "district"})
+                .assign_coords(district=lambda x: x.district.astype(str))
+            )
+            results.append(da_rescued)
+
+        if not results:
+            return None
+        return xr.concat(results, dim="district")
+
     def _with_fallback(data):
         da_false = _zonal_stats(data, all_touched=False)
         da_true = _zonal_stats(data, all_touched=True)
-
         false_districts = set(da_false.district.values)
         true_districts = set(da_true.district.values)
 
@@ -139,27 +231,53 @@ def compute_district_average(da, area):
 
         # Districts completely absent from both rasterizations
         missing_from_both = expected_districts - false_districts - true_districts
+        da_rescued = None
         if missing_from_both:
             logging.warning(
                 f"{len(missing_from_both)} district(s) missing from both "
                 f"rasterizations: {missing_from_both}"
             )
+            # TEMPORARY: skip rescue for Tanzania (adm0_Code 257) — already
+            # handled by the dedicated Wete/Micheweni patching. Remove this
+            # guard once that patch is folded into (or replaced by) this rescue.
+            adm0_code = area.get_dataset([area.BASE_AREA_DATASET]).adm0_Code.unique()[0]
+            if adm0_code != 257:
+                da_rescued = _rescue_missing_districts(data, missing_from_both)
+                if da_rescued is not None:
+                    still_missing = missing_from_both - set(da_rescued.district.values)
+                    if still_missing:
+                        logging.warning(
+                            f"{len(still_missing)} district(s) still missing after "
+                            f"single-geometry rescue: {still_missing}"
+                        )
+                else:
+                    logging.warning(
+                        f"No district(s) could be rescued out of: {missing_from_both}"
+                    )
+            else:
+                logging.info(
+                    "Skipping single-geometry rescue for TZA (adm0_Code 257) — "
+                    "handled separately by existing Wete/Micheweni patching."
+                )
 
         # Only take from all_touched=True what is strictly absent from all_touched=False
         # (small districts with no pixel centers inside them)
         only_in_true = true_districts - false_districts
-        if not only_in_true:
-            return da_false
+        pieces = [da_false]
+        if only_in_true:
+            pieces.append(da_true.sel(district=list(only_in_true)))
+        if da_rescued is not None:
+            pieces.append(da_rescued)
 
-        da_extra = da_true.sel(district=list(only_in_true))
-        return xr.concat([da_false, da_extra], dim="district")
+        if len(pieces) == 1:
+            return pieces[0]
+        return xr.concat(pieces, dim="district")
 
     if len(groupby_dim) == 1:
         gb = list(groupby_dim)[0]
         da_grouped = da.groupby(gb).map(lambda s: _with_fallback(s.squeeze(gb)))
     else:
         da_grouped = _with_fallback(da)
-
     return da_grouped
 
 
