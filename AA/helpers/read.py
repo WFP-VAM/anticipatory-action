@@ -45,6 +45,16 @@ def read_forecasts(area, issue, local_path):
         xarray.DataArray: The `tp` variable from the forecast dataset, covering all
                           timesteps up to `last_date`.
     """
+
+    def _next_issue_cycle_start(
+        last_cached_date: pd.Timestamp, issue: int
+    ) -> pd.Timestamp:
+        """First of the next occurrence of the issue month, strictly after last_cached_date."""
+        candidate = pd.Timestamp(year=last_cached_date.year, month=issue, day=1)
+        if candidate <= last_cached_date:
+            candidate = pd.Timestamp(year=last_cached_date.year + 1, month=issue, day=1)
+        return candidate
+
     fs = fsspec.open(local_path).fs
     zmetadata_path = os.path.join(local_path, ".zmetadata")
     data_exists = fs.exists(zmetadata_path)
@@ -63,7 +73,7 @@ def read_forecasts(area, issue, local_path):
 
         # Find the day after the last cached date and fetch everything from there
         last_cached_date = pd.Timestamp(ds.time.values.max())
-        fetch_start = last_cached_date + datetime.timedelta(days=1)
+        fetch_start = _next_issue_cycle_start(last_cached_date, issue)
 
         gap_days = (last_date - last_cached_date).days
 
