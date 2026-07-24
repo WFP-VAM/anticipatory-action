@@ -64,6 +64,14 @@ def update_prism_dashboard(
         df_concat["district"] = [
             districts_mapping.get(v, v) for v in df_concat.district.values
         ]
+    if iso3 == "mwi":
+        print("🗺️ Applying district name corrections for Malawi...")
+        districts_mapping = {
+            "Nkhata Bay": "Nkhatabay",
+        }
+        df_concat["district"] = [
+            districts_mapping.get(v, v) for v in df_concat.district.values
+        ]
 
     print("🧭 Mapping vulnerability labels...")
     vulnerability_mapping = {"GT": "General Triggers", "NRT": "Emergency Triggers"}
