@@ -38,7 +38,7 @@ def read_forecasts(area, issue, local_path):
     Args:
         area: Area object with a `datetime_range` attribute (e.g. "2023-06-01/2024-12-31")
               and `get_dataset()` method.
-        issue (int): Forecast issue month (1–12).
+        issue (str): Forecast issue month (1–12).
         local_path (str): Path to the local zarr store used as a cache.
 
     Returns:
@@ -47,12 +47,14 @@ def read_forecasts(area, issue, local_path):
     """
 
     def _next_issue_cycle_start(
-        last_cached_date: pd.Timestamp, issue: int
+        last_cached_date: pd.Timestamp, issue: str
     ) -> pd.Timestamp:
         """First of the next occurrence of the issue month, strictly after last_cached_date."""
-        candidate = pd.Timestamp(year=last_cached_date.year, month=issue, day=1)
+        candidate = pd.Timestamp(year=last_cached_date.year, month=int(issue), day=1)
         if candidate <= last_cached_date:
-            candidate = pd.Timestamp(year=last_cached_date.year + 1, month=issue, day=1)
+            candidate = pd.Timestamp(
+                year=last_cached_date.year + 1, month=int(issue), day=1
+            )
         return candidate
 
     fs = fsspec.open(local_path).fs
