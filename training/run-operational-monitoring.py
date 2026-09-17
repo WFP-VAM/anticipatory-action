@@ -75,6 +75,9 @@ area = AnalysisArea.from_admin_boundaries(
     datetime_range=f"1981-01-01/{params.monitoring_year + 1}-06-30",
 )
 
+if not params.custom_shapefile.empty:
+    area.add_dataset(params.custom_shapefile, [area.BASE_AREA_DATASET])
+
 gdf = area.get_dataset([area.BASE_AREA_DATASET])
 gdf
 # -
