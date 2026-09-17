@@ -1,0 +1,5 @@
+# Extra mkdocs dependencies for use in Docs GitHub Action only
+mkdocs-jupyter
+mkdocstrings
+mkdocstrings-python
+python-markdown-math
